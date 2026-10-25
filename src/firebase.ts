@@ -3,12 +3,13 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
-  apiKey: "مفتاح_الـ_API_الخاص_بك",
-  authDomain: "project-id.firebaseapp.com",
-  projectId: "project-id",
-  storageBucket: "project-id.appspot.com",
-  messagingSenderId: "sender-id",
-  appId: "app-id"
+  apiKey: "AIzaSyAgImckC3OINwifYmwVckKB_584f5P1smU",
+  authDomain: "nabough-educational-platform.firebaseapp.com",
+  projectId: "nabough-educational-platform",
+  storageBucket: "nabough-educational-platform.appspot.com",
+  messagingSenderId: "960221317099",
+  appId: "1:960221317099:web:ffc7161ad2a34ebcd1fbae",
+  measurementId: "G-VHSV1CDTEH"
 };
 
 const app = initializeApp(firebaseConfig);
