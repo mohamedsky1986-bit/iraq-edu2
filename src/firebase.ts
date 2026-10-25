@@ -1,18 +1,17 @@
+// Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
 
+// Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyAgImckC3OINwifYmwVckKB_584f5P1smU",
-  authDomain: "nabough-educational-platform.firebaseapp.com",
-  projectId: "nabough-educational-platform",
-  storageBucket: "nabough-educational-platform.appspot.com",
-  messagingSenderId: "960221317099",
-  appId: "1:960221317099:web:ffc7161ad2a34ebcd1fbae",
-  measurementId: "G-VHSV1CDTEH"
+  apiKey: "AIzaSyBWRcxQweru-kKjtJur90e96lF6d35gmeU",
+  authDomain: "nabough-platform.firebaseapp.com",
+  projectId: "nabough-platform",
+  storageBucket: "nabough-platform.firebasestorage.app",
+  messagingSenderId: "637214267268",
+  appId: "1:637214267268:web:1cdd063d1c0becc406efd1"
 };
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-
-export const auth = getAuth(app);
-export const db = getFirestore(app);
