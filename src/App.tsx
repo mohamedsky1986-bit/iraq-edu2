@@ -14,7 +14,6 @@ export function App() {
   const [adminUsername, setAdminUsername] = useState<string>('admin');
   const [adminPassword, setAdminPassword] = useState<string>('123456');
   
-  // إعدادات الدفع واشتراكات الـ VIP
   const [vipSettings, setVipSettings] = useState({
     price: '25,000 دينار عراقي / شهرياً',
     mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
@@ -24,7 +23,6 @@ export function App() {
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
-  // نظام تسجيل دخول الطالب
   const [loggedStudent, setLoggedStudent] = useState<any | null>(null);
   const [studentLoginUser, setStudentLoginUser] = useState('');
   const [studentLoginPass, setStudentLoginPass] = useState('');
@@ -36,7 +34,6 @@ export function App() {
   const [selectedStage, setSelectedStage] = useState<string>('third_intermediate'); 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   
-  // المشغلات وقارئ الـ PDF والاختبارات
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
@@ -48,7 +45,6 @@ export function App() {
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // قاعدة بيانات الطلبة والمواد (متزامنة مع Firebase)
   const [studentsList, setStudentsList] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
 
@@ -56,7 +52,6 @@ export function App() {
   const [editUser, setEditUser] = useState('');
   const [editPass, setEditPass] = useState('');
 
-  // المراحل التسع الرسمية
   const allStagesList = [
     { id: 'first_intermediate', name: 'الأول المتوسط' },
     { id: 'second_intermediate', name: 'الثاني المتوسط' },
@@ -69,7 +64,6 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
-  // جلب البيانات من Firestore عند فتح التطبيق
   useEffect(() => {
     async function loadDataFromFirebase() {
       try {
@@ -108,7 +102,6 @@ export function App() {
     loadDataFromFirebase();
   }, []);
 
-  // حقول الإضافة داخل المادة
   const [newVideoTitle, setNewVideoTitle] = useState('');
   const [newVideoUrl, setNewVideoUrl] = useState('');
   const [newVideoVip, setNewVideoVip] = useState(false);
@@ -242,7 +235,6 @@ export function App() {
     ? subjects 
     : subjects.filter(s => s.stage === selectedStage);
 
-  // بوابة تسجيل دخول الطلاب الإجبارية للزائر
   if (!loggedStudent && !isAdmin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 flex items-center justify-center p-4">
@@ -666,7 +658,7 @@ export function App() {
           </div>
         )}
 
-        {/* 2. إدارة المادة الدراسية المفصلة */}
+        {/* 2. إدارة المادة الدراسية المفصلة الكاملة */}
         {selectedSubjectId && (() => {
           const currentSub = subjects.find(s => s.id === selectedSubjectId);
           if (!currentSub) return null;
@@ -684,10 +676,10 @@ export function App() {
                 </button>
               </div>
 
-              {/* أ) الشروحات والتعاليل */}
+              {/* أ) الشروحات والتعاليل والملاحظات التعليمية */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
-                  <NoteIcon className="w-5 h-5 text-amber-600" /> الشروحات والتعاليل والملاحظات ({currentSub.notes?.length || 0})
+                  <NoteIcon className="w-5 h-5 text-amber-600" /> الشروحات والتعاليل والملاحظات التعليمية ({currentSub.notes?.length || 0})
                 </h4>
                 <div className="space-y-4">
                   {currentSub.notes?.map((note: any) => (
@@ -713,101 +705,293 @@ export function App() {
                           </>
                         )}
                       </div>
+
+                      {isAdmin && (
+                        <button onClick={async () => {
+                          const updatedNotes = currentSub.notes.filter((n: any) => n.id !== note.id);
+                          await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
+                          setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s));
+                          setSuccessMessage('تم حذف الشرح بنجاح.');
+                          setTimeout(() => setSuccessMessage(null), 3000);
+                        }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg self-start">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
 
                 {isAdmin && (
                   <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-3 mt-4">
-                    <h5 className="text-xs font-black text-slate-800">إضافة شرح أو تعليل أو ملاحظة جديدة:</h5>
-                    <input type="text" value={newNoteTitle} onChange={(e) => setNewNoteTitle(e.target.value)} placeholder="عنوان الشرح..." className="w-full px-4 py-2.5 rounded-xl border text-xs font-bold" />
-                    <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="نص الشرح التفصيلي..." className="w-full px-4 py-2.5 rounded-xl border text-xs font-bold h-24" />
+                    <h5 className="text-xs font-black text-slate-800">إضافة شرح أو تعليل أو ملاحظة تعليمية (مع صورة و VIP):</h5>
+                    <input type="text" value={newNoteTitle} onChange={(e) => setNewNoteTitle(e.target.value)} placeholder="عنوان الشرح أو التعليل..." className="w-full px-4 py-2.5 rounded-xl border text-xs font-bold" />
+                    <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="اكتب نص الشرح أو التعليل التفصيلي هنا..." className="w-full px-4 py-2.5 rounded-xl border text-xs font-bold h-24" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <input type="text" value={newNoteImage} onChange={(e) => setNewNoteImage(e.target.value)} placeholder="رابط صورة توضيحية (اختياري)..." className="px-4 py-2 rounded-xl border text-xs font-bold font-mono" />
+                      <label className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border font-bold text-xs cursor-pointer justify-center">
+                        <input type="checkbox" checked={newNoteVip} onChange={(e) => setNewNoteVip(e.target.checked)} className="w-4 h-4 text-amber-600 rounded" />
+                        <span>شرح خاص بـ VIP؟</span>
+                      </label>
+                    </div>
                     <button onClick={async () => {
                       if (!newNoteTitle || !newNoteContent) return;
                       const newNoteObj = { id: Date.now().toString(), title: newNoteTitle, content: newNoteContent, image: newNoteImage, isVip: newNoteVip };
                       const updatedNotes = [...(currentSub.notes || []), newNoteObj];
                       await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
                       setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s));
-                      setNewNoteTitle(''); setNewNoteContent('');
-                      setSuccessMessage('تمت إضافة الشرح بنجاح!');
+                      setNewNoteTitle(''); setNewNoteContent(''); setNewNoteImage(''); setNewNoteVip(false);
+                      setSuccessMessage('تمت إضافة الشرح أو التعليل بنجاح للمادة!');
                       setTimeout(() => setSuccessMessage(null), 3000);
-                    }} className="w-full py-3 bg-amber-600 text-white rounded-xl text-xs font-bold shadow">
-                      + نشر الشرح في المادة
+                    }} className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow">
+                      + نشر الشرح / التعليل في المادة
                     </button>
                   </div>
                 )}
               </div>
 
-              {/* ب) الفيديوهات */}
+              {/* ب) الفيديوهات الشارحة */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
-                  <Video className="w-5 h-5 text-indigo-600" /> الدروس المرئية ({currentSub.videos?.length || 0})
+                  <Video className="w-5 h-5 text-indigo-600" /> الدروس المرئية والمحاضرات ({currentSub.videos?.length || 0})
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {currentSub.videos?.map((vid: any) => (
                     <div key={vid.id} className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center justify-between shadow-sm">
-                      <span className="font-bold text-slate-800 text-sm">{vid.title}</span>
-                      <button onClick={() => setActiveVideoUrl(vid.url)} className="px-3 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md">
-                        تشغيل
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold">▶</div>
+                        <div>
+                          <span className="font-bold text-slate-800 text-sm block">{vid.title}</span>
+                          <span className="text-xs text-slate-500">المدة: {vid.duration} {vid.isVip ? '• ⭐ VIP' : ''}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {vid.isVip && !loggedStudent?.isVip && isAdmin === false ? (
+                          <button onClick={() => setVipModalItem(vid)} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow">
+                            <Lock className="w-3.5 h-3.5" /> قفل VIP
+                          </button>
+                        ) : (
+                          <button onClick={() => setActiveVideoUrl(vid.url)} className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-md">
+                            <Play className="w-3.5 h-3.5" /> تشغيل
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button onClick={async () => {
+                            const updatedVids = currentSub.videos.filter((v: any) => v.id !== vid.id);
+                            await updateDoc(doc(db, 'subjects', currentSub.id), { videos: updatedVids });
+                            setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s));
+                            setSuccessMessage('تم حذف الفيديو بنجاح.');
+                            setTimeout(() => setSuccessMessage(null), 3000);
+                          }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
 
                 {isAdmin && (
-                  <div className="bg-white p-4 rounded-xl border space-y-3 mt-4">
-                    <h5 className="text-xs font-black text-slate-800">إضافة درس مرئي جديد:</h5>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3 mt-4">
+                    <h5 className="text-xs font-black text-slate-800">إضافة درس مرئي جديد (رابط يوتيوب و VIP):</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <input type="text" value={newVideoTitle} onChange={(e) => setNewVideoTitle(e.target.value)} placeholder="عنوان الدرس..." className="px-4 py-2 rounded-xl border text-xs font-bold" />
                       <input type="text" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} placeholder="رابط يوتيوب..." className="px-4 py-2 rounded-xl border text-xs font-bold font-mono" />
+                      <div className="flex items-center gap-2">
+                        <label className="flex items-center gap-1 text-xs font-bold cursor-pointer">
+                          <input type="checkbox" checked={newVideoVip} onChange={(e) => setNewVideoVip(e.target.checked)} className="w-4 h-4" />
+                          <span>VIP</span>
+                        </label>
+                        <button onClick={async () => {
+                          if (!newVideoTitle || !newVideoUrl) return;
+                          const formattedUrl = formatYouTubeUrl(newVideoUrl);
+                          const newVidObj = { id: Date.now().toString(), title: newVideoTitle, url: formattedUrl, duration: '45 دقيقة', isVip: newVideoVip };
+                          const updatedVids = [...(currentSub.videos || []), newVidObj];
+                          await updateDoc(doc(db, 'subjects', currentSub.id), { videos: updatedVids });
+                          setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s));
+                          setNewVideoTitle(''); setNewVideoUrl(''); setNewVideoVip(false);
+                          setSuccessMessage('تمت إضافة الفيديو بنجاح!');
+                          setTimeout(() => setSuccessMessage(null), 3000);
+                        }} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl text-xs font-bold shadow-md">
+                          + نشر الفيديو
+                        </button>
+                      </div>
                     </div>
-                    <button onClick={async () => {
-                      if (!newVideoTitle || !newVideoUrl) return;
-                      const formattedUrl = formatYouTubeUrl(newVideoUrl);
-                      const newVidObj = { id: Date.now().toString(), title: newVideoTitle, url: formattedUrl, duration: '45 دقيقة', isVip: newVideoVip };
-                      const updatedVids = [...(currentSub.videos || []), newVidObj];
-                      await updateDoc(doc(db, 'subjects', currentSub.id), { videos: updatedVids });
-                      setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s));
-                      setNewVideoTitle(''); setNewVideoUrl('');
-                      setSuccessMessage('تمت إضافة الفيديو بنجاح!');
-                      setTimeout(() => setSuccessMessage(null), 3000);
-                    }} className="w-full bg-indigo-600 text-white py-2 rounded-xl text-xs font-bold shadow">
-                      + نشر الفيديو
-                    </button>
                   </div>
                 )}
               </div>
 
-              {/* ج) الامتحانات والاختبارات */}
+              {/* ج) ملازم وقارئ الـ PDF */}
+              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
+                <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-emerald-600" /> ملازم وقارئ الـ PDF ({currentSub.booklets?.length || 0})
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {currentSub.booklets?.map((book: any) => (
+                    <div key={book.id} className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center justify-between shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">📄</div>
+                        <div>
+                          <span className="font-bold text-slate-800 text-sm block">{book.title}</span>
+                          <span className="text-xs text-slate-500">الحجم: {book.size} {book.isVip ? '• ⭐ VIP' : ''}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {book.isVip && !loggedStudent?.isVip && isAdmin === false ? (
+                          <button onClick={() => setVipModalItem(book)} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow">
+                            <Lock className="w-3.5 h-3.5" /> قفل VIP
+                          </button>
+                        ) : (
+                          <button onClick={() => setActivePdfUrl(book.url)} className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-md">
+                            <Eye className="w-3.5 h-3.5" /> قراءة
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button onClick={async () => {
+                            const updatedBooks = currentSub.booklets.filter((b: any) => b.id !== book.id);
+                            await updateDoc(doc(db, 'subjects', currentSub.id), { booklets: updatedBooks });
+                            setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, booklets: updatedBooks} : s));
+                            setSuccessMessage('تم حذف الملزمة بنجاح.');
+                            setTimeout(() => setSuccessMessage(null), 3000);
+                          }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {isAdmin && (
+                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3 mt-4">
+                    <h5 className="text-xs font-black text-slate-800">إضافة ملزمة PDF للقراءة (مع VIP):</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <input type="text" value={newBookletTitle} onChange={(e) => setNewBookletTitle(e.target.value)} placeholder="عنوان الملزمة..." className="px-4 py-2 rounded-xl border text-xs font-bold" />
+                      <input type="text" value={newBookletUrl} onChange={(e) => setNewBookletUrl(e.target.value)} placeholder="رابط ملف الـ PDF..." className="px-4 py-2 rounded-xl border text-xs font-bold font-mono" />
+                      <div className="flex items-center gap-2">
+                        <label className="flex items-center gap-1 text-xs font-bold cursor-pointer">
+                          <input type="checkbox" checked={newBookletVip} onChange={(e) => setNewBookletVip(e.target.checked)} className="w-4 h-4" />
+                          <span>VIP</span>
+                        </label>
+                        <button onClick={async () => {
+                          if (!newBookletTitle || !newBookletUrl) return;
+                          const newBookObj = { id: Date.now().toString(), title: newBookletTitle, url: newBookletUrl, size: '15 MB', isVip: newBookletVip };
+                          const updatedBooks = [...(currentSub.booklets || []), newBookObj];
+                          await updateDoc(doc(db, 'subjects', currentSub.id), { booklets: updatedBooks });
+                          setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, booklets: updatedBooks} : s));
+                          setNewBookletTitle(''); setNewBookletUrl(''); setNewBookletVip(false);
+                          setSuccessMessage('تمت إضافة الملزمة بنجاح!');
+                          setTimeout(() => setSuccessMessage(null), 3000);
+                        }} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-xs font-bold shadow-md">
+                          + نشر الملزمة
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* د) الامتحانات والاختبارات التفاعلية */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
-                  <CheckSquare className="w-5 h-5 text-indigo-600" /> الامتحانات والاختبارات ({currentSub.quizzes?.length || 0})
+                  <CheckSquare className="w-5 h-5 text-indigo-600" /> الامتحانات والاختبارات التفاعلية ({currentSub.quizzes?.length || 0})
                 </h4>
                 <div className="space-y-3">
                   {currentSub.quizzes?.map((quiz: any) => (
                     <div key={quiz.id} className="p-4 bg-white rounded-xl border border-slate-200 flex items-center justify-between shadow-sm">
-                      <span className="font-bold text-slate-800 text-sm">📝 {quiz.title}</span>
-                      <button onClick={() => { setActiveQuiz(quiz); setTimeLeft(900); setTimerActive(true); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md">
-                        بدء الامتحان
-                      </button>
+                      <span className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                        📝 {quiz.title} {quiz.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        {quiz.isVip && !loggedStudent?.isVip && isAdmin === false ? (
+                          <button onClick={() => setVipModalItem(quiz)} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow">
+                            <Lock className="w-3.5 h-3.5" /> قفل VIP
+                          </button>
+                        ) : (
+                          <button onClick={() => { setActiveQuiz(quiz); setTimeLeft(900); setTimerActive(true); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md">
+                            بدء الامتحان
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button onClick={async () => {
+                            const updatedQuizzes = currentSub.quizzes.filter((q: any) => q.id !== quiz.id);
+                            await updateDoc(doc(db, 'subjects', currentSub.id), { quizzes: updatedQuizzes });
+                            setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, quizzes: updatedQuizzes} : s));
+                            setSuccessMessage('تم حذف الامتحان.');
+                            setTimeout(() => setSuccessMessage(null), 3000);
+                          }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
 
                 {isAdmin && (
                   <div className="bg-white p-6 rounded-2xl border border-indigo-200 space-y-4">
-                    <h5 className="font-black text-slate-900 text-sm">🛠️ صياغة وإضافة امتحان تفاعلي جديد:</h5>
-                    <input type="text" value={quizTitle} onChange={(e) => setQuizTitle(e.target.value)} placeholder="عنوان الامتحان الشامل..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" />
-                    
+                    <h5 className="font-black text-slate-900 text-sm">🛠️ صياغة وإضافة امتحان تفاعلي جديد للمادة:</h5>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-bold text-slate-700 mb-1">عنوان الامتحان الرئيسي</label>
+                        <input type="text" value={quizTitle} onChange={(e) => setQuizTitle(e.target.value)} placeholder="مثال: امتحان الفصل الأول الشامل..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" />
+                      </div>
+                      <div className="flex items-end">
+                        <label className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border font-bold text-xs cursor-pointer w-full justify-center">
+                          <input type="checkbox" checked={quizIsVip} onChange={(e) => setQuizIsVip(e.target.checked)} className="w-4 h-4 text-amber-600 rounded" />
+                          <span>امتحان VIP حصري؟</span>
+                        </label>
+                      </div>
+                    </div>
+
                     <div className="p-4 bg-slate-50 rounded-xl border space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-800">إضافة سؤال جديد ({currentQuestionsList.length} أسئلة مضافة)</span>
+                        <select value={questionType} onChange={(e) => setQuestionType(e.target.value as any)} className="px-3 py-1 bg-white border rounded-lg text-xs font-bold">
+                          <option value="mcq">اختيار من متعدد (MCQ)</option>
+                          <option value="fill">ملء فراغات (تصحيح مرن)</option>
+                          <option value="true_false">صح وخطأ</option>
+                        </select>
+                      </div>
+
                       <input type="text" value={questionText} onChange={(e) => setQuestionText(e.target.value)} placeholder="نص السؤال..." className="w-full px-3 py-2 bg-white rounded-lg border text-xs font-bold" />
-                      <input type="text" value={fillCorrect} onChange={(e) => setFillCorrect(e.target.value)} placeholder="الإجابة الصحيحة..." className="w-full px-3 py-1.5 bg-emerald-50 border rounded-lg text-xs font-bold" />
-                      <button onClick={handleAddQuestionToQuiz} className="w-full py-2 bg-slate-900 text-white rounded-xl text-xs font-bold">
+
+                      {questionType === 'mcq' && (
+                        <div className="space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            {mcqOptions.map((opt, oIdx) => (
+                              <input key={oIdx} type="text" value={opt} onChange={(e) => {
+                                const newOpts = [...mcqOptions];
+                                newOpts[oIdx] = e.target.value;
+                                setMcqOptions(newOpts);
+                              }} placeholder={`الخيار ${oIdx+1}`} className="px-3 py-1.5 bg-white rounded-lg border text-xs" />
+                            ))}
+                          </div>
+                          <input type="text" value={mcqCorrect} onChange={(e) => setMcqCorrect(e.target.value)} placeholder="اكتب الخيار الصحيح تماماً..." className="w-full px-3 py-1.5 bg-emerald-50 border border-emerald-300 rounded-lg text-xs font-bold text-emerald-900" />
+                        </div>
+                      )}
+
+                      {questionType === 'fill' && (
+                        <input type="text" value={fillCorrect} onChange={(e) => setFillCorrect(e.target.value)} placeholder="الكلمة الصحيحة للفراغ..." className="w-full px-3 py-2 bg-emerald-50 border border-emerald-300 rounded-lg text-xs font-bold text-emerald-900" />
+                      )}
+
+                      {questionType === 'true_false' && (
+                        <div className="flex items-center gap-4 py-1">
+                          <span className="text-xs font-bold text-slate-700">الإجابة الصحيحة:</span>
+                          <label className="flex items-center gap-1 text-xs font-bold cursor-pointer">
+                            <input type="radio" name="tf" checked={tfCorrect === 'صح'} onChange={() => setTfCorrect('صح')} /> صح
+                          </label>
+                          <label className="flex items-center gap-1 text-xs font-bold cursor-pointer">
+                            <input type="radio" name="tf" checked={tfCorrect === 'خطأ'} onChange={() => setTfCorrect('خطأ')} /> خطأ
+                          </label>
+                        </div>
+                      )}
+
+                      <button onClick={handleAddQuestionToQuiz} className="w-full py-2 bg-slate-900 text-white rounded-xl text-xs font-bold shadow">
                         + إضافة هذا السؤال لورقة الامتحان
                       </button>
                     </div>
 
-                    <button onClick={() => handleSaveQuizToSubject(currentSub.id)} className="w-full py-3 bg-indigo-600 text-white font-black rounded-xl text-xs">
+                    <button onClick={() => handleSaveQuizToSubject(currentSub.id)} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-xs shadow-md">
                       نشر الامتحان التفاعلي نهائياً للمادة
                     </button>
                   </div>
@@ -821,49 +1005,92 @@ export function App() {
         {/* 3. لوحة إدارة الطلبة والـ VIP */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
-            <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-              <Users className="w-6 h-6 text-indigo-600" /> لوحة إدارة الطلبة وحسابات الـ VIP
-            </h2>
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div>
+                <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
+                  <Users className="w-6 h-6 text-indigo-600" /> لوحة إدارة الطلبة وحسابات الـ VIP
+                </h2>
+                <p className="text-sm text-slate-600 mt-1">تعديل اليوزر والباسورد، تفعيل اشتراكات الـ VIP، ومتابعة درجات الامتحانات.</p>
+              </div>
+              <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-xl text-xs font-bold">
+                إجمالي الطلبة: {studentsList.length}
+              </span>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-right border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 border-b text-slate-700 text-xs font-black">
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-black">
                     <th className="p-4">الطالب والصف</th>
-                    <th className="p-4">بيانات الدخول</th>
+                    <th className="p-4">بيانات الدخول (اليوزر والباسورد)</th>
                     <th className="p-4">حالة الاتصال والدرجة</th>
-                    <th className="p-4">نوع الاشتراك</th>
-                    <th className="p-4 text-center">الإجراءات</th>
+                    <th className="p-4">نوع الاشتراك (VIP)</th>
+                    <th className="p-4 text-center">التحكم والإجراءات</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y text-xs font-bold text-slate-800">
+                <tbody className="divide-y divide-slate-100 text-xs font-bold text-slate-800">
                   {studentsList.map((st) => (
-                    <tr key={st.id} className="hover:bg-slate-50">
+                    <tr key={st.id} className="hover:bg-slate-50/80 transition-all">
                       <td className="p-4">
                         <div className="font-black text-slate-900">{st.name}</div>
                         <div className="text-indigo-600 text-[11px]">{st.stage}</div>
                       </td>
-                      <td className="p-4 font-mono">
-                        <div>👤 {st.username}</div>
-                        <div>🔑 {st.pass}</div>
-                      </td>
+
                       <td className="p-4">
-                        <span className="px-2.5 py-1 rounded-full text-[10px] bg-emerald-50 text-emerald-700">{st.status}</span>
-                        <div className="text-[11px] text-amber-600 mt-1">الدرجة: {st.examScore}</div>
+                        {editingStudentId === st.id ? (
+                          <div className="flex flex-col gap-1.5 bg-slate-50 p-2 rounded-xl border border-indigo-200">
+                            <input type="text" value={editUser} onChange={(e) => setEditUser(e.target.value)} placeholder="اليوزر الجديد" className="px-2 py-1 rounded bg-white border text-xs font-bold" />
+                            <input type="text" value={editPass} onChange={(e) => setEditPass(e.target.value)} placeholder="الباسورد الجديد" className="px-2 py-1 rounded bg-white border text-xs font-bold" />
+                            <div className="flex gap-2 pt-1">
+                              <button onClick={async () => {
+                                await updateDoc(doc(db, 'students', st.id), { username: editUser, pass: editPass });
+                                setStudentsList(studentsList.map(item => item.id === st.id ? {...item, username: editUser, pass: editPass} : item));
+                                setEditingStudentId(null);
+                                setSuccessMessage('تم تحديث بيانات الدخول بنجاح.');
+                                setTimeout(() => setSuccessMessage(null), 3000);
+                              }} className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px]">حفظ</button>
+                              <button onClick={() => setEditingStudentId(null)} className="px-2 py-1 bg-slate-200 rounded text-[10px]">إلغاء</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl border">
+                            <div>
+                              <div className="text-slate-900">👤 اليوزر: <span className="font-mono text-indigo-700">{st.username}</span></div>
+                              <div className="text-slate-600">🔑 الباسورد: <span className="font-mono text-slate-900">{st.pass}</span></div>
+                            </div>
+                            <button onClick={() => { setEditingStudentId(st.id); setEditUser(st.username); setEditPass(st.pass); }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </td>
+
+                      <td className="p-4">
+                        <span className="px-2.5 py-1 rounded-full text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200">{st.status}</span>
+                        <div className="text-[11px] text-amber-600 font-black mt-1">آخر درجة امتحان: {st.examScore}</div>
+                      </td>
+
                       <td className="p-4">
                         <button onClick={async () => {
                           const newVip = !st.isVip;
                           await updateDoc(doc(db, 'students', st.id), { isVip: newVip });
                           setStudentsList(studentsList.map(item => item.id === st.id ? {...item, isVip: newVip} : item));
+                          setSuccessMessage('تم تحديث اشتراك الـ VIP.');
+                          setTimeout(() => setSuccessMessage(null), 3000);
                         }} className={`px-3 py-1.5 rounded-xl text-[11px] font-black ${st.isVip ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-700'}`}>
                           {st.isVip ? '⭐ VIP مفعّل' : 'حساب مجاني'}
                         </button>
                       </td>
+
                       <td className="p-4 text-center">
                         <button onClick={async () => {
                           await deleteDoc(doc(db, 'students', st.id));
                           setStudentsList(studentsList.filter(item => item.id !== st.id));
-                        }} className="text-rose-500 p-2"><Trash2 className="w-4 h-4" /></button>
+                          setSuccessMessage('تم حذف الطالب.');
+                          setTimeout(() => setSuccessMessage(null), 3000);
+                        }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -876,7 +1103,16 @@ export function App() {
         {/* 4. لوحة إضافة المواد العامة */}
         {activeTab === 'adminPanel' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-emerald-200 space-y-6">
-            <h2 className="text-2xl font-black text-slate-900">لوحة إضافة المواد والصور المخصصة</h2>
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">➕</div>
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900">لوحة إضافة المواد والصور المخصصة</h2>
+                  <p className="text-xs text-slate-500">أضف أي مادة لأي صف مع صورة جذابة</p>
+                </div>
+              </div>
+            </div>
+
             <form onSubmit={async (e) => {
               e.preventDefault();
               if (!newSubName) return;
@@ -899,24 +1135,35 @@ export function App() {
               } catch (err) {
                 console.error(err);
               }
-            }} className="bg-slate-50 p-6 rounded-2xl border space-y-4">
+            }} className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <input type="text" required value={newSubName} onChange={(e) => setNewSubName(e.target.value)} placeholder="اسم المادة..." className="px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" />
-                <select value={newSubStage} onChange={(e) => setNewSubStage(e.target.value)} className="px-4 py-2.5 rounded-xl border text-sm font-bold bg-white">
-                  {allStagesList.map(st => (
-                    <option key={st.id} value={st.id}>{st.name}</option>
-                  ))}
-                </select>
-                <input type="text" value={newSubImage} onChange={(e) => setNewSubImage(e.target.value)} placeholder="رابط صورة المادة..." className="px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم المادة</label>
+                  <input type="text" required value={newSubName} onChange={(e) => setNewSubName(e.target.value)} placeholder="مثال: الحاسوب والتكنولوجيا" className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">الصف الدراسي</label>
+                  <select value={newSubStage} onChange={(e) => setNewSubStage(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white">
+                    {allStagesList.map(st => (
+                      <option key={st.id} value={st.id}>{st.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">رابط صورة المادة (URL)</label>
+                  <input type="text" value={newSubImage} onChange={(e) => setNewSubImage(e.target.value)} placeholder="رابط صورة..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
+                </div>
               </div>
-              <button type="submit" className="bg-emerald-600 text-white font-bold py-3 px-8 rounded-xl text-xs shadow-md">
-                إضافة ونشر المادة
-              </button>
+              <div className="flex justify-end pt-2">
+                <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl text-xs shadow-md">
+                  إضافة ونشر المادة
+                </button>
+              </div>
             </form>
           </div>
         )}
 
-        {/* 5. إعدادات الـ VIP */}
+        {/* 5. إعدادات اشتراكات VIP وطرق الدفع */}
         {activeTab === 'vipSettings' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-amber-200 space-y-6">
             <h2 className="text-2xl font-black text-slate-900">إعدادات أسعار وطرق دفع اشتراكات الـ VIP</h2>
