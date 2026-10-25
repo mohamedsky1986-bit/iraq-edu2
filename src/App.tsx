@@ -9,14 +9,14 @@ import {
 } from 'lucide-react';
 
 export function App() {
-  // الحماية القصوى: تبدأ المنصة مغلقة ولا يظهر أي تحكم للأدمن إلا عبر القفل السري
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [showAdminLoginModal, setShowAdminLoginModal] = useState<boolean>(false);
   const [adminPinInput, setAdminPinInput] = useState<string>('');
+  const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
 
   const [adminName, setAdminName] = useState<string>('مدير المنصة');
   const [adminUsername, setAdminUsername] = useState<string>('admin');
-  const [adminPassword, setAdminPassword] = useState<string>('123456'); // قابلة للتغيير من إعدادات الأدمن
+  const [adminPassword, setAdminPassword] = useState<string>('123456');
   
   const [vipSettings, setVipSettings] = useState({
     price: '25,000 دينار عراقي / شهرياً',
@@ -48,18 +48,8 @@ export function App() {
   const [newStudentStage, setNewStudentStage] = useState('الثالث المتوسط');
 
   const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings'>('curriculum');
-  const [selectedStage, setSelectedStage] = useState<string>('third_intermediate'); 
+  const [selectedStage, setSelectedStage] = useState<string>('all'); 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
-  
-  // حجب المراحل البقية عن الطالب
-  useEffect(() => {
-    if (loggedStudent && !isAdmin) {
-      const stageObj = allStagesList.find(st => st.name === loggedStudent.stage);
-      if (stageObj) {
-        setSelectedStage(stageObj.id);
-      }
-    }
-  }, [loggedStudent, isAdmin]);
   
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
@@ -258,7 +248,7 @@ export function App() {
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
 
-  // تصفية المواد حسب المرحلة
+  // تصفية المواد حسب المرحلة المختارة للزائر أو الحصرية للطالب
   const filteredSubjects = subjects.filter(s => {
     if (isAdmin) {
       return selectedStage === 'all' || s.stage === selectedStage;
@@ -270,7 +260,7 @@ export function App() {
   });
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden">
+    <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
       
       {/* نافذة تسجيل دخول الأدمن عبر القفل السري */}
       {showAdminLoginModal && (
@@ -309,6 +299,127 @@ export function App() {
                 دخول لوحة التحكم
               </button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تسجيل دخول أو إنشاء حساب طالب (تظهر عند الضغط على زر تسجيل دخول طالب أو عند محاولة الدخول لمحتوى مقفل) */}
+      {showStudentAuthModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl relative space-y-6 text-right">
+            <button onClick={() => setShowStudentAuthModal(false)} className="absolute top-4 left-4 w-10 h-10 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
+              <X className="w-5 h-5" />
+            </button>
+            <div className="text-center">
+              <GraduationCap className="w-14 h-14 text-indigo-600 mx-auto mb-2 animate-bounce" />
+              <h2 className="text-2xl font-black text-slate-900">بوابة دخول الطلاب</h2>
+              <p className="text-xs text-slate-500 mt-1">سجل دخولك أو أنشئ حساباً جديداً للوصول إلى تفاصيل المواد والامتحانات</p>
+            </div>
+
+            {isStudentSignup ? (
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                if (!newStudentName || !studentLoginUser || !studentLoginPass) return;
+
+                if (studentsList.some(st => st.username === studentLoginUser)) {
+                  alert('⚠️ اسم المستخدم هذا مستخدم مسبقاً، يرجى اختيار يوزر آخر.');
+                  return;
+                }
+                if (studentLoginUser.length < 3) {
+                  alert('⚠️ يجب أن يكون اسم المستخدم 3 أحرف على الأقل.');
+                  return;
+                }
+                if (studentLoginPass.length < 6) {
+                  alert('⚠️ يجب أن تكون كلمة المرور 6 أحرف أو أرقام على الأقل.');
+                  return;
+                }
+
+                const newSt = {
+                  name: newStudentName,
+                  username: studentLoginUser,
+                  pass: studentLoginPass,
+                  stage: newStudentStage,
+                  isVip: false,
+                  status: 'متصل الآن',
+                  lastSeen: new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'}),
+                  regDate: new Date().toISOString().split('T')[0],
+                  examScore: 'لم يتقدم'
+                };
+
+                try {
+                  const docRef = await addDoc(collection(db, 'students'), newSt);
+                  const savedSt = { id: docRef.id, ...newSt };
+                  setStudentsList([savedSt, ...studentsList]);
+                  setLoggedStudent(savedSt);
+                  setShowStudentAuthModal(false);
+                  setSuccessMessage('تم إنشاء الحساب وتسجيل الدخول بنجاح!');
+                } catch (err) {
+                  console.error(err);
+                }
+              }} className="space-y-4">
+                
+                {/* اختيار الصف في البداية أولاً لتنبيه الطالب */}
+                <div className="bg-amber-50 border-2 border-amber-300 p-4 rounded-2xl space-y-2">
+                  <label className="block text-xs font-black text-amber-900">⚠️ تنبيه هام: اختر مرحلتك الدراسية بدقة أولاً</label>
+                  <select value={newStudentStage} onChange={(e) => setNewStudentStage(e.target.value)} className="w-full px-4 py-3 rounded-xl border-2 border-amber-400 bg-white text-sm font-black text-slate-900 shadow-sm cursor-pointer">
+                    {allStagesList.map(st => (
+                      <option key={st.id} value={st.name}>{st.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم الطالب الثلاثي</label>
+                  <input type="text" required value={newStudentName} onChange={(e) => setNewStudentName(e.target.value)} placeholder="مثال: محمد قاسم كريم" className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم المستخدم (3 أحرف على الأقل)</label>
+                  <input type="text" required value={studentLoginUser} onChange={(e) => setStudentLoginUser(e.target.value)} placeholder="اختر يوزر..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور (6 رموز على الأقل)</label>
+                  <input type="password" required value={studentLoginPass} onChange={(e) => setStudentLoginPass(e.target.value)} placeholder="كلمة المرور..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
+                </div>
+
+                <button type="submit" className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md">
+                  تسجيل حساب جديد ودخول المنصة
+                </button>
+                <div className="text-center pt-2">
+                  <button type="button" onClick={() => setIsStudentSignup(false)} className="text-xs text-indigo-600 font-bold hover:underline">
+                    لديك حساب بالفعل؟ تسجيل الدخول
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={(e) => {
+                e.preventDefault();
+                const found = studentsList.find(st => st.username === studentLoginUser && st.pass === studentLoginPass);
+                if (found) {
+                  setLoggedStudent(found);
+                  setShowStudentAuthModal(false);
+                  setSuccessMessage(`أهلاً بك يا ${found.name}!`);
+                } else {
+                  alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
+                }
+              }} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم المستخدم</label>
+                  <input type="text" required value={studentLoginUser} onChange={(e) => setStudentLoginUser(e.target.value)} placeholder="اليوزر الخاص بك..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور</label>
+                  <input type="password" required value={studentLoginPass} onChange={(e) => setStudentLoginPass(e.target.value)} placeholder="كلمة المرور..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
+                </div>
+                <button type="submit" className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md">
+                  تسجيل الدخول للمنصة
+                </button>
+                <div className="text-center pt-2">
+                  <button type="button" onClick={() => setIsStudentSignup(true)} className="text-xs text-indigo-600 font-bold hover:underline">
+                    ليس لديك حساب؟ إنشاء حساب جديد
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -456,12 +567,12 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة والشعار بشكل نظيف ومرتب للموبايل */}
-      <div className="w-full bg-slate-900 py-4 px-4 sm:px-8 shadow-md flex items-center justify-between flex-wrap gap-3">
+      {/* رأس الصفحة النظيف بدون تداخل أو نصوص إنجليزية */}
+      <div className="w-full bg-slate-900 py-3 px-4 sm:px-8 shadow-md flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-lg shadow">ن</div>
+          <div className="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-base shadow">ن</div>
           <div>
-            <h2 className="text-white font-black text-base sm:text-lg tracking-wide">منصة النابغة التعليمية</h2>
+            <h2 className="text-white font-black text-sm sm:text-base tracking-wide">منصة النابغة التعليمية</h2>
             <p className="text-[10px] text-slate-400">المنهج العراقي الرسمي</p>
           </div>
         </div>
@@ -479,7 +590,7 @@ export function App() {
               تسجيل الخروج ({loggedStudent.name})
             </button>
           ) : (
-            <button onClick={() => { setLoggedStudent(null); setIsAdmin(false); }} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow">
+            <button onClick={() => setShowStudentAuthModal(true)} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md">
               تسجيل دخول طالب
             </button>
           )}
@@ -542,8 +653,8 @@ export function App() {
       {/* المحتوى الرئيسي */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8 overflow-x-hidden">
         
-        {/* البانر العلوي المرتب بدون تداخل */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-3xl shadow-xl text-white p-6 sm:p-8 relative overflow-hidden mt-2">
+        {/* البانر العلوي */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-3xl shadow-xl text-white p-6 sm:p-8 relative overflow-hidden mt-1">
           <div className="relative z-10 max-w-3xl">
             <div className="inline-flex items-center gap-2 bg-indigo-800/60 border border-indigo-600/30 px-3 py-1 rounded-xl text-xs font-bold mb-4 text-indigo-200 flex-wrap">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> منصة النابغة التعليمية - المنهج العراقي الرسمي
@@ -566,12 +677,13 @@ export function App() {
                     {isAdmin ? 'اختر الصف الدراسي المطلوب' : loggedStudent ? `مرحلتك الدراسية الحصرية: ${loggedStudent?.stage}` : 'اختر الصف الدراسي لتصفح المنهج'}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {isAdmin ? 'يتضمن كافة المراحل والصفوف الدراسية التسع في العراق' : loggedStudent ? 'تم حجب المراحل الأخرى وتظهر لك مواد صفك حصراً' : 'قم بتسجيل الدخول كطالب لتظهر مرحلتك حصراً'}
+                    {isAdmin ? 'يتضمن كافة المراحل والصفوف الدراسية التسع في العراق' : loggedStudent ? 'تم حجب المراحل الأخرى وتظهر لك مواد صفك حصراً' : 'يمكنك تصفح مواد أي صف، وعند محاولة الدخول سيُطلب منك تسجيل الدخول'}
                   </p>
                 </div>
               </div>
 
-              {isAdmin && (
+              {/* القائمة المنسدلة للزوار والأدمن */}
+              {(!loggedStudent || isAdmin) && (
                 <div className="relative w-full sm:w-96">
                   <select 
                     value={selectedStage}
@@ -592,7 +704,15 @@ export function App() {
               {filteredSubjects.map((sub) => (
                 <div 
                   key={sub.id}
-                  className="bg-white rounded-3xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-slate-200/80 group flex flex-col justify-between relative"
+                  onClick={() => {
+                    // إذا لم يكن مسجلاً، نطلب منه تسجيل الدخول عند محاولة الدخول للمادة
+                    if (!loggedStudent && !isAdmin) {
+                      setShowStudentAuthModal(true);
+                    } else {
+                      setSelectedSubjectId(sub.id);
+                    }
+                  }}
+                  className="bg-white rounded-3xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-slate-200/80 group flex flex-col justify-between relative cursor-pointer"
                 >
                   {isAdmin && (
                     <button 
@@ -615,7 +735,7 @@ export function App() {
                     </button>
                   )}
 
-                  <div onClick={() => setSelectedSubjectId(sub.id)} className="h-40 w-full relative overflow-hidden bg-slate-200 cursor-pointer">
+                  <div className="h-40 w-full relative overflow-hidden bg-slate-200">
                     <img src={sub.image} alt={sub.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent"></div>
                     <div className="absolute bottom-3 right-3 left-3 flex items-center justify-between text-white">
@@ -624,7 +744,7 @@ export function App() {
                     </div>
                   </div>
                   
-                  <div onClick={() => setSelectedSubjectId(sub.id)} className="p-6 cursor-pointer">
+                  <div className="p-6">
                     <h3 className="text-xl font-black text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors">
                       {sub.name}
                     </h3>
