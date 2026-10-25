@@ -28,7 +28,7 @@ export const CurriculumProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }));
         setStages(loadedStages);
       } else {
-        // إذا كانت القاعدة فارغة، قم برفع البيانات الافتتاحية لأول مرة
+        // إذا كانت القاعدة فارغة، قم برفع البيانات الافتتاحية لأول مرة تلقائياً
         for (const stage of initialStages) {
           await setDoc(doc(db, 'stages', stage.id.toString()), stage);
         }
@@ -56,10 +56,8 @@ export const CurriculumProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const currentStage = stages[stageIndex];
       const newSubjects = [...(currentStage.subjects || []), { ...subjectData, id: Date.now().toString() }];
       
-      // تحديث قاعدة البيانات
       await updateDoc(stageRef, { subjects: newSubjects });
 
-      // تحديث الواجهة فوراً
       const updatedStages = [...stages];
       updatedStages[stageIndex] = { ...currentStage, subjects: newSubjects };
       setStages(updatedStages);
