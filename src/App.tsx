@@ -9,14 +9,14 @@ import {
 } from 'lucide-react';
 
 export function App() {
-  // الحماية الافتراضية: المنصة تبدأ بوضع الزائر العادي ولا تظهر أي صلاحيات أدمن إلا عبر القفل السري
+  // الحماية القصوى: تبدأ المنصة مغلقة ولا يظهر أي تحكم للأدمن إلا عبر القفل السري
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [showAdminLoginModal, setShowAdminLoginModal] = useState<boolean>(false);
   const [adminPinInput, setAdminPinInput] = useState<string>('');
 
-  const [adminName, setAdminName] = useState<string>('د. أحمد النابغة (المدير العام)');
+  const [adminName, setAdminName] = useState<string>('مدير المنصة');
   const [adminUsername, setAdminUsername] = useState<string>('admin');
-  const [adminPassword, setAdminPassword] = useState<string>('123456'); // قابلة للتغيير من قبل الأدمن
+  const [adminPassword, setAdminPassword] = useState<string>('123456'); // قابلة للتغيير من إعدادات الأدمن
   
   const [vipSettings, setVipSettings] = useState({
     price: '25,000 دينار عراقي / شهرياً',
@@ -27,7 +27,7 @@ export function App() {
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
-  // نظام تسجيل دخول الطالب مع حفظ الجلسة
+  // نظام تسجيل دخول الطالب مع الحفاظ على الجلسة
   const [loggedStudent, setLoggedStudent] = useState<any | null>(() => {
     const saved = localStorage.getItem('nabough_logged_student');
     return saved ? JSON.parse(saved) : null;
@@ -265,13 +265,12 @@ export function App() {
     } else if (loggedStudent) {
       return s.stageName === loggedStudent?.stage || s.stage === allStagesList.find(st => st.name === loggedStudent?.stage)?.id;
     } else {
-      // الزائر العادي يرى الكل أو مرحلة افتراضية
-      return true;
+      return selectedStage === 'all' || s.stage === selectedStage;
     }
   });
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
+    <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden">
       
       {/* نافذة تسجيل دخول الأدمن عبر القفل السري */}
       {showAdminLoginModal && (
@@ -457,81 +456,79 @@ export function App() {
         </div>
       )}
 
-      {/* شريط التنقل العلوي المنسق للموبايل */}
-      <div className="sticky top-0 z-40 shadow-md w-full bg-slate-900">
-        <Navbar 
-          isAdmin={isAdmin}
-          setIsAdmin={setIsAdmin}
-          adminName={adminName}
-          setAdminName={setAdminName}
-        />
-      </div>
-
-      {/* شريط التبويبات (يظهر حصراً للأدمن أو للطالب المسجل) */}
-      <div className="bg-white border-b border-slate-200 shadow-sm sticky top-16 z-30 w-full">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between py-3 gap-3">
-          <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
-            <button 
-              onClick={() => { setActiveTab('curriculum'); setSelectedSubjectId(null); }}
-              className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'curriculum' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-            >
-              <BookOpen className="w-4 h-4" /> المنهج الدراسي والصفوف
-            </button>
-            {isAdmin ? (
-              <>
-                <button 
-                  onClick={() => { setActiveTab('students'); setSelectedSubjectId(null); }}
-                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'students' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                >
-                  <Users className="w-4 h-4" /> إدارة الطلبة والـ VIP
-                </button>
-                <button 
-                  onClick={() => { setActiveTab('adminPanel'); setSelectedSubjectId(null); }}
-                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'adminPanel' ? 'bg-emerald-600 text-white shadow-md' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}
-                >
-                  <Settings className="w-4 h-4" /> إضافة المواد والصور
-                </button>
-                <button 
-                  onClick={() => { setActiveTab('vipSettings'); setSelectedSubjectId(null); }}
-                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'vipSettings' ? 'bg-amber-600 text-white shadow-md' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}
-                >
-                  <Crown className="w-4 h-4" /> إعدادات VIP
-                </button>
-                <button 
-                  onClick={() => { setActiveTab('settings'); setSelectedSubjectId(null); }}
-                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'settings' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-                >
-                  <Key className="w-4 h-4" /> إعدادات الأدمن
-                </button>
-              </>
-            ) : loggedStudent ? (
-              <div className="flex items-center gap-2 bg-indigo-50 px-3 py-2 rounded-xl text-indigo-900 text-xs font-bold whitespace-nowrap">
-                <User className="w-4 h-4 text-indigo-600" />
-                <span>الطالب: {loggedStudent?.name} ({loggedStudent?.stage}) {loggedStudent?.isVip ? '⭐ VIP' : 'مجاني'}</span>
-              </div>
-            ) : null}
-          </div>
-          
-          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
-            {isAdmin ? (
-              <button onClick={() => { setIsAdmin(false); }} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow whitespace-nowrap">
-                خروج من وضع الأدمن
-              </button>
-            ) : loggedStudent ? (
-              <button onClick={() => { 
-                localStorage.removeItem('nabough_logged_student');
-                setLoggedStudent(null); 
-              }} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow whitespace-nowrap">
-                تسجيل الخروج
-              </button>
-            ) : (
-              <button onClick={() => { setLoggedStudent(null); setIsAdmin(false); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow whitespace-nowrap">
-                تسجيل دخول طالب
-              </button>
-            )}
+      {/* رأس الصفحة والشعار بشكل نظيف ومرتب للموبايل */}
+      <div className="w-full bg-slate-900 py-4 px-4 sm:px-8 shadow-md flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-lg shadow">ن</div>
+          <div>
+            <h2 className="text-white font-black text-base sm:text-lg tracking-wide">منصة النابغة التعليمية</h2>
+            <p className="text-[10px] text-slate-400">المنهج العراقي الرسمي</p>
           </div>
         </div>
+
+        <div className="flex items-center gap-2">
+          {isAdmin ? (
+            <button onClick={() => setIsAdmin(false)} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow">
+              خروج من وضع الأدمن
+            </button>
+          ) : loggedStudent ? (
+            <button onClick={() => { 
+              localStorage.removeItem('nabough_logged_student');
+              setLoggedStudent(null); 
+            }} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow">
+              تسجيل الخروج ({loggedStudent.name})
+            </button>
+          ) : (
+            <button onClick={() => { setLoggedStudent(null); setIsAdmin(false); }} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow">
+              تسجيل دخول طالب
+            </button>
+          )}
+        </div>
       </div>
+
+      {/* شريط التبويبات (للأدمن أو الطالب المسجل) */}
+      {(isAdmin || loggedStudent) && (
+        <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30 w-full">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between py-3 gap-3 overflow-x-auto scrollbar-none">
+            <div className="flex items-center gap-2">
+              <button 
+                onClick={() => { setActiveTab('curriculum'); setSelectedSubjectId(null); }}
+                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'curriculum' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              >
+                <BookOpen className="w-4 h-4" /> المنهج الدراسي والصفوف
+              </button>
+              {isAdmin && (
+                <>
+                  <button 
+                    onClick={() => { setActiveTab('students'); setSelectedSubjectId(null); }}
+                    className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'students' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  >
+                    <Users className="w-4 h-4" /> إدارة الطلبة والـ VIP
+                  </button>
+                  <button 
+                    onClick={() => { setActiveTab('adminPanel'); setSelectedSubjectId(null); }}
+                    className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'adminPanel' ? 'bg-emerald-600 text-white shadow-md' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}
+                  >
+                    <Settings className="w-4 h-4" /> إضافة المواد والصور
+                  </button>
+                  <button 
+                    onClick={() => { setActiveTab('vipSettings'); setSelectedSubjectId(null); }}
+                    className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'vipSettings' ? 'bg-amber-600 text-white shadow-md' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}
+                  >
+                    <Crown className="w-4 h-4" /> إعدادات VIP
+                  </button>
+                  <button 
+                    onClick={() => { setActiveTab('settings'); setSelectedSubjectId(null); }}
+                    className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'settings' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                  >
+                    <Key className="w-4 h-4" /> إعدادات الأدمن
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {successMessage && (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 w-full">
@@ -545,8 +542,8 @@ export function App() {
       {/* المحتوى الرئيسي */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8 overflow-x-hidden">
         
-        {/* البانر العلوي مع مساحة كافية لتجنب تداخل النصوص */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-3xl shadow-xl text-white p-6 sm:p-8 relative overflow-hidden mt-4">
+        {/* البانر العلوي المرتب بدون تداخل */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-3xl shadow-xl text-white p-6 sm:p-8 relative overflow-hidden mt-2">
           <div className="relative z-10 max-w-3xl">
             <div className="inline-flex items-center gap-2 bg-indigo-800/60 border border-indigo-600/30 px-3 py-1 rounded-xl text-xs font-bold mb-4 text-indigo-200 flex-wrap">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> منصة النابغة التعليمية - المنهج العراقي الرسمي
@@ -995,7 +992,7 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة (خاصة بالأدمن فقط) */}
+        {/* 3. لوحة إدارة الطلبة (أدمن فقط) */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-3">
@@ -1099,7 +1096,7 @@ export function App() {
           </div>
         )}
 
-        {/* 4. إضافة المواد (خاص بالأدمن) */}
+        {/* 4. إضافة المواد (أدمن فقط) */}
         {activeTab === 'adminPanel' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-emerald-200 space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-3">
@@ -1190,7 +1187,7 @@ export function App() {
           </div>
         )}
 
-        {/* 6. إعدادات الأدمن وتغيير كلمة المرور */}
+        {/* 6. إعدادات الأدمن وتغيير الباسورد */}
         {activeTab === 'settings' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
             <h2 className="text-2xl font-black text-slate-900">إعدادات حساب المدير العام والصلاحيات</h2>
@@ -1210,7 +1207,7 @@ export function App() {
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور الجديدة الخاصة بك (Password)</label>
                 <input type="text" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="أدخل كلمة مرور قوية جديدة..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
-                <p className="text-[11px] text-slate-500 mt-1">هذه الكلمة هي التي ستستخدمها في كل مرة تفتح فيها القفل السري 🔒 بالأسفل.</p>
+                <p className="text-[11px] text-slate-500 mt-1">هذه الكلمة هي التي ستستخدمها في كل مرة تفتح فيها القفل السري 🔒 بالأسفل للدخول للأدمن.</p>
               </div>
               <button type="submit" className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl text-xs shadow-md">
                 حفظ كلمة المرور الجديدة والأمان
@@ -1221,7 +1218,7 @@ export function App() {
 
       </main>
 
-      {/* الفوتر مع رمز القفل السري لدخول الأدمن فقط */}
+      {/* الفوتر مع رمز القفل السري للأدمن */}
       <footer className="border-t border-slate-200 bg-white py-6 mt-auto w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <div className="flex items-center gap-2">
