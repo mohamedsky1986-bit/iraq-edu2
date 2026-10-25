@@ -23,7 +23,20 @@ export function App() {
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
-  const [loggedStudent, setLoggedStudent] = useState<any | null>(null);
+  // نظام تسجيل الدخول مع حفظ الجلسة (LocalStorage) لمنع خروج الطالب عند الـ Refresh
+  const [loggedStudent, setLoggedStudent] = useState<any | null>(() => {
+    const saved = localStorage.getItem('nabough_logged_student');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  useEffect(() => {
+    if (loggedStudent) {
+      localStorage.setItem('nabough_logged_student', JSON.stringify(loggedStudent));
+    } else {
+      localStorage.removeItem('nabough_logged_student');
+    }
+  }, [loggedStudent]);
+
   const [studentLoginUser, setStudentLoginUser] = useState('');
   const [studentLoginPass, setStudentLoginPass] = useState('');
   const [isStudentSignup, setIsStudentSignup] = useState(false);
@@ -33,6 +46,16 @@ export function App() {
   const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings'>('curriculum');
   const [selectedStage, setSelectedStage] = useState<string>('third_intermediate'); 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
+  
+  // حجب المراحل عن الطالب وجعله يرى مرحلته فقط
+  useEffect(() => {
+    if (loggedStudent && !isAdmin) {
+      const stageObj = allStagesList.find(st => st.name === loggedStudent.stage);
+      if (stageObj) {
+        setSelectedStage(stageObj.id);
+      }
+    }
+  }, [loggedStudent, isAdmin]);
   
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
@@ -91,7 +114,7 @@ export function App() {
         if (!studsSnap.empty) {
           setStudentsList(studsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
         } else {
-          const defaultStudent = { name: 'علي محمد حسن', username: 'ali', pass: '123', stage: 'الثالث المتوسط', isVip: true, status: 'متصل الآن', lastSeen: 'الآن', regDate: '2026-10-01', examScore: 'لم يتقدم' };
+          const defaultStudent = { name: 'علي محمد حسن', username: 'ali', pass: '123456', stage: 'الثالث المتوسط', isVip: true, status: 'متصل الآن', lastSeen: 'الآن', regDate: '2026-10-19', examScore: 'لم يتقدم' };
           const docRef = await addDoc(collection(db, 'students'), defaultStudent);
           setStudentsList([{ id: docRef.id, ...defaultStudent }]);
         }
@@ -231,10 +254,17 @@ export function App() {
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
 
-  const filteredSubjects = selectedStage === 'all' 
-    ? subjects 
-    : subjects.filter(s => s.stage === selectedStage);
+  // حفل تصفية المواد حسب المرحلة (حجب المراحل الأخرى عن الطالب العادي)
+  const filteredSubjects = subjects.filter(s => {
+    if (isAdmin) {
+      return selectedStage === 'all' || s.stage === selectedStage;
+    } else {
+      // الطالب يرى فقط المواد الخاصة بمرحلته المسجل بها
+      return s.stageName === loggedStudent?.stage || s.stage === allStagesList.find(st => st.name === loggedStudent?.stage)?.id;
+    }
+  });
 
+  // بوابة تسجيل دخول الطالب مع شروط الأمان ومنع التكرار
   if (!loggedStudent && !isAdmin) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 flex items-center justify-center p-4">
@@ -249,6 +279,23 @@ export function App() {
             <form onSubmit={async (e) => {
               e.preventDefault();
               if (!newStudentName || !studentLoginUser || !studentLoginPass) return;
+
+              // التحقق من عدم تكرار اسم المستخدم
+              if (studentsList.some(st => st.username === studentLoginUser)) {
+                alert('⚠️ اسم المستخدم هذا مستخدم مسبقاً، يرجى اختيار اسم مستخدم (يوزر) آخر.');
+                return;
+              }
+
+              // شروط الأمان: اليوزر 3 أحرف فأكثر، والباسورد 6 رموز فأكثر
+              if (studentLoginUser.length < 3) {
+                alert('⚠️ يجب أن يكون اسم المستخدم (Username) 3 أحرف على الأقل.');
+                return;
+              }
+              if (studentLoginPass.length < 6) {
+                alert('⚠️ يجب أن تكون كلمة المرور (Password) 6 أحرف أو أرقام على الأقل لحماية حسابك.');
+                return;
+              }
+
               const newSt = {
                 name: newStudentName,
                 username: studentLoginUser,
@@ -256,10 +303,11 @@ export function App() {
                 stage: newStudentStage,
                 isVip: false,
                 status: 'متصل الآن',
-                lastSeen: 'الآن',
+                lastSeen: new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'}),
                 regDate: new Date().toISOString().split('T')[0],
                 examScore: 'لم يتقدم'
               };
+
               try {
                 const docRef = await addDoc(collection(db, 'students'), newSt);
                 const savedSt = { id: docRef.id, ...newSt };
@@ -270,26 +318,30 @@ export function App() {
                 console.error(err);
               }
             }} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">اسم الطالب الثلاثي</label>
-                <input type="text" required value={newStudentName} onChange={(e) => setNewStudentName(e.target.value)} placeholder="مثال: محمد قاسم كريم" className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">الصف الدراسي</label>
-                <select value={newStudentStage} onChange={(e) => setNewStudentStage(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold">
+              
+              {/* اختيار الصف الدراسي في البداية أولاً وبارزاً لتنبيه الطالب */}
+              <div className="bg-amber-50 border-2 border-amber-300 p-4 rounded-2xl space-y-2">
+                <label className="block text-xs font-black text-amber-900">⚠️ تنبيه هام: اختر مرحلتك الدراسية بدقة أولاً</label>
+                <select value={newStudentStage} onChange={(e) => setNewStudentStage(e.target.value)} className="w-full px-4 py-3 rounded-xl border-2 border-amber-400 bg-white text-sm font-black text-slate-900 shadow-sm cursor-pointer">
                   {allStagesList.map(st => (
                     <option key={st.id} value={st.name}>{st.name}</option>
                   ))}
                 </select>
               </div>
+
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">اسم المستخدم (Username)</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">اسم الطالب الثلاثي</label>
+                <input type="text" required value={newStudentName} onChange={(e) => setNewStudentName(e.target.value)} placeholder="مثال: محمد قاسم كريم" className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">اسم المستخدم (3 أحرف على الأقل)</label>
                 <input type="text" required value={studentLoginUser} onChange={(e) => setStudentLoginUser(e.target.value)} placeholder="اختر يوزر..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور (Password)</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور (6 رموز/أحرف على الأقل)</label>
                 <input type="password" required value={studentLoginPass} onChange={(e) => setStudentLoginPass(e.target.value)} placeholder="كلمة المرور..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
               </div>
+
               <button type="submit" className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md">
                 تسجيل حساب جديد ودخول المنصة
               </button>
@@ -307,7 +359,7 @@ export function App() {
                 setLoggedStudent(found);
                 setSuccessMessage(`أهلاً بك يا ${found.name}!`);
               } else {
-                alert('اسم المستخدم أو كلمة المرور غير صحيحة، أو لم يتم اعتماد حسابك.');
+                alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
               }
             }} className="space-y-4">
               <div>
@@ -339,7 +391,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased">
       
-      {/* نافذة تفاصيل الدفع واشتراك الـ VIP */}
+      {/* نافذة تفاصيل الدفع VIP */}
       {vipModalItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative space-y-6 text-right">
@@ -382,7 +434,7 @@ export function App() {
         </div>
       )}
 
-      {/* مشغل الفيديو المنبثق */}
+      {/* مشغل الفيديو */}
       {activeVideoUrl && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-4xl w-full p-4 shadow-2xl relative">
@@ -396,7 +448,7 @@ export function App() {
         </div>
       )}
 
-      {/* قارئ الـ PDF المنبثق */}
+      {/* قارئ PDF */}
       {activePdfUrl && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-4xl w-full h-[80vh] p-4 shadow-2xl relative flex flex-col">
@@ -413,7 +465,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة خوض الامتحان التفاعلي */}
+      {/* نافذة الامتحان */}
       {activeQuiz && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative space-y-6">
@@ -546,8 +598,12 @@ export function App() {
                 خروج / تسجيل دخول طالب
               </button>
             ) : (
-              <button onClick={() => { setIsAdmin(true); setLoggedStudent(null); }} className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-xs font-bold shadow">
-                العودة لوحة الأدمن
+              <button onClick={() => { 
+                localStorage.removeItem('nabough_logged_student');
+                setLoggedStudent(null); 
+                setIsAdmin(true); 
+              }} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow">
+                تسجيل الخروج
               </button>
             )}
           </div>
@@ -570,9 +626,10 @@ export function App() {
           <div className="relative z-10 max-w-3xl">
             <div className="inline-flex items-center gap-2 bg-indigo-800/60 border border-indigo-600/30 px-3 py-1 rounded-xl text-xs font-bold mb-4 text-indigo-200">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> منصة النابغة التعليمية - المنهج العراقي الرسمي
+              {!isAdmin && <span className="bg-indigo-600 text-white px-2 py-0.5 rounded text-[10px] mr-2">مرحلتك الحصرية: {loggedStudent?.stage}</span>}
             </div>
             <h1 className="text-3xl sm:text-4xl font-black mb-3 tracking-tight">
-              إدارة المناهج، الامتحانات الذكية، والشروحات التفاعلية 🎓
+              {isAdmin ? 'لوحة تحكم المدير العام والإدارة 🎓' : `مرحباً بك يا ${loggedStudent?.name} في مرحلة ${loggedStudent?.stage} 📚`}
             </h1>
           </div>
         </div>
@@ -584,24 +641,30 @@ export function App() {
               <div className="flex items-center gap-3 w-full sm:w-auto">
                 <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xl">📚</div>
                 <div>
-                  <h3 className="font-black text-slate-900 text-base">اختر الصف الدراسي المطلوب</h3>
-                  <p className="text-xs text-slate-500">يتضمن كافة المراحل والصفوف الدراسية التسع في العراق</p>
+                  <h3 className="font-black text-slate-900 text-base">
+                    {isAdmin ? 'اختر الصف الدراسي المطلوب' : `مرحلتك الدراسية الحصرية: ${loggedStudent?.stage}`}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {isAdmin ? 'يتضمن كافة المراحل والصفوف الدراسية التسع في العراق' : 'تم حجب المراحل الأخرى وتظهر لك مواد صفك حصراً'}
+                  </p>
                 </div>
               </div>
 
-              <div className="relative w-full sm:w-96">
-                <select 
-                  value={selectedStage}
-                  onChange={(e) => setSelectedStage(e.target.value)}
-                  className="w-full bg-slate-50 border-2 border-indigo-200 text-slate-900 text-sm font-black rounded-xl px-4 py-3.5 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-sm"
-                >
-                  <option value="all">🌟 عرض كافة المراحل والصفوف الدراسية</option>
-                  {allStagesList.map(st => (
-                    <option key={st.id} value={st.id}>{st.name}</option>
-                  ))}
-                </select>
-                <ChevronDown className="w-5 h-5 text-indigo-600 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
-              </div>
+              {isAdmin && (
+                <div className="relative w-full sm:w-96">
+                  <select 
+                    value={selectedStage}
+                    onChange={(e) => setSelectedStage(e.target.value)}
+                    className="w-full bg-slate-50 border-2 border-indigo-200 text-slate-900 text-sm font-black rounded-xl px-4 py-3.5 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-sm"
+                  >
+                    <option value="all">🌟 عرض كافة المراحل والصفوف الدراسية</option>
+                    {allStagesList.map(st => (
+                      <option key={st.id} value={st.id}>{st.name}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-5 h-5 text-indigo-600 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -655,10 +718,16 @@ export function App() {
                 </div>
               ))}
             </div>
+
+            {filteredSubjects.length === 0 && (
+              <div className="bg-white rounded-3xl p-12 text-center border border-slate-200">
+                <p className="text-slate-500 font-bold text-base">لا توجد مواد دراسية مضافة لهذه المرحلة حالياً.</p>
+              </div>
+            )}
           </div>
         )}
 
-        {/* 2. إدارة المادة الدراسية المفصلة الكاملة */}
+        {/* 2. إدارة المادة الدراسية المفصلة */}
         {selectedSubjectId && (() => {
           const currentSub = subjects.find(s => s.id === selectedSubjectId);
           if (!currentSub) return null;
@@ -666,17 +735,17 @@ export function App() {
             <div className="bg-white rounded-3xl p-8 shadow-xl border border-indigo-100 space-y-8">
               <div className="flex items-center justify-between pb-4 border-b border-slate-100">
                 <div>
-                  <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-xl border border-indigo-200">إدارة مادة دراسية</span>
+                  <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-xl border border-indigo-200">عرض المادة الدراسية</span>
                   <h3 className="text-2xl font-black text-slate-900 mt-2 flex items-center gap-3">
                     <span className="text-3xl">{currentSub.icon}</span> {currentSub.name} ({currentSub.stageName})
                   </h3>
                 </div>
                 <button onClick={() => setSelectedSubjectId(null)} className="text-xs font-bold bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl">
-                  ← العودة لقائمة الصفوف
+                  ← العودة للمناهج
                 </button>
               </div>
 
-              {/* أ) الشروحات والتعاليل والملاحظات التعليمية */}
+              {/* أ) الشروحات والتعاليل */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <NoteIcon className="w-5 h-5 text-amber-600" /> الشروحات والتعاليل والملاحظات التعليمية ({currentSub.notes?.length || 0})
@@ -820,7 +889,7 @@ export function App() {
                 )}
               </div>
 
-              {/* ج) ملازم وقارئ الـ PDF */}
+              {/* ج) ملازم وقارئ PDF */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <FileText className="w-5 h-5 text-emerald-600" /> ملازم وقارئ الـ PDF ({currentSub.booklets?.length || 0})
@@ -890,7 +959,7 @@ export function App() {
                 )}
               </div>
 
-              {/* د) الامتحانات والاختبارات التفاعلية */}
+              {/* د) الامتحانات */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <CheckSquare className="w-5 h-5 text-indigo-600" /> الامتحانات والاختبارات التفاعلية ({currentSub.quizzes?.length || 0})
@@ -1002,7 +1071,7 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة والـ VIP */}
+        {/* 3. لوحة إدارة الطلبة مع تاريخ التسجيل وآخر ظهور */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100">
@@ -1010,7 +1079,7 @@ export function App() {
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
                   <Users className="w-6 h-6 text-indigo-600" /> لوحة إدارة الطلبة وحسابات الـ VIP
                 </h2>
-                <p className="text-sm text-slate-600 mt-1">تعديل اليوزر والباسورد، تفعيل اشتراكات الـ VIP، ومتابعة درجات الامتحانات.</p>
+                <p className="text-sm text-slate-600 mt-1">عرض تاريخ التسجيل، آخر ظهور، تعديل اليوزر والباسورد، وتفعيل الـ VIP.</p>
               </div>
               <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-xl text-xs font-bold">
                 إجمالي الطلبة: {studentsList.length}
@@ -1021,11 +1090,12 @@ export function App() {
               <table className="w-full text-right border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-black">
-                    <th className="p-4">الطالب والصف</th>
-                    <th className="p-4">بيانات الدخول (اليوزر والباسورد)</th>
-                    <th className="p-4">حالة الاتصال والدرجة</th>
-                    <th className="p-4">نوع الاشتراك (VIP)</th>
-                    <th className="p-4 text-center">التحكم والإجراءات</th>
+                    <th className="p-4">الطالب والمرحلة</th>
+                    <th className="p-4">تاريخ التسجيل & آخر ظهور</th>
+                    <th className="p-4">بيانات الدخول</th>
+                    <th className="p-4">الحالة والدرجة</th>
+                    <th className="p-4">اشتراك VIP</th>
+                    <th className="p-4 text-center">التحكم</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs font-bold text-slate-800">
@@ -1034,6 +1104,11 @@ export function App() {
                       <td className="p-4">
                         <div className="font-black text-slate-900">{st.name}</div>
                         <div className="text-indigo-600 text-[11px]">{st.stage}</div>
+                      </td>
+
+                      <td className="p-4 text-slate-600">
+                        <div>📅 تسجيل: <span className="font-mono text-slate-900">{st.regDate || 'غير متوفر'}</span></div>
+                        <div className="mt-1">🕒 آخر ظهور: <span className="font-mono text-emerald-600">{st.lastSeen || 'الآن'}</span></div>
                       </td>
 
                       <td className="p-4">
@@ -1067,7 +1142,7 @@ export function App() {
 
                       <td className="p-4">
                         <span className="px-2.5 py-1 rounded-full text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200">{st.status}</span>
-                        <div className="text-[11px] text-amber-600 font-black mt-1">آخر درجة امتحان: {st.examScore}</div>
+                        <div className="text-[11px] text-amber-600 font-black mt-1">الدرجة: {st.examScore}</div>
                       </td>
 
                       <td className="p-4">
@@ -1100,19 +1175,10 @@ export function App() {
           </div>
         )}
 
-        {/* 4. لوحة إضافة المواد العامة */}
+        {/* 4. إضافة المواد */}
         {activeTab === 'adminPanel' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-emerald-200 space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">➕</div>
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900">لوحة إضافة المواد والصور المخصصة</h2>
-                  <p className="text-xs text-slate-500">أضف أي مادة لأي صف مع صورة جذابة</p>
-                </div>
-              </div>
-            </div>
-
+            <h2 className="text-2xl font-black text-slate-900">لوحة إضافة المواد والصور المخصصة</h2>
             <form onSubmit={async (e) => {
               e.preventDefault();
               if (!newSubName) return;
@@ -1135,35 +1201,24 @@ export function App() {
               } catch (err) {
                 console.error(err);
               }
-            }} className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
+            }} className="bg-slate-50 p-6 rounded-2xl border space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم المادة</label>
-                  <input type="text" required value={newSubName} onChange={(e) => setNewSubName(e.target.value)} placeholder="مثال: الحاسوب والتكنولوجيا" className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">الصف الدراسي</label>
-                  <select value={newSubStage} onChange={(e) => setNewSubStage(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white">
-                    {allStagesList.map(st => (
-                      <option key={st.id} value={st.id}>{st.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">رابط صورة المادة (URL)</label>
-                  <input type="text" value={newSubImage} onChange={(e) => setNewSubImage(e.target.value)} placeholder="رابط صورة..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
-                </div>
+                <input type="text" required value={newSubName} onChange={(e) => setNewSubName(e.target.value)} placeholder="اسم المادة..." className="px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" />
+                <select value={newSubStage} onChange={(e) => setNewSubStage(e.target.value)} className="px-4 py-2.5 rounded-xl border text-sm font-bold bg-white">
+                  {allStagesList.map(st => (
+                    <option key={st.id} value={st.name}>{st.name}</option>
+                  ))}
+                </select>
+                <input type="text" value={newSubImage} onChange={(e) => setNewSubImage(e.target.value)} placeholder="رابط صورة المادة..." className="px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
               </div>
-              <div className="flex justify-end pt-2">
-                <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl text-xs shadow-md">
-                  إضافة ونشر المادة
-                </button>
-              </div>
+              <button type="submit" className="bg-emerald-600 text-white font-bold py-3 px-8 rounded-xl text-xs shadow-md">
+                إضافة ونشر المادة
+              </button>
             </form>
           </div>
         )}
 
-        {/* 5. إعدادات اشتراكات VIP وطرق الدفع */}
+        {/* 5. إعدادات VIP */}
         {activeTab === 'vipSettings' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-amber-200 space-y-6">
             <h2 className="text-2xl font-black text-slate-900">إعدادات أسعار وطرق دفع اشتراكات الـ VIP</h2>
@@ -1191,7 +1246,7 @@ export function App() {
           </div>
         )}
 
-        {/* 6. إعدادات حساب الأدمن */}
+        {/* 6. إعدادات الأدمن */}
         {activeTab === 'settings' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
             <h2 className="text-2xl font-black text-slate-900">إعدادات حساب المدير العام والصلاحيات</h2>
