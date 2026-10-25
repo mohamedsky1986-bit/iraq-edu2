@@ -9,14 +9,14 @@ import {
 } from 'lucide-react';
 
 export function App() {
-  // تبديل حالة الأدمن الافتراضية لتكون مخفية وتحتاج فتح القفل السري
+  // الحماية الافتراضية: المنصة تبدأ بوضع الزائر العادي ولا تظهر أي صلاحيات أدمن إلا عبر القفل السري
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [showAdminLoginModal, setShowAdminLoginModal] = useState<boolean>(false);
   const [adminPinInput, setAdminPinInput] = useState<string>('');
 
   const [adminName, setAdminName] = useState<string>('د. أحمد النابغة (المدير العام)');
   const [adminUsername, setAdminUsername] = useState<string>('admin');
-  const [adminPassword, setAdminPassword] = useState<string>('123456');
+  const [adminPassword, setAdminPassword] = useState<string>('123456'); // قابلة للتغيير من قبل الأدمن
   
   const [vipSettings, setVipSettings] = useState({
     price: '25,000 دينار عراقي / شهرياً',
@@ -27,7 +27,7 @@ export function App() {
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
-  // نظام تسجيل الدخول مع الحفاظ على الجلسة عبر الـ LocalStorage
+  // نظام تسجيل دخول الطالب مع حفظ الجلسة
   const [loggedStudent, setLoggedStudent] = useState<any | null>(() => {
     const saved = localStorage.getItem('nabough_logged_student');
     return saved ? JSON.parse(saved) : null;
@@ -51,7 +51,7 @@ export function App() {
   const [selectedStage, setSelectedStage] = useState<string>('third_intermediate'); 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   
-  // حجب المراحل البقية عن الطالب وجعله يرى مرحلته فقط
+  // حجب المراحل البقية عن الطالب
   useEffect(() => {
     if (loggedStudent && !isAdmin) {
       const stageObj = allStagesList.find(st => st.name === loggedStudent.stage);
@@ -153,7 +153,7 @@ export function App() {
   const [currentQuestionsList, setCurrentQuestionsList] = useState<any[]>([]);
 
   const [newSubName, setNewSubName] = useState('');
-  const [newSubStage, setNewSubStage] = useState('third_intermediate');
+  const [newSubStage, setNewSubStage] = useState('الثالث المتوسط');
   const [newSubImage, setNewSubImage] = useState('');
 
   useEffect(() => {
@@ -262,15 +262,18 @@ export function App() {
   const filteredSubjects = subjects.filter(s => {
     if (isAdmin) {
       return selectedStage === 'all' || s.stage === selectedStage;
-    } else {
+    } else if (loggedStudent) {
       return s.stageName === loggedStudent?.stage || s.stage === allStagesList.find(st => st.name === loggedStudent?.stage)?.id;
+    } else {
+      // الزائر العادي يرى الكل أو مرحلة افتراضية
+      return true;
     }
   });
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden">
+    <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
       
-      {/* نافذة تسجيل دخول الأدمن السري عبر القفل */}
+      {/* نافذة تسجيل دخول الأدمن عبر القفل السري */}
       {showAdminLoginModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative space-y-4 text-right">
@@ -284,7 +287,7 @@ export function App() {
             </div>
             <form onSubmit={(e) => {
               e.preventDefault();
-              if (adminPinInput === adminPassword || adminPinInput === '123456') {
+              if (adminPinInput === adminPassword) {
                 setIsAdmin(true);
                 setLoggedStudent(null);
                 setShowAdminLoginModal(false);
@@ -315,7 +318,7 @@ export function App() {
       {vipModalItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative space-y-6 text-right">
-            <button onClick={() => setVipModalItem(null)} className="absolute top-4 left-4 w-10 h-10 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
+            <button onClick={() => setVipModalItem(null)} className="absolute top-4 left-4 w-10 h-10 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-full flex items-center justify-center font-bold">
               <X className="w-5 h-5" />
             </button>
             <div className="text-center space-y-2">
@@ -454,8 +457,8 @@ export function App() {
         </div>
       )}
 
-      {/* شريط التنقل العلوي مع ضبط المحاذاة والمسافات للموبايل */}
-      <div className="sticky top-0 z-40 shadow-md w-full">
+      {/* شريط التنقل العلوي المنسق للموبايل */}
+      <div className="sticky top-0 z-40 shadow-md w-full bg-slate-900">
         <Navbar 
           isAdmin={isAdmin}
           setIsAdmin={setIsAdmin}
@@ -464,7 +467,7 @@ export function App() {
         />
       </div>
 
-      {/* شريط التبويبات (تظهر فقط للأدمن أو الطالب المسجل) */}
+      {/* شريط التبويبات (يظهر حصراً للأدمن أو للطالب المسجل) */}
       <div className="bg-white border-b border-slate-200 shadow-sm sticky top-16 z-30 w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between py-3 gap-3">
           <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
@@ -539,11 +542,11 @@ export function App() {
         </div>
       )}
 
-      {/* المحتوى الرئيسي مع تلافى أي انزلاق أفقي على الهواتف */}
+      {/* المحتوى الرئيسي */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8 overflow-x-hidden">
         
-        {/* البانر العلوي مع مساحة كافية لعدم قص العنوان */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-3xl shadow-xl text-white p-6 sm:p-8 relative overflow-hidden mt-2">
+        {/* البانر العلوي مع مساحة كافية لتجنب تداخل النصوص */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-3xl shadow-xl text-white p-6 sm:p-8 relative overflow-hidden mt-4">
           <div className="relative z-10 max-w-3xl">
             <div className="inline-flex items-center gap-2 bg-indigo-800/60 border border-indigo-600/30 px-3 py-1 rounded-xl text-xs font-bold mb-4 text-indigo-200 flex-wrap">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> منصة النابغة التعليمية - المنهج العراقي الرسمي
@@ -563,10 +566,10 @@ export function App() {
                 <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xl flex-shrink-0">📚</div>
                 <div>
                   <h3 className="font-black text-slate-900 text-base">
-                    {isAdmin ? 'اختر الصف الدراسي المطلوب' : `مرحلتك الدراسية الحصرية: ${loggedStudent?.stage}`}
+                    {isAdmin ? 'اختر الصف الدراسي المطلوب' : loggedStudent ? `مرحلتك الدراسية الحصرية: ${loggedStudent?.stage}` : 'اختر الصف الدراسي لتصفح المنهج'}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {isAdmin ? 'يتضمن كافة المراحل والصفوف الدراسية التسع في العراق' : 'تم حجب المراحل الأخرى وتظهر لك مواد صفك حصراً'}
+                    {isAdmin ? 'يتضمن كافة المراحل والصفوف الدراسية التسع في العراق' : loggedStudent ? 'تم حجب المراحل الأخرى وتظهر لك مواد صفك حصراً' : 'قم بتسجيل الدخول كطالب لتظهر مرحلتك حصراً'}
                   </p>
                 </div>
               </div>
@@ -992,7 +995,7 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة مع تاريخ التسجيل وآخر ظهور */}
+        {/* 3. لوحة إدارة الطلبة (خاصة بالأدمن فقط) */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-3">
@@ -1096,7 +1099,7 @@ export function App() {
           </div>
         )}
 
-        {/* 4. إضافة المواد */}
+        {/* 4. إضافة المواد (خاص بالأدمن) */}
         {activeTab === 'adminPanel' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-emerald-200 space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-3">
@@ -1112,11 +1115,11 @@ export function App() {
             <form onSubmit={async (e) => {
               e.preventDefault();
               if (!newSubName) return;
-              const foundStageObj = allStagesList.find(st => st.id === newSubStage);
+              const foundStageObj = allStagesList.find(st => st.id === newSubStage || st.name === newSubStage);
               const newObj = {
                 name: newSubName,
-                stage: newSubStage,
-                stageName: foundStageObj ? foundStageObj.name : 'المرحلة الدراسية',
+                stage: foundStageObj ? foundStageObj.id : 'third_intermediate',
+                stageName: foundStageObj ? foundStageObj.name : newSubStage,
                 icon: '📚',
                 color: 'from-blue-600 to-indigo-800',
                 image: newSubImage || 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=500&q=80',
@@ -1187,13 +1190,13 @@ export function App() {
           </div>
         )}
 
-        {/* 6. إعدادات الأدمن */}
+        {/* 6. إعدادات الأدمن وتغيير كلمة المرور */}
         {activeTab === 'settings' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
             <h2 className="text-2xl font-black text-slate-900">إعدادات حساب المدير العام والصلاحيات</h2>
             <form onSubmit={(e) => {
               e.preventDefault();
-              setSuccessMessage('تم تحديث بيانات حساب المدير العام بنجاح!');
+              setSuccessMessage('تم تحديث كلمة المرور وبيانات الأدمن بنجاح!');
               setTimeout(() => setSuccessMessage(null), 3000);
             }} className="bg-slate-50 p-6 rounded-2xl border space-y-4 max-w-xl">
               <div>
@@ -1205,11 +1208,12 @@ export function App() {
                 <input type="text" value={adminUsername} onChange={(e) => setAdminUsername(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور (Password)</label>
-                <input type="text" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
+                <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور الجديدة الخاصة بك (Password)</label>
+                <input type="text" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="أدخل كلمة مرور قوية جديدة..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
+                <p className="text-[11px] text-slate-500 mt-1">هذه الكلمة هي التي ستستخدمها في كل مرة تفتح فيها القفل السري 🔒 بالأسفل.</p>
               </div>
               <button type="submit" className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl text-xs shadow-md">
-                حفظ التغييرات الأمنية
+                حفظ كلمة المرور الجديدة والأمان
               </button>
             </form>
           </div>
@@ -1217,7 +1221,7 @@ export function App() {
 
       </main>
 
-      {/* الفوتر مع رمز القفل السري لدخول الأدمن */}
+      {/* الفوتر مع رمز القفل السري لدخول الأدمن فقط */}
       <footer className="border-t border-slate-200 bg-white py-6 mt-auto w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <div className="flex items-center gap-2">
@@ -1230,7 +1234,7 @@ export function App() {
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-emerald-600" /> بغداد - العراق</span>
             
-            {/* زر القفل السري للأدمن */}
+            {/* زر القفل السري لدخول الأدمن */}
             <button 
               onClick={() => setShowAdminLoginModal(true)} 
               className="w-7 h-7 bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-400 rounded-full flex items-center justify-center transition-all shadow-sm"
