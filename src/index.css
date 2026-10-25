@@ -1,0 +1,10 @@
+@import "@fontsource/cairo/arabic.css";
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Cairo', system-ui, sans-serif;
+}
+
+* {
+  font-family: 'Cairo', system-ui, sans-serif !important;
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Remix منصة نبوغ التعليمية | الامتحانات والمناهج",
+  "description": "منصة تعليمية متكاملة لاختبارات ومناهج المتوسطة والإعدادية مع تصحيح ذكي للأسئلة والفراغات ولوحة تحكم للمدرس",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
