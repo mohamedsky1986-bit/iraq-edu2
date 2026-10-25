@@ -14,9 +14,10 @@ export function App() {
   const [adminPinInput, setAdminPinInput] = useState<string>('');
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
 
-  const [adminName, setAdminName] = useState<string>('مدير المنصة');
-  const [adminUsername, setAdminUsername] = useState<string>('admin');
-  const [adminPassword, setAdminPassword] = useState<string>('123456');
+  // حفظ وحفظ بيانات الأدمن وكلمة المرور في الـ LocalStorage لضمان عدم ضياعها وتغييرها للأبد
+  const [adminName, setAdminName] = useState<string>(() => localStorage.getItem('nabough_admin_name') || 'مدير المنصة');
+  const [adminUsername, setAdminUsername] = useState<string>(() => localStorage.getItem('nabough_admin_user') || 'admin');
+  const [adminPassword, setAdminPassword] = useState<string>(() => localStorage.getItem('nabough_admin_pass') || '123456');
   
   const [vipSettings, setVipSettings] = useState({
     price: '25,000 دينار عراقي / شهرياً',
@@ -248,7 +249,7 @@ export function App() {
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
 
-  // تصفية المواد حسب المرحلة المختارة للزائر أو الحصرية للطالب
+  // تصفية المواد حسب المرحلة
   const filteredSubjects = subjects.filter(s => {
     if (isAdmin) {
       return selectedStage === 'all' || s.stage === selectedStage;
@@ -262,7 +263,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
       
-      {/* نافذة تسجيل دخول الأدمن عبر القفل السري */}
+      {/* نافذة تسجيل دخول الأدمن عبر القفل السري (تفحص كلمة المرور المخصصة وحدها بدون أي باسبورد افتراضي) */}
       {showAdminLoginModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative space-y-4 text-right">
@@ -289,7 +290,7 @@ export function App() {
             }} className="space-y-3">
               <input 
                 type="password" 
-                placeholder="كلمة مرور الأدمن..." 
+                placeholder="كلمة المرور..." 
                 value={adminPinInput} 
                 onChange={(e) => setAdminPinInput(e.target.value)} 
                 className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" 
@@ -303,7 +304,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة تسجيل دخول أو إنشاء حساب طالب (تظهر عند الضغط على زر تسجيل دخول طالب أو عند محاولة الدخول لمحتوى مقفل) */}
+      {/* نافذة تسجيل دخول أو إنشاء حساب طالب */}
       {showStudentAuthModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl relative space-y-6 text-right">
@@ -358,7 +359,6 @@ export function App() {
                 }
               }} className="space-y-4">
                 
-                {/* اختيار الصف في البداية أولاً لتنبيه الطالب */}
                 <div className="bg-amber-50 border-2 border-amber-300 p-4 rounded-2xl space-y-2">
                   <label className="block text-xs font-black text-amber-900">⚠️ تنبيه هام: اختر مرحلتك الدراسية بدقة أولاً</label>
                   <select value={newStudentStage} onChange={(e) => setNewStudentStage(e.target.value)} className="w-full px-4 py-3 rounded-xl border-2 border-amber-400 bg-white text-sm font-black text-slate-900 shadow-sm cursor-pointer">
@@ -567,7 +567,7 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة النظيف بدون تداخل أو نصوص إنجليزية */}
+      {/* رأس الصفحة والنظيف */}
       <div className="w-full bg-slate-900 py-3 px-4 sm:px-8 shadow-md flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-base shadow">ن</div>
@@ -591,14 +591,14 @@ export function App() {
             </button>
           ) : (
             <button onClick={() => setShowStudentAuthModal(true)} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md">
-              تسجيل دخول طالب
+              تسجيل دخول / إنشاء حساب طالب
             </button>
           )}
         </div>
       </div>
 
-      {/* شريط التبويبات (للأدمن أو الطالب المسجل) */}
-      {(isAdmin || loggedStudent) && (
+      {/* شريط التبويبات (للأدمن فقط) */}
+      {isAdmin && (
         <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30 w-full">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between py-3 gap-3 overflow-x-auto scrollbar-none">
             <div className="flex items-center gap-2">
@@ -608,34 +608,30 @@ export function App() {
               >
                 <BookOpen className="w-4 h-4" /> المنهج الدراسي والصفوف
               </button>
-              {isAdmin && (
-                <>
-                  <button 
-                    onClick={() => { setActiveTab('students'); setSelectedSubjectId(null); }}
-                    className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'students' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-                  >
-                    <Users className="w-4 h-4" /> إدارة الطلبة والـ VIP
-                  </button>
-                  <button 
-                    onClick={() => { setActiveTab('adminPanel'); setSelectedSubjectId(null); }}
-                    className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'adminPanel' ? 'bg-emerald-600 text-white shadow-md' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}
-                  >
-                    <Settings className="w-4 h-4" /> إضافة المواد والصور
-                  </button>
-                  <button 
-                    onClick={() => { setActiveTab('vipSettings'); setSelectedSubjectId(null); }}
-                    className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'vipSettings' ? 'bg-amber-600 text-white shadow-md' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}
-                  >
-                    <Crown className="w-4 h-4" /> إعدادات VIP
-                  </button>
-                  <button 
-                    onClick={() => { setActiveTab('settings'); setSelectedSubjectId(null); }}
-                    className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'settings' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-                  >
-                    <Key className="w-4 h-4" /> إعدادات الأدمن
-                  </button>
-                </>
-              )}
+              <button 
+                onClick={() => { setActiveTab('students'); setSelectedSubjectId(null); }}
+                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'students' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              >
+                <Users className="w-4 h-4" /> إدارة الطلبة والـ VIP
+              </button>
+              <button 
+                onClick={() => { setActiveTab('adminPanel'); setSelectedSubjectId(null); }}
+                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'adminPanel' ? 'bg-emerald-600 text-white shadow-md' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}
+              >
+                <Settings className="w-4 h-4" /> إضافة المواد والصور
+              </button>
+              <button 
+                onClick={() => { setActiveTab('vipSettings'); setSelectedSubjectId(null); }}
+                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'vipSettings' ? 'bg-amber-600 text-white shadow-md' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}
+              >
+                <Crown className="w-4 h-4" /> إعدادات VIP
+              </button>
+              <button 
+                onClick={() => { setActiveTab('settings'); setSelectedSubjectId(null); }}
+                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'settings' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+              >
+                <Key className="w-4 h-4" /> إعدادات الأدمن
+              </button>
             </div>
           </div>
         </div>
@@ -666,7 +662,7 @@ export function App() {
           </div>
         </div>
 
-        {/* 1. تبويب المنهج الدراسي */}
+        {/* 1. تبويب المنهج الدراسي وقائمة اختيار الصف */}
         {activeTab === 'curriculum' && !selectedSubjectId && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -674,15 +670,15 @@ export function App() {
                 <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xl flex-shrink-0">📚</div>
                 <div>
                   <h3 className="font-black text-slate-900 text-base">
-                    {isAdmin ? 'اختر الصف الدراسي المطلوب' : loggedStudent ? `مرحلتك الدراسية الحصرية: ${loggedStudent?.stage}` : 'اختر الصف الدراسي لتصفح المنهج'}
+                    {isAdmin ? 'اختر الصف الدراسي المطلوب' : loggedStudent ? `مرحلتك الدراسية الحصرية: ${loggedStudent?.stage}` : 'اختر الصف الدراسي لتصفح المناهج'}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {isAdmin ? 'يتضمن كافة المراحل والصفوف الدراسية التسع في العراق' : loggedStudent ? 'تم حجب المراحل الأخرى وتظهر لك مواد صفك حصراً' : 'يمكنك تصفح مواد أي صف، وعند محاولة الدخول سيُطلب منك تسجيل الدخول'}
+                    {isAdmin ? 'يتضمن كافة المراحل والصفوف الدراسية التسع في العراق' : loggedStudent ? 'تظهر لك مواد صفك حصراً' : 'يمكنك استخدام القائمة المنسدلة لاختيار أي صف وتصفح مواده، وعند محاولة فتح مادة سيُطلب منك تسجيل الدخول'}
                   </p>
                 </div>
               </div>
 
-              {/* القائمة المنسدلة للزوار والأدمن */}
+              {/* قائمة منسدلة لاختيار الصفوف تظهر للزوار والأدمن */}
               {(!loggedStudent || isAdmin) && (
                 <div className="relative w-full sm:w-96">
                   <select 
@@ -705,7 +701,7 @@ export function App() {
                 <div 
                   key={sub.id}
                   onClick={() => {
-                    // إذا لم يكن مسجلاً، نطلب منه تسجيل الدخول عند محاولة الدخول للمادة
+                    // إذا لم يكن مسجلاً، نفتح له نافذة تسجيل الدخول عند النقر على المادة
                     if (!loggedStudent && !isAdmin) {
                       setShowStudentAuthModal(true);
                     } else {
@@ -1307,13 +1303,16 @@ export function App() {
           </div>
         )}
 
-        {/* 6. إعدادات الأدمن وتغيير الباسورد */}
+        {/* 6. إعدادات الأدمن وتغيير الباسورد وحفظه في الـ LocalStorage */}
         {activeTab === 'settings' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
             <h2 className="text-2xl font-black text-slate-900">إعدادات حساب المدير العام والصلاحيات</h2>
             <form onSubmit={(e) => {
               e.preventDefault();
-              setSuccessMessage('تم تحديث كلمة المرور وبيانات الأدمن بنجاح!');
+              localStorage.setItem('nabough_admin_pass', adminPassword);
+              localStorage.setItem('nabough_admin_user', adminUsername);
+              localStorage.setItem('nabough_admin_name', adminName);
+              setSuccessMessage('تم تحديث كلمة المرور وحفظها بشكل دائم في الذاكرة!');
               setTimeout(() => setSuccessMessage(null), 3000);
             }} className="bg-slate-50 p-6 rounded-2xl border space-y-4 max-w-xl">
               <div>
@@ -1327,7 +1326,7 @@ export function App() {
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور الجديدة الخاصة بك (Password)</label>
                 <input type="text" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="أدخل كلمة مرور قوية جديدة..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
-                <p className="text-[11px] text-slate-500 mt-1">هذه الكلمة هي التي ستستخدمها في كل مرة تفتح فيها القفل السري 🔒 بالأسفل للدخول للأدمن.</p>
+                <p className="text-[11px] text-slate-500 mt-1">هذه الكلمة ستبقى محفوظة بشكل دائم، وهي المطلوبة عند الضغط على رمز القفل 🔒 بالأسفل.</p>
               </div>
               <button type="submit" className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl text-xs shadow-md">
                 حفظ كلمة المرور الجديدة والأمان
