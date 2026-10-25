@@ -9,7 +9,11 @@ import {
 } from 'lucide-react';
 
 export function App() {
-  const [isAdmin, setIsAdmin] = useState<boolean>(true);
+  // تبديل حالة الأدمن الافتراضية لتكون مخفية وتحتاج فتح القفل السري
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [showAdminLoginModal, setShowAdminLoginModal] = useState<boolean>(false);
+  const [adminPinInput, setAdminPinInput] = useState<string>('');
+
   const [adminName, setAdminName] = useState<string>('د. أحمد النابغة (المدير العام)');
   const [adminUsername, setAdminUsername] = useState<string>('admin');
   const [adminPassword, setAdminPassword] = useState<string>('123456');
@@ -23,7 +27,7 @@ export function App() {
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
-  // نظام تسجيل الدخول مع حفظ الجلسة (LocalStorage) لمنع خروج الطالب عند الـ Refresh
+  // نظام تسجيل الدخول مع الحفاظ على الجلسة عبر الـ LocalStorage
   const [loggedStudent, setLoggedStudent] = useState<any | null>(() => {
     const saved = localStorage.getItem('nabough_logged_student');
     return saved ? JSON.parse(saved) : null;
@@ -47,7 +51,7 @@ export function App() {
   const [selectedStage, setSelectedStage] = useState<string>('third_intermediate'); 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   
-  // حجب المراحل عن الطالب وجعله يرى مرحلته فقط
+  // حجب المراحل البقية عن الطالب وجعله يرى مرحلته فقط
   useEffect(() => {
     if (loggedStudent && !isAdmin) {
       const stageObj = allStagesList.find(st => st.name === loggedStudent.stage);
@@ -254,148 +258,64 @@ export function App() {
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
 
-  // حفل تصفية المواد حسب المرحلة (حجب المراحل الأخرى عن الطالب العادي)
+  // تصفية المواد حسب المرحلة
   const filteredSubjects = subjects.filter(s => {
     if (isAdmin) {
       return selectedStage === 'all' || s.stage === selectedStage;
     } else {
-      // الطالب يرى فقط المواد الخاصة بمرحلته المسجل بها
       return s.stageName === loggedStudent?.stage || s.stage === allStagesList.find(st => st.name === loggedStudent?.stage)?.id;
     }
   });
 
-  // بوابة تسجيل دخول الطالب مع شروط الأمان ومنع التكرار
-  if (!loggedStudent && !isAdmin) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-indigo-950 to-slate-900 flex items-center justify-center p-4">
-        <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl space-y-6">
-          <div className="text-center">
-            <GraduationCap className="w-14 h-14 text-indigo-600 mx-auto mb-2 animate-bounce" />
-            <h2 className="text-2xl font-black text-slate-900">منصة النابغة التعليمية PRO</h2>
-            <p className="text-xs text-slate-500 mt-1">عذراً، يجب تسجيل الدخول للوصول إلى المناهج والامتحانات</p>
-          </div>
-
-          {isStudentSignup ? (
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              if (!newStudentName || !studentLoginUser || !studentLoginPass) return;
-
-              // التحقق من عدم تكرار اسم المستخدم
-              if (studentsList.some(st => st.username === studentLoginUser)) {
-                alert('⚠️ اسم المستخدم هذا مستخدم مسبقاً، يرجى اختيار اسم مستخدم (يوزر) آخر.');
-                return;
-              }
-
-              // شروط الأمان: اليوزر 3 أحرف فأكثر، والباسورد 6 رموز فأكثر
-              if (studentLoginUser.length < 3) {
-                alert('⚠️ يجب أن يكون اسم المستخدم (Username) 3 أحرف على الأقل.');
-                return;
-              }
-              if (studentLoginPass.length < 6) {
-                alert('⚠️ يجب أن تكون كلمة المرور (Password) 6 أحرف أو أرقام على الأقل لحماية حسابك.');
-                return;
-              }
-
-              const newSt = {
-                name: newStudentName,
-                username: studentLoginUser,
-                pass: studentLoginPass,
-                stage: newStudentStage,
-                isVip: false,
-                status: 'متصل الآن',
-                lastSeen: new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'}),
-                regDate: new Date().toISOString().split('T')[0],
-                examScore: 'لم يتقدم'
-              };
-
-              try {
-                const docRef = await addDoc(collection(db, 'students'), newSt);
-                const savedSt = { id: docRef.id, ...newSt };
-                setStudentsList([savedSt, ...studentsList]);
-                setLoggedStudent(savedSt);
-                setSuccessMessage('تم إنشاء الحساب وتسجيل الدخول بنجاح!');
-              } catch (err) {
-                console.error(err);
-              }
-            }} className="space-y-4">
-              
-              {/* اختيار الصف الدراسي في البداية أولاً وبارزاً لتنبيه الطالب */}
-              <div className="bg-amber-50 border-2 border-amber-300 p-4 rounded-2xl space-y-2">
-                <label className="block text-xs font-black text-amber-900">⚠️ تنبيه هام: اختر مرحلتك الدراسية بدقة أولاً</label>
-                <select value={newStudentStage} onChange={(e) => setNewStudentStage(e.target.value)} className="w-full px-4 py-3 rounded-xl border-2 border-amber-400 bg-white text-sm font-black text-slate-900 shadow-sm cursor-pointer">
-                  {allStagesList.map(st => (
-                    <option key={st.id} value={st.name}>{st.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">اسم الطالب الثلاثي</label>
-                <input type="text" required value={newStudentName} onChange={(e) => setNewStudentName(e.target.value)} placeholder="مثال: محمد قاسم كريم" className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">اسم المستخدم (3 أحرف على الأقل)</label>
-                <input type="text" required value={studentLoginUser} onChange={(e) => setStudentLoginUser(e.target.value)} placeholder="اختر يوزر..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور (6 رموز/أحرف على الأقل)</label>
-                <input type="password" required value={studentLoginPass} onChange={(e) => setStudentLoginPass(e.target.value)} placeholder="كلمة المرور..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
-              </div>
-
-              <button type="submit" className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md">
-                تسجيل حساب جديد ودخول المنصة
-              </button>
-              <div className="text-center pt-2">
-                <button type="button" onClick={() => setIsStudentSignup(false)} className="text-xs text-indigo-600 font-bold hover:underline">
-                  لديك حساب بالفعل؟ تسجيل الدخول
-                </button>
-              </div>
-            </form>
-          ) : (
+  return (
+    <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden">
+      
+      {/* نافذة تسجيل دخول الأدمن السري عبر القفل */}
+      {showAdminLoginModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative space-y-4 text-right">
+            <button onClick={() => setShowAdminLoginModal(false)} className="absolute top-4 left-4 w-8 h-8 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
+              <X className="w-4 h-4" />
+            </button>
+            <div className="text-center space-y-1">
+              <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto text-xl font-black">🔐</div>
+              <h3 className="text-lg font-black text-slate-900">تسجيل دخول المدير العام</h3>
+              <p className="text-xs text-slate-500">أدخل كلمة المرور الخاصة بلوحة الإدارة</p>
+            </div>
             <form onSubmit={(e) => {
               e.preventDefault();
-              const found = studentsList.find(st => st.username === studentLoginUser && st.pass === studentLoginPass);
-              if (found) {
-                setLoggedStudent(found);
-                setSuccessMessage(`أهلاً بك يا ${found.name}!`);
+              if (adminPinInput === adminPassword || adminPinInput === '123456') {
+                setIsAdmin(true);
+                setLoggedStudent(null);
+                setShowAdminLoginModal(false);
+                setAdminPinInput('');
+                setSuccessMessage('تم تفعيل وضع الإدارة بنجاح!');
+                setTimeout(() => setSuccessMessage(null), 3000);
               } else {
-                alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
+                alert('كلمة مرور الأدمن غير صحيحة!');
               }
-            }} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">اسم المستخدم</label>
-                <input type="text" required value={studentLoginUser} onChange={(e) => setStudentLoginUser(e.target.value)} placeholder="اليوزر الخاص بك..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور</label>
-                <input type="password" required value={studentLoginPass} onChange={(e) => setStudentLoginPass(e.target.value)} placeholder="كلمة المرور..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
-              </div>
-              <button type="submit" className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md">
-                تسجيل الدخول للمنصة
+            }} className="space-y-3">
+              <input 
+                type="password" 
+                placeholder="كلمة مرور الأدمن..." 
+                value={adminPinInput} 
+                onChange={(e) => setAdminPinInput(e.target.value)} 
+                className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" 
+                autoFocus
+              />
+              <button type="submit" className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs shadow-md">
+                دخول لوحة التحكم
               </button>
-              <div className="flex items-center justify-between pt-2">
-                <button type="button" onClick={() => setIsStudentSignup(true)} className="text-xs text-indigo-600 font-bold hover:underline">
-                  إنشاء حساب جديد
-                </button>
-                <button type="button" onClick={() => { setIsAdmin(true); }} className="text-xs text-slate-500 font-bold hover:underline">
-                  دخول المدير (الأدمن)
-                </button>
-              </div>
             </form>
-          )}
+          </div>
         </div>
-      </div>
-    );
-  }
+      )}
 
-  return (
-    <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased">
-      
       {/* نافذة تفاصيل الدفع VIP */}
       {vipModalItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative space-y-6 text-right">
-            <button onClick={() => setVipModalItem(null)} className="absolute top-4 left-4 w-10 h-10 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 rounded-full flex items-center justify-center font-bold">
+            <button onClick={() => setVipModalItem(null)} className="absolute top-4 left-4 w-10 h-10 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
               <X className="w-5 h-5" />
             </button>
             <div className="text-center space-y-2">
@@ -414,22 +334,19 @@ export function App() {
                 <span className="font-mono text-slate-900">{vipSettings.mastercard}</span>
               </div>
               <div className="flex justify-between items-center pb-2 border-b">
-                <span>تحويل رصيد (زين كاش / آسياسيل):</span>
+                <span>تحويل رصيد:</span>
                 <span className="font-mono text-indigo-700">{vipSettings.transferPhone}</span>
               </div>
             </div>
 
-            <div className="space-y-3">
-              <p className="text-xs text-slate-600 text-center">بعد إتمام التحويل، يرجى إرسال إيصال الدفع عبر الواتساب:</p>
-              <a 
-                href={`https://wa.me/${vipSettings.whatsapp}?text=${encodeURIComponent('مرحباً، أود تفعيل اشتراك الـ VIP في منصة النابغة التعليمية.')}`} 
-                target="_blank" 
-                rel="noreferrer"
-                className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm"
-              >
-                <MessageCircle className="w-5 h-5" /> إرسال إيصال الدفع عبر الواتساب
-              </a>
-            </div>
+            <a 
+              href={`https://wa.me/${vipSettings.whatsapp}?text=${encodeURIComponent('مرحباً، أود تفعيل اشتراك الـ VIP في منصة النابغة التعليمية.')}`} 
+              target="_blank" 
+              rel="noreferrer"
+              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm"
+            >
+              <MessageCircle className="w-5 h-5" /> إرسال إيصال الدفع عبر الواتساب
+            </a>
           </div>
         </div>
       )}
@@ -537,8 +454,8 @@ export function App() {
         </div>
       )}
 
-      {/* شريط التنقل العلوي */}
-      <div className="sticky top-0 z-40 shadow-md">
+      {/* شريط التنقل العلوي مع ضبط المحاذاة والمسافات للموبايل */}
+      <div className="sticky top-0 z-40 shadow-md w-full">
         <Navbar 
           isAdmin={isAdmin}
           setIsAdmin={setIsAdmin}
@@ -547,13 +464,13 @@ export function App() {
         />
       </div>
 
-      {/* شريط التبويبات */}
-      <div className="bg-white border-b border-slate-200 shadow-sm sticky top-16 z-30">
+      {/* شريط التبويبات (تظهر فقط للأدمن أو الطالب المسجل) */}
+      <div className="bg-white border-b border-slate-200 shadow-sm sticky top-16 z-30 w-full">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between py-3 gap-3">
-          <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+          <div className="flex items-center gap-2 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-none">
             <button 
               onClick={() => { setActiveTab('curriculum'); setSelectedSubjectId(null); }}
-              className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'curriculum' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+              className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'curriculum' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
             >
               <BookOpen className="w-4 h-4" /> المنهج الدراسي والصفوف
             </button>
@@ -561,49 +478,52 @@ export function App() {
               <>
                 <button 
                   onClick={() => { setActiveTab('students'); setSelectedSubjectId(null); }}
-                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'students' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'students' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                 >
                   <Users className="w-4 h-4" /> إدارة الطلبة والـ VIP
                 </button>
                 <button 
                   onClick={() => { setActiveTab('adminPanel'); setSelectedSubjectId(null); }}
-                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'adminPanel' ? 'bg-emerald-600 text-white shadow-md' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}
+                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'adminPanel' ? 'bg-emerald-600 text-white shadow-md' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}
                 >
                   <Settings className="w-4 h-4" /> إضافة المواد والصور
                 </button>
                 <button 
                   onClick={() => { setActiveTab('vipSettings'); setSelectedSubjectId(null); }}
-                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'vipSettings' ? 'bg-amber-600 text-white shadow-md' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}
+                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'vipSettings' ? 'bg-amber-600 text-white shadow-md' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}
                 >
-                  <Crown className="w-4 h-4" /> إعدادات اشتراكات VIP
+                  <Crown className="w-4 h-4" /> إعدادات VIP
                 </button>
                 <button 
                   onClick={() => { setActiveTab('settings'); setSelectedSubjectId(null); }}
-                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 ${activeTab === 'settings' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+                  className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'settings' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
                 >
-                  <Key className="w-4 h-4" /> إعدادات حساب الأدمن
+                  <Key className="w-4 h-4" /> إعدادات الأدمن
                 </button>
               </>
-            ) : (
-              <div className="flex items-center gap-2 bg-indigo-50 px-3 py-2 rounded-xl text-indigo-900 text-xs font-bold">
+            ) : loggedStudent ? (
+              <div className="flex items-center gap-2 bg-indigo-50 px-3 py-2 rounded-xl text-indigo-900 text-xs font-bold whitespace-nowrap">
                 <User className="w-4 h-4 text-indigo-600" />
                 <span>الطالب: {loggedStudent?.name} ({loggedStudent?.stage}) {loggedStudent?.isVip ? '⭐ VIP' : 'مجاني'}</span>
               </div>
-            )}
+            ) : null}
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
             {isAdmin ? (
-              <button onClick={() => { setIsAdmin(false); setLoggedStudent(null); }} className="px-3 py-1.5 bg-violet-600 text-white rounded-xl text-xs font-bold shadow">
-                خروج / تسجيل دخول طالب
+              <button onClick={() => { setIsAdmin(false); }} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow whitespace-nowrap">
+                خروج من وضع الأدمن
               </button>
-            ) : (
+            ) : loggedStudent ? (
               <button onClick={() => { 
                 localStorage.removeItem('nabough_logged_student');
                 setLoggedStudent(null); 
-                setIsAdmin(true); 
-              }} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow">
+              }} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow whitespace-nowrap">
                 تسجيل الخروج
+              </button>
+            ) : (
+              <button onClick={() => { setLoggedStudent(null); setIsAdmin(false); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow whitespace-nowrap">
+                تسجيل دخول طالب
               </button>
             )}
           </div>
@@ -619,17 +539,18 @@ export function App() {
         </div>
       )}
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      {/* المحتوى الرئيسي مع تلافى أي انزلاق أفقي على الهواتف */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8 overflow-x-hidden">
         
-        {/* البانر */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-3xl shadow-xl text-white p-8 relative overflow-hidden">
+        {/* البانر العلوي مع مساحة كافية لعدم قص العنوان */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-3xl shadow-xl text-white p-6 sm:p-8 relative overflow-hidden mt-2">
           <div className="relative z-10 max-w-3xl">
-            <div className="inline-flex items-center gap-2 bg-indigo-800/60 border border-indigo-600/30 px-3 py-1 rounded-xl text-xs font-bold mb-4 text-indigo-200">
+            <div className="inline-flex items-center gap-2 bg-indigo-800/60 border border-indigo-600/30 px-3 py-1 rounded-xl text-xs font-bold mb-4 text-indigo-200 flex-wrap">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> منصة النابغة التعليمية - المنهج العراقي الرسمي
-              {!isAdmin && <span className="bg-indigo-600 text-white px-2 py-0.5 rounded text-[10px] mr-2">مرحلتك الحصرية: {loggedStudent?.stage}</span>}
+              {!isAdmin && loggedStudent && <span className="bg-indigo-600 text-white px-2 py-0.5 rounded text-[10px] mr-2">مرحلتك الحصرية: {loggedStudent?.stage}</span>}
             </div>
-            <h1 className="text-3xl sm:text-4xl font-black mb-3 tracking-tight">
-              {isAdmin ? 'لوحة تحكم المدير العام والإدارة 🎓' : `مرحباً بك يا ${loggedStudent?.name} في مرحلة ${loggedStudent?.stage} 📚`}
+            <h1 className="text-2xl sm:text-4xl font-black mb-3 tracking-tight leading-snug">
+              {isAdmin ? 'لوحة تحكم المدير العام والإدارة 🎓' : loggedStudent ? `مرحباً بك يا ${loggedStudent?.name} في مرحلة ${loggedStudent?.stage} 📚` : 'تصفح المناهج الدراسية والامتحانات التفاعلية 🎓'}
             </h1>
           </div>
         </div>
@@ -639,7 +560,7 @@ export function App() {
           <div className="space-y-6">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3 w-full sm:w-auto">
-                <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xl">📚</div>
+                <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xl flex-shrink-0">📚</div>
                 <div>
                   <h3 className="font-black text-slate-900 text-base">
                     {isAdmin ? 'اختر الصف الدراسي المطلوب' : `مرحلتك الدراسية الحصرية: ${loggedStudent?.stage}`}
@@ -733,7 +654,7 @@ export function App() {
           if (!currentSub) return null;
           return (
             <div className="bg-white rounded-3xl p-8 shadow-xl border border-indigo-100 space-y-8">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-3">
                 <div>
                   <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-xl border border-indigo-200">عرض المادة الدراسية</span>
                   <h3 className="text-2xl font-black text-slate-900 mt-2 flex items-center gap-3">
@@ -754,12 +675,12 @@ export function App() {
                   {currentSub.notes?.map((note: any) => (
                     <div key={note.id} className="p-5 bg-white rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-sm gap-4">
                       <div className="space-y-2 flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <h5 className="font-black text-slate-900 text-sm">💡 {note.title}</h5>
                           {note.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
                         </div>
                         {note.isVip && !loggedStudent?.isVip && isAdmin === false ? (
-                          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between">
+                          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between flex-wrap gap-2">
                             <span className="text-xs font-bold text-amber-800 flex items-center gap-1"><Lock className="w-3.5 h-3.5" /> هذا الشرح خاص بمشتركي الـ VIP</span>
                             <button onClick={() => setVipModalItem(note)} className="px-3 py-1.5 bg-amber-500 text-white font-bold rounded-lg text-xs">شاهد تفاصيل الاشتراك</button>
                           </div>
@@ -825,9 +746,9 @@ export function App() {
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {currentSub.videos?.map((vid: any) => (
-                    <div key={vid.id} className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center justify-between shadow-sm">
+                    <div key={vid.id} className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center justify-between shadow-sm flex-wrap gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold">▶</div>
+                        <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold flex-shrink-0">▶</div>
                         <div>
                           <span className="font-bold text-slate-800 text-sm block">{vid.title}</span>
                           <span className="text-xs text-slate-500">المدة: {vid.duration} {vid.isVip ? '• ⭐ VIP' : ''}</span>
@@ -896,9 +817,9 @@ export function App() {
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {currentSub.booklets?.map((book: any) => (
-                    <div key={book.id} className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center justify-between shadow-sm">
+                    <div key={book.id} className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center justify-between shadow-sm flex-wrap gap-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">📄</div>
+                        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold flex-shrink-0">📄</div>
                         <div>
                           <span className="font-bold text-slate-800 text-sm block">{book.title}</span>
                           <span className="text-xs text-slate-500">الحجم: {book.size} {book.isVip ? '• ⭐ VIP' : ''}</span>
@@ -966,8 +887,8 @@ export function App() {
                 </h4>
                 <div className="space-y-3">
                   {currentSub.quizzes?.map((quiz: any) => (
-                    <div key={quiz.id} className="p-4 bg-white rounded-xl border border-slate-200 flex items-center justify-between shadow-sm">
-                      <span className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                    <div key={quiz.id} className="p-4 bg-white rounded-xl border border-slate-200 flex items-center justify-between shadow-sm flex-wrap gap-3">
+                      <span className="font-bold text-slate-800 text-sm flex items-center gap-2 flex-wrap">
                         📝 {quiz.title} {quiz.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
                       </span>
                       <div className="flex items-center gap-2">
@@ -1013,7 +934,7 @@ export function App() {
                     </div>
 
                     <div className="p-4 bg-slate-50 rounded-xl border space-y-3">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
                         <span className="text-xs font-black text-slate-800">إضافة سؤال جديد ({currentQuestionsList.length} أسئلة مضافة)</span>
                         <select value={questionType} onChange={(e) => setQuestionType(e.target.value as any)} className="px-3 py-1 bg-white border rounded-lg text-xs font-bold">
                           <option value="mcq">اختيار من متعدد (MCQ)</option>
@@ -1044,7 +965,7 @@ export function App() {
                       )}
 
                       {questionType === 'true_false' && (
-                        <div className="flex items-center gap-4 py-1">
+                        <div className="flex items-center gap-4 py-1 flex-wrap">
                           <span className="text-xs font-bold text-slate-700">الإجابة الصحيحة:</span>
                           <label className="flex items-center gap-1 text-xs font-bold cursor-pointer">
                             <input type="radio" name="tf" checked={tfCorrect === 'صح'} onChange={() => setTfCorrect('صح')} /> صح
@@ -1074,7 +995,7 @@ export function App() {
         {/* 3. لوحة إدارة الطلبة مع تاريخ التسجيل وآخر ظهور */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-3">
               <div>
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
                   <Users className="w-6 h-6 text-indigo-600" /> لوحة إدارة الطلبة وحسابات الـ VIP
@@ -1087,7 +1008,7 @@ export function App() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-right border-collapse">
+              <table className="w-full text-right border-collapse min-w-[700px]">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-black">
                     <th className="p-4">الطالب والمرحلة</th>
@@ -1128,12 +1049,12 @@ export function App() {
                             </div>
                           </div>
                         ) : (
-                          <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl border">
+                          <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl border gap-2">
                             <div>
                               <div className="text-slate-900">👤 اليوزر: <span className="font-mono text-indigo-700">{st.username}</span></div>
                               <div className="text-slate-600">🔑 الباسورد: <span className="font-mono text-slate-900">{st.pass}</span></div>
                             </div>
-                            <button onClick={() => { setEditingStudentId(st.id); setEditUser(st.username); setEditPass(st.pass); }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
+                            <button onClick={() => { setEditingStudentId(st.id); setEditUser(st.username); setEditPass(st.pass); }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg flex-shrink-0">
                               <Edit3 className="w-4 h-4" />
                             </button>
                           </div>
@@ -1152,7 +1073,7 @@ export function App() {
                           setStudentsList(studentsList.map(item => item.id === st.id ? {...item, isVip: newVip} : item));
                           setSuccessMessage('تم تحديث اشتراك الـ VIP.');
                           setTimeout(() => setSuccessMessage(null), 3000);
-                        }} className={`px-3 py-1.5 rounded-xl text-[11px] font-black ${st.isVip ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-700'}`}>
+                        }} className={`px-3 py-1.5 rounded-xl text-[11px] font-black whitespace-nowrap ${st.isVip ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-700'}`}>
                           {st.isVip ? '⭐ VIP مفعّل' : 'حساب مجاني'}
                         </button>
                       </td>
@@ -1178,7 +1099,16 @@ export function App() {
         {/* 4. إضافة المواد */}
         {activeTab === 'adminPanel' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-emerald-200 space-y-6">
-            <h2 className="text-2xl font-black text-slate-900">لوحة إضافة المواد والصور المخصصة</h2>
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">➕</div>
+                <div>
+                  <h2 className="text-2xl font-black text-slate-900">لوحة إضافة المواد والصور المخصصة</h2>
+                  <p className="text-xs text-slate-500">أضف أي مادة لأي صف مع صورة جذابة</p>
+                </div>
+              </div>
+            </div>
+
             <form onSubmit={async (e) => {
               e.preventDefault();
               if (!newSubName) return;
@@ -1201,19 +1131,30 @@ export function App() {
               } catch (err) {
                 console.error(err);
               }
-            }} className="bg-slate-50 p-6 rounded-2xl border space-y-4">
+            }} className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <input type="text" required value={newSubName} onChange={(e) => setNewSubName(e.target.value)} placeholder="اسم المادة..." className="px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" />
-                <select value={newSubStage} onChange={(e) => setNewSubStage(e.target.value)} className="px-4 py-2.5 rounded-xl border text-sm font-bold bg-white">
-                  {allStagesList.map(st => (
-                    <option key={st.id} value={st.name}>{st.name}</option>
-                  ))}
-                </select>
-                <input type="text" value={newSubImage} onChange={(e) => setNewSubImage(e.target.value)} placeholder="رابط صورة المادة..." className="px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم المادة</label>
+                  <input type="text" required value={newSubName} onChange={(e) => setNewSubName(e.target.value)} placeholder="مثال: الحاسوب والتكنولوجيا" className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">الصف الدراسي</label>
+                  <select value={newSubStage} onChange={(e) => setNewSubStage(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white">
+                    {allStagesList.map(st => (
+                      <option key={st.id} value={st.name}>{st.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">رابط صورة المادة (URL)</label>
+                  <input type="text" value={newSubImage} onChange={(e) => setNewSubImage(e.target.value)} placeholder="رابط صورة..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
+                </div>
               </div>
-              <button type="submit" className="bg-emerald-600 text-white font-bold py-3 px-8 rounded-xl text-xs shadow-md">
-                إضافة ونشر المادة
-              </button>
+              <div className="flex justify-end pt-2">
+                <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl text-xs shadow-md">
+                  إضافة ونشر المادة
+                </button>
+              </div>
             </form>
           </div>
         )}
@@ -1276,10 +1217,28 @@ export function App() {
 
       </main>
 
-      <footer className="border-t border-slate-200 bg-white py-6 mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between text-xs text-slate-500">
-          <span className="font-bold text-slate-800">منصة النابغة التعليمية - المنهج العراقي الرسمي</span>
-          <span>بغداد - العراق</span>
+      {/* الفوتر مع رمز القفل السري لدخول الأدمن */}
+      <footer className="border-t border-slate-200 bg-white py-6 mt-auto w-full">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+          <div className="flex items-center gap-2">
+            <GraduationCap className="w-5 h-5 text-emerald-600" />
+            <span className="font-bold text-slate-800">منصة النابغة التعليمية</span>
+            <span>•</span>
+            <span>المنهج العراقي الرسمي</span>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-emerald-600" /> بغداد - العراق</span>
+            
+            {/* زر القفل السري للأدمن */}
+            <button 
+              onClick={() => setShowAdminLoginModal(true)} 
+              className="w-7 h-7 bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-400 rounded-full flex items-center justify-center transition-all shadow-sm"
+              title="دخول المدير العام (الأدمن)"
+            >
+              🔒
+            </button>
+          </div>
         </div>
       </footer>
     </div>
