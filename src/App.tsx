@@ -9,6 +9,9 @@ import {
 } from 'lucide-react';
 
 export function App() {
+  // شاشة التحميل لمنع الشاشة البيضاء
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     return localStorage.getItem('nabough_is_admin') === 'true';
   });
@@ -22,7 +25,6 @@ export function App() {
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
 
-  // تصفية الطلبة حسب المرحلة في لوحة الأدمن
   const [adminStageFilter, setAdminStageFilter] = useState<string>('all');
 
   const [adminName, setAdminName] = useState<string>(() => localStorage.getItem('nabough_admin_name') || 'مدير المنصة');
@@ -30,13 +32,22 @@ export function App() {
   const [adminPassword, setAdminPassword] = useState<string>(() => localStorage.getItem('nabough_admin_pass') || '123456');
   
   const [vipSettings, setVipSettings] = useState(() => {
-    const saved = localStorage.getItem('nabough_vip_settings');
-    return saved ? JSON.parse(saved) : {
-      price: '25,000 دينار عراقي / شهرياً',
-      mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
-      transferPhone: '07701234567 (زين كاش / آسياسيل)',
-      whatsapp: '9647701234567'
-    };
+    try {
+      const saved = localStorage.getItem('nabough_vip_settings');
+      return saved ? JSON.parse(saved) : {
+        price: '25,000 دينار عراقي / شهرياً',
+        mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
+        transferPhone: '07701234567 (زين كاش / آسياسيل)',
+        whatsapp: '9647701234567'
+      };
+    } catch(e) {
+      return {
+        price: '25,000 دينار عراقي / شهرياً',
+        mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
+        transferPhone: '07701234567 (زين كاش / آسياسيل)',
+        whatsapp: '9647701234567'
+      };
+    }
   });
 
   useEffect(() => {
@@ -45,10 +56,13 @@ export function App() {
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
-  // نظام تسجيل دخول الطالب مع الحفاظ على الجلسة
   const [loggedStudent, setLoggedStudent] = useState<any | null>(() => {
-    const saved = localStorage.getItem('nabough_logged_student');
-    return saved ? JSON.parse(saved) : null;
+    try {
+      const saved = localStorage.getItem('nabough_logged_student');
+      return saved ? JSON.parse(saved) : null;
+    } catch(e) {
+      return null;
+    }
   });
 
   useEffect(() => {
@@ -59,7 +73,6 @@ export function App() {
     }
   }, [loggedStudent]);
 
-  // التحقق الفوري من حالة الـ VIP للطالب المسجل من أحدث قائمة طلاب
   const currentLoggedStudentData = loggedStudent ? studentsList.find(s => s.id === loggedStudent.id) || loggedStudent : null;
   const isVipActive = currentLoggedStudentData?.isVip || false;
 
@@ -85,13 +98,21 @@ export function App() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const [studentsList, setStudentsList] = useState<any[]>(() => {
-    const cached = localStorage.getItem('nabough_cached_students');
-    return cached ? JSON.parse(cached) : [];
+    try {
+      const cached = localStorage.getItem('nabough_cached_students');
+      return cached ? JSON.parse(cached) : [];
+    } catch(e) {
+      return [];
+    }
   });
 
   const [subjects, setSubjects] = useState<any[]>(() => {
-    const cached = localStorage.getItem('nabough_cached_subjects');
-    return cached ? JSON.parse(cached) : [];
+    try {
+      const cached = localStorage.getItem('nabough_cached_subjects');
+      return cached ? JSON.parse(cached) : [];
+    } catch(e) {
+      return [];
+    }
   });
 
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
@@ -118,11 +139,12 @@ export function App() {
         try {
           await updateDoc(doc(db, 'students', loggedStudent.id), { lastSeen: nowTime });
         } catch(e) {}
-      }, 60000); // كل دقيقة يحدث وقت النشاط
+      }, 60000);
       return () => clearInterval(updateInterval);
     }
   }, [loggedStudent]);
 
+  // جلب البيانات مع إيقاف شاشة التحميل بأمان تام
   useEffect(() => {
     async function loadDataFromFirebase() {
       try {
@@ -141,9 +163,17 @@ export function App() {
         }
       } catch (e) {
         console.error('Offline mode / Firebase load error:', e);
+      } finally {
+        setIsLoading(false);
       }
     }
     loadDataFromFirebase();
+
+    // مؤقت أمان لضمان عدم بقاء شاشة التحميل معلقة أبداً
+    const safetyTimer = setTimeout(() => {
+      setIsLoading(false);
+    }, 2000);
+    return () => clearTimeout(safetyTimer);
   }, []);
 
   const [newVideoTitle, setNewVideoTitle] = useState('');
@@ -292,7 +322,6 @@ export function App() {
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
 
-  // تصفية المواد حسب المرحلة
   const filteredSubjects = subjects.filter(s => {
     if (isAdmin) {
       return selectedStage === 'all' || s.stage === selectedStage;
@@ -300,6 +329,20 @@ export function App() {
       return selectedStage === 'all' || s.stage === selectedStage;
     }
   });
+
+  // عرض شاشة التحميل الاحترافية بدلاً من الشاشة البيضاء عند فتح الموقع
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
+        <div className="w-20 h-20 rounded-3xl bg-indigo-600 text-white flex items-center justify-center font-black text-3xl shadow-2xl animate-bounce mb-4">ن</div>
+        <h2 className="text-xl font-black tracking-wide">منصة النابغة التعليمية</h2>
+        <p className="text-xs text-slate-400 mt-2">جاري تحميل المناهج والبيانات...</p>
+        <div className="w-32 h-1.5 bg-slate-800 rounded-full overflow-hidden mt-6">
+          <div className="w-full h-full bg-indigo-500 animate-pulse"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
@@ -1043,7 +1086,7 @@ export function App() {
                 )}
               </div>
 
-              {/* ج) ملازم وقارئ PDF */}
+              {/* ج) ملازم PDF */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <FileText className="w-5 h-5 text-emerald-600" /> ملازم وقارئ الـ PDF ({currentSub.booklets?.length || 0})
@@ -1242,7 +1285,6 @@ export function App() {
                 <p className="text-sm text-slate-600 mt-1">تصفية حسب المرحلة، عرض تاريخ التسجيل، آخر ظهور، ونقاط ضعف الامتحانات.</p>
               </div>
               
-              {/* قائمة تصفية الطلبة حسب المرحلة */}
               <div className="flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-700">تصفية بالمرحلة:</span>
                 <select 
