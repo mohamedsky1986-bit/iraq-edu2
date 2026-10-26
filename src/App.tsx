@@ -22,7 +22,7 @@ export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    return localStorage.getItem('nabough_is_admin') === 'true';
+    return localStorage.getItem('nabough_is_admin'] === 'true';
   });
 
   useEffect(() => {
@@ -45,20 +45,24 @@ export function App() {
       setShowInstallBtn(true);
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    
+    // إظهار زر التثبيت تلقائياً كخيار متاح للجميع
+    setShowInstallBtn(true);
+
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
   const handleInstallApp = async () => {
-    if (!deferredPrompt) {
-      alert('التطبيق جاهز! يمكنك تثبيته مباشرة من إعدادات متصفحك (اختر: إضافة إلى الشاشة الرئيسية).');
-      return;
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setShowInstallBtn(false);
+      }
+      setDeferredPrompt(null);
+    } else {
+      alert('📱 لتثبيت التطبيق على هاتفك:\n- أندرويد (متصفح كروم): اضغط على القائمة (⋮) ثم اختر "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".\n- آيفون (متصفح سفاري): اضغط على زر المشاركة (📤) ثم اختر "إضافة إلى الشاشة الرئيسية (Add to Home Screen)".');
     }
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setShowInstallBtn(false);
-    }
-    setDeferredPrompt(null);
   };
 
   const [adminStageFilter, setAdminStageFilter] = useState<string>('all');
@@ -126,17 +130,6 @@ export function App() {
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // حالات التعديل الجديدة (للمواد، والشروحات، والطلبة)
-  const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
-  const [editSubName, setEditSubName] = useState('');
-  const [editSubImage, setEditSubImage] = useState('');
-
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
-  const [editNoteTitle, setEditNoteTitle] = useState('');
-  const [editNoteContent, setEditNoteContent] = useState('');
-  const [editNoteImage, setEditNoteImage] = useState('');
-  const [editNoteVip, setEditNoteVip] = useState(false);
-
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editUser, setEditUser] = useState('');
   const [editPass, setEditPass] = useState('');
@@ -155,7 +148,6 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
-  // تتبع النشاط اللحظي وتحديث آخر ظهور
   useEffect(() => {
     if (loggedStudent) {
       const updateInterval = setInterval(async () => {
@@ -762,7 +754,7 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة مع زر تثبيت التطبيق */}
+      {/* رأس الصفحة مع زر تثبيت التطبيق باللون الذهبي البارز */}
       <div className="w-full bg-slate-900 py-3 px-4 sm:px-8 shadow-md flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-base shadow">ن</div>
@@ -773,11 +765,14 @@ export function App() {
         </div>
 
         <div className="flex items-center gap-2">
-          {showInstallBtn && (
-            <button onClick={handleInstallApp} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5 animate-pulse">
-              <Smartphone className="w-4 h-4" /> تثبيت التطبيق 📱
-            </button>
-          )}
+          {/* زر تثبيت التطبيق بلون ذهبي بارز وأنيق */}
+          <button 
+            onClick={handleInstallApp} 
+            className="px-3.5 py-2 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 animate-pulse border border-yellow-200 cursor-pointer"
+            title="تثبيت منصة النابغة على شاشة هاتفك"
+          >
+            <Smartphone className="w-4 h-4 text-slate-950" /> تثبيت التطبيق 📱
+          </button>
 
           {isAdmin ? (
             <button onClick={() => setIsAdmin(false)} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow">
@@ -952,7 +947,6 @@ export function App() {
                     </div>
                   )}
 
-                  {/* نافذة تعديل المادة المصغرة */}
                   {editingSubjectId === sub.id && (
                     <div onClick={(e) => e.stopPropagation()} className="absolute inset-0 bg-white/95 backdrop-blur-md z-30 p-6 flex flex-col justify-center space-y-3 text-right">
                       <h4 className="font-black text-sm text-slate-900">تعديل بيانات المادة</h4>
@@ -1006,7 +1000,7 @@ export function App() {
           </div>
         )}
 
-        {/* 2. إدارة المادة الدراسية المفصلة مع خيارات التعديل للشروحات والتعاليل */}
+        {/* 2. إدارة المادة الدراسية المفصلة */}
         {selectedSubjectId && (() => {
           const currentSub = subjects.find(s => s.id === selectedSubjectId);
           if (!currentSub) return null;
@@ -1033,7 +1027,6 @@ export function App() {
                   {currentSub.notes?.map((note: any) => (
                     <div key={note.id} className="p-5 bg-white rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-sm gap-4 relative">
                       
-                      {/* نموذج تعديل الشرح أو التعليل */}
                       {editingNoteId === note.id ? (
                         <div className="w-full space-y-3 bg-slate-50 p-4 rounded-xl border">
                           <h5 className="font-black text-xs text-indigo-900">تعديل الشرح أو التعليل</h5>
@@ -1427,7 +1420,7 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة مع خيارات التعديل الشاملة (الاسم، اليوزر، الباسورد، المرحلة) */}
+        {/* 3. لوحة إدارة الطلبة مع خيارات التعديل الشاملة */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-4">
@@ -1460,7 +1453,7 @@ export function App() {
                     <th className="p-4">الطالب والمرحلة</th>
                     <th className="p-4">تاريخ التسجيل & آخر ظهور</th>
                     <th className="p-4">بيانات الدخول (تعديل اليوزر والباسورد والاسم)</th>
-                    <th className="p-4">الحالة والدرجة</th>
+                    <th className="p-4">الحالة والدرجة ونقاط الضعف</th>
                     <th className="p-4">اشتراك VIP</th>
                     <th className="p-4 text-center">التحكم</th>
                   </tr>
