@@ -8,11 +8,14 @@ import {
   Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone
 } from 'lucide-react';
 
+// دالة أمان صارمة لمنع الشاشة البيضاء نهائياً وتصفية البيانات التالفة
 const safeGetStorage = (key: string, fallback: any) => {
   try {
     const item = localStorage.getItem(key);
     if (!item || item === 'undefined' || item === 'null') return fallback;
-    return JSON.parse(item);
+    const parsed = JSON.parse(item);
+    if (Array.isArray(fallback) && !Array.isArray(parsed)) return fallback;
+    return parsed;
   } catch (e) {
     return fallback;
   }
@@ -21,7 +24,6 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // تم تصحيح القوس هنا لتصبح الدالة سليمة 100%
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     return localStorage.getItem('nabough_is_admin') === 'true';
   });
@@ -59,7 +61,7 @@ export function App() {
       }
       setDeferredPrompt(null);
     } else {
-      alert('التطبيق جاهز! يمكنك تثبيته مباشرة من إعدادات متصفحك (اختر: إضافة إلى الشاشة الرئيسية).');
+      alert('📱 لتثبيت التطبيق على هاتفك:\n- أندرويد: افتح قائمة المتصفح (⋮) واختار "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".\n- آيفون: اضغط زر المشاركة (📤) واختار "إضافة إلى الشاشة الرئيسية".');
     }
   };
 
@@ -128,6 +130,17 @@ export function App() {
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // حالات التعديل للمواد، الشروحات، والطلبة
+  const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
+  const [editSubName, setEditSubName] = useState('');
+  const [editSubImage, setEditSubImage] = useState('');
+
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteTitle, setEditNoteTitle] = useState('');
+  const [editNoteContent, setEditNoteContent] = useState('');
+  const [editNoteImage, setEditNoteImage] = useState('');
+  const [editNoteVip, setEditNoteVip] = useState(false);
+
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editUser, setEditUser] = useState('');
   const [editPass, setEditPass] = useState('');
@@ -146,6 +159,7 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
+  // تتبع النشاط اللحظي وتحديث آخر ظهور
   useEffect(() => {
     if (loggedStudent) {
       const updateInterval = setInterval(async () => {
@@ -184,7 +198,7 @@ export function App() {
 
     const safetyTimer = setTimeout(() => {
       setIsLoading(false);
-    }, 1200);
+    }, 1000);
     return () => clearTimeout(safetyTimer);
   }, []);
 
@@ -369,6 +383,7 @@ export function App() {
     }
   });
 
+  // شاشة التحميل الاحترافية التي تمنع الشاشة البيضاء تماماً
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
@@ -763,11 +778,14 @@ export function App() {
         </div>
 
         <div className="flex items-center gap-2">
-          {showInstallBtn && (
-            <button onClick={handleInstallApp} className="px-3.5 py-2 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 animate-pulse border border-yellow-200 cursor-pointer">
-              <Smartphone className="w-4 h-4 text-slate-950" /> تثبيت التطبيق 📱
-            </button>
-          )}
+          {/* زر تثبيت التطبيق بلون ذهبي بارز وأنيق */}
+          <button 
+            onClick={handleInstallApp} 
+            className="px-3.5 py-2 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 animate-pulse border border-yellow-200 cursor-pointer"
+            title="تثبيت منصة النابغة على شاشة هاتفك"
+          >
+            <Smartphone className="w-4 h-4 text-slate-950" /> تثبيت التطبيق 📱
+          </button>
 
           {isAdmin ? (
             <button onClick={() => setIsAdmin(false)} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow">
@@ -1690,6 +1708,7 @@ export function App() {
 
       {/* الفوتر مع رمز القفل السري للأدمن */}
       <footer className="border-t border-slate-200 bg-white py-6 mt-auto w-full">
+        {/* ... */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <div className="flex items-center gap-2">
             <GraduationCap className="w-5 h-5 text-emerald-600" />
