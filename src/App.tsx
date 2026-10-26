@@ -23,7 +23,7 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // حقن ملف التثبيت (PWA Manifest) برمجياً لكي يتقبل الهاتف التثبيت بدون أي خطأ
+  // حققنا أيقونة تطبيق احترافية وجذابة (قبعة التخرج التعليمية) لتظهر بشكل أنيق على شاشة الهاتف
   useEffect(() => {
     const manifest = {
       name: "منصة النابغة التعليمية",
@@ -34,7 +34,7 @@ export function App() {
       theme_color: "#0f172a",
       icons: [
         {
-          src: "https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=192&h=192&q=80",
+          src: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=192&h=192&q=80",
           sizes: "192x192",
           type: "image/png"
         }
