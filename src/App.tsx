@@ -8,8 +8,18 @@ import {
   Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone
 } from 'lucide-react';
 
+// دالة أمان لمنع الشاشة البيضاء في حال تلف الذاكرة المحلية أو وجود قيم فارغة
+const safeGetStorage = (key: string, fallback: any) => {
+  try {
+    const item = localStorage.getItem(key);
+    if (!item || item === 'undefined' || item === 'null') return fallback;
+    return JSON.parse(item);
+  } catch (e) {
+    return fallback;
+  }
+};
+
 export function App() {
-  // شاشة التحميل الاحترافية لمنع ظهور الشاشة البيضاء كلياً على أي جهاز
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
@@ -41,7 +51,7 @@ export function App() {
 
   const handleInstallApp = async () => {
     if (!deferredPrompt) {
-      alert('التطبيق جاهز! يمكنك تثبيته مباشرة من إعدادات متصفحك (اختيار: إضافة إلى الشاشة الرئيسية).');
+      alert('التطبيق جاهز! يمكنك تثبيته مباشرة من خيارات متصفحك (اختر: إضافة إلى الشاشة الرئيسية).');
       return;
     }
     deferredPrompt.prompt();
@@ -59,22 +69,12 @@ export function App() {
   const [adminPassword, setAdminPassword] = useState<string>(() => localStorage.getItem('nabough_admin_pass') || '123456');
   
   const [vipSettings, setVipSettings] = useState(() => {
-    try {
-      const saved = localStorage.getItem('nabough_vip_settings');
-      return saved ? JSON.parse(saved) : {
-        price: '25,000 دينار عراقي / شهرياً',
-        mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
-        transferPhone: '07701234567 (زين كاش / آسياسيل)',
-        whatsapp: '9647701234567'
-      };
-    } catch(e) {
-      return {
-        price: '25,000 دينار عراقي / شهرياً',
-        mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
-        transferPhone: '07701234567 (زين كاش / آسياسيل)',
-        whatsapp: '9647701234567'
-      };
-    }
+    return safeGetStorage('nabough_vip_settings', {
+      price: '25,000 دينار عراقي / شهرياً',
+      mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
+      transferPhone: '07701234567 (زين كاش / آسياسيل)',
+      whatsapp: '9647701234567'
+    });
   });
 
   useEffect(() => {
@@ -84,12 +84,7 @@ export function App() {
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
   const [loggedStudent, setLoggedStudent] = useState<any | null>(() => {
-    try {
-      const saved = localStorage.getItem('nabough_logged_student');
-      return saved ? JSON.parse(saved) : null;
-    } catch(e) {
-      return null;
-    }
+    return safeGetStorage('nabough_logged_student', null);
   });
 
   useEffect(() => {
@@ -99,6 +94,14 @@ export function App() {
       localStorage.removeItem('nabough_logged_student');
     }
   }, [loggedStudent]);
+
+  const [studentsList, setStudentsList] = useState<any[]>(() => {
+    return safeGetStorage('nabough_cached_students', []);
+  });
+
+  const [subjects, setSubjects] = useState<any[]>(() => {
+    return safeGetStorage('nabough_cached_subjects', []);
+  });
 
   const currentLoggedStudentData = loggedStudent ? studentsList?.find((s: any) => s.id === loggedStudent.id) || loggedStudent : null;
   const isVipActive = currentLoggedStudentData?.isVip || false;
@@ -124,24 +127,6 @@ export function App() {
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const [studentsList, setStudentsList] = useState<any[]>(() => {
-    try {
-      const cached = localStorage.getItem('nabough_cached_students');
-      return cached ? JSON.parse(cached) : [];
-    } catch(e) {
-      return [];
-    }
-  });
-
-  const [subjects, setSubjects] = useState<any[]>(() => {
-    try {
-      const cached = localStorage.getItem('nabough_cached_subjects');
-      return cached ? JSON.parse(cached) : [];
-    } catch(e) {
-      return [];
-    }
-  });
-
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editUser, setEditUser] = useState('');
   const [editPass, setEditPass] = useState('');
@@ -158,7 +143,7 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
-  // تتبع النشاط اللحظي وآخر ظهور دقيق
+  // تتبع النشاط اللحظي وتحديث آخر ظهور للطالب المتصل
   useEffect(() => {
     if (loggedStudent) {
       const updateInterval = setInterval(async () => {
@@ -171,7 +156,7 @@ export function App() {
     }
   }, [loggedStudent]);
 
-  // تحميل البيانات السريع وإلغاء شاشة التحميل فوراً لمنع أي شاشة بيضاء
+  // جلب البيانات من السيرفر وإلغاء شاشة التحميل بسلاسة
   useEffect(() => {
     async function loadDataFromFirebase() {
       try {
@@ -198,7 +183,7 @@ export function App() {
 
     const safetyTimer = setTimeout(() => {
       setIsLoading(false);
-    }, 1500);
+    }, 1200);
     return () => clearTimeout(safetyTimer);
   }, []);
 
@@ -356,7 +341,7 @@ export function App() {
     }
   });
 
-  // شاشة التحميل الاحترافية لمنع الشاشة البيضاء تماماً
+  // شاشة التحميل الاحترافية التي תمنع الشاشة البيضاء تماماً
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
