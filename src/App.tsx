@@ -8,7 +8,7 @@ import {
   Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink
 } from 'lucide-react';
 
-// 🔴 ضع رقم الواتساب الحقيقي الخاص بك هنا (مع رمز الدولة، مثلاً: 9647712345678) لتهيئة رسائل الإيصالات والاتصال
+// 🔴 ضع رقم الواتساب الحقيقي الخاص بك هنا (مع رمز الدولة، مثلاً: 9647783849831) لتهيئة رسائل الإيصالات والاتصال
 const MY_WHATSAPP_NUMBER = '9647783849831'; 
 
 const safeGetStorage = (key: string, fallback: any) => {
