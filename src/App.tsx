@@ -14,10 +14,10 @@ export function App() {
   const [adminPinInput, setAdminPinInput] = useState<string>('');
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
 
-  // حفظ وحفظ بيانات الأدمن وكلمة المرور في الـ LocalStorage لضمان عدم ضياعها وتغييرها للأبد
+  // حفظ بيانات الأدمن وكلمة المرور بأمان دائم في الـ LocalStorage
   const [adminName, setAdminName] = useState<string>(() => localStorage.getItem('nabough_admin_name') || 'مدير المنصة');
   const [adminUsername, setAdminUsername] = useState<string>(() => localStorage.getItem('nabough_admin_user') || 'admin');
-  const [adminPassword, setAdminPassword] = useState<string>(() => localStorage.getItem('nabough_admin_pass') || '123456');
+  const [adminPassword, setAdminPassword] = useState<string>(() => localStorage.getItem('nabough_admin_pass') || 'Nabough2026!');
   
   const [vipSettings, setVipSettings] = useState({
     price: '25,000 دينار عراقي / شهرياً',
@@ -63,8 +63,16 @@ export function App() {
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const [studentsList, setStudentsList] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<any[]>([]);
+  // تحميل سريع من الذاكرة المحلية (للعمل حتى بدون نت ولزيادة السرعة)
+  const [studentsList, setStudentsList] = useState<any[]>(() => {
+    const cached = localStorage.getItem('nabough_cached_students');
+    return cached ? JSON.parse(cached) : [];
+  });
+
+  const [subjects, setSubjects] = useState<any[]>(() => {
+    const cached = localStorage.getItem('nabough_cached_subjects');
+    return cached ? JSON.parse(cached) : [];
+  });
 
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editUser, setEditUser] = useState('');
@@ -82,39 +90,25 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
+  // مزامنة البيانات مع Firebase وتخزينها محلياً للسرعة والعمل بدون إنترنت
   useEffect(() => {
     async function loadDataFromFirebase() {
       try {
         const subsSnap = await getDocs(collection(db, 'subjects'));
         if (!subsSnap.empty) {
-          setSubjects(subsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-        } else {
-          const defaultSub = {
-            name: 'الرياضيات',
-            stage: 'third_intermediate',
-            stageName: 'الثالث المتوسط',
-            icon: '📐',
-            color: 'from-indigo-600 to-violet-800',
-            image: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=500&q=80',
-            videos: [{ id: 'v1', title: 'محاضرة الفصل الأول: المتباينات', url: 'https://www.youtube.com/embed/T1SxpvU-iqA', duration: '45 دقيقة', isVip: false }],
-            booklets: [{ id: 'b1', title: 'ملزمة الرياضيات الشاملة (PDF)', url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf', size: '18 MB', isVip: false }],
-            notes: [{ id: 'n1', title: 'تعليل: لماذا تعتبر الأعداد الحقيقية أساس الرياضيات؟', content: 'لأنها تتضمن الأعداد النسبية وغير النسبية وتغطي كافة العمليات الحسابية.', image: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=400&q=80', isVip: false }],
-            quizzes: []
-          };
-          const docRef = await addDoc(collection(db, 'subjects'), defaultSub);
-          setSubjects([{ id: docRef.id, ...defaultSub }]);
+          const loadedSubs = subsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setSubjects(loadedSubs);
+          localStorage.setItem('nabough_cached_subjects', JSON.stringify(loadedSubs));
         }
 
         const studsSnap = await getDocs(collection(db, 'students'));
         if (!studsSnap.empty) {
-          setStudentsList(studsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-        } else {
-          const defaultStudent = { name: 'علي محمد حسن', username: 'ali', pass: '123456', stage: 'الثالث المتوسط', isVip: true, status: 'متصل الآن', lastSeen: 'الآن', regDate: '2026-10-19', examScore: 'لم يتقدم' };
-          const docRef = await addDoc(collection(db, 'students'), defaultStudent);
-          setStudentsList([{ id: docRef.id, ...defaultStudent }]);
+          const loadedStuds = studsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setStudentsList(loadedStuds);
+          localStorage.setItem('nabough_cached_students', JSON.stringify(loadedStuds));
         }
       } catch (e) {
-        console.error('Firebase load error:', e);
+        console.error('Offline mode / Firebase load error:', e);
       }
     }
     loadDataFromFirebase();
@@ -213,7 +207,9 @@ export function App() {
 
     try {
       await updateDoc(doc(db, 'subjects', subjectId), { quizzes: updatedQuizzes });
-      setSubjects(subjects.map(sub => sub.id === subjectId ? { ...sub, quizzes: updatedQuizzes } : sub));
+      const updatedSubs = subjects.map(sub => sub.id === subjectId ? { ...sub, quizzes: updatedQuizzes } : sub);
+      setSubjects(updatedSubs);
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
       setQuizTitle('');
       setQuizIsVip(false);
       setCurrentQuestionsList([]);
@@ -244,7 +240,9 @@ export function App() {
     setQuizResult({ score: finalScore, total: 100, details });
 
     if (loggedStudent) {
-      setStudentsList(studentsList.map(st => st.id === loggedStudent.id ? {...st, examScore: `${finalScore}/100`} : st));
+      const updatedStudents = studentsList.map(st => st.id === loggedStudent.id ? {...st, examScore: `${finalScore}/100`} : st);
+      setStudentsList(updatedStudents);
+      localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStudents));
     }
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
@@ -253,8 +251,6 @@ export function App() {
   const filteredSubjects = subjects.filter(s => {
     if (isAdmin) {
       return selectedStage === 'all' || s.stage === selectedStage;
-    } else if (loggedStudent) {
-      return s.stageName === loggedStudent?.stage || s.stage === allStagesList.find(st => st.name === loggedStudent?.stage)?.id;
     } else {
       return selectedStage === 'all' || s.stage === selectedStage;
     }
@@ -263,7 +259,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
       
-      {/* نافذة تسجيل دخول الأدمن عبر القفل السري (تفحص كلمة المرور المخصصة وحدها بدون أي باسبورد افتراضي) */}
+      {/* نافذة تسجيل دخول الأدمن عبر القفل السري */}
       {showAdminLoginModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative space-y-4 text-right">
@@ -304,7 +300,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة تسجيل دخول أو إنشاء حساب طالب */}
+      {/* نافذة تسجيل دخول أو إنشاء حساب طالب بالشروط الصارمة */}
       {showStudentAuthModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl relative space-y-6 text-right">
@@ -322,16 +318,30 @@ export function App() {
                 e.preventDefault();
                 if (!newStudentName || !studentLoginUser || !studentLoginPass) return;
 
+                // 1. تدقيق الاسم الثلاثي الصريح
+                const nameParts = newStudentName.trim().split(/\s+/);
+                if (nameParts.length < 3) {
+                  alert('⚠️ يرجى إدخال الاسم الثلاثي الصريح صحيحاً (ثلاثة أسماء على الأقل).');
+                  return;
+                }
+
+                // 2. تدقيق اليوزر (4 أحرف إنجليزية وأرقام على الأقل)
+                const userRegex = /^[a-zA-Z0-9_]{4,}$/;
+                if (!userRegex.test(studentLoginUser)) {
+                  alert('⚠️ اسم المستخدم يجب أن يكون 4 أحرف إنجليزية أو أرقام على الأقل وبدون مسافات أو رموز عربية.');
+                  return;
+                }
+
+                // 3. تدقيق الباسورد (8 أحرف مع أحرف وأرقام إنجليزية)
+                const passRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
+                if (!passRegex.test(studentLoginPass)) {
+                  alert('⚠️ كلمة المرور يجب أن تكون 8 أحرف على الأقل وتتضمن أحرفاً إنجليزية وأرقاماً.');
+                  return;
+                }
+
+                // 4. منع تكرار اليوزر
                 if (studentsList.some(st => st.username === studentLoginUser)) {
                   alert('⚠️ اسم المستخدم هذا مستخدم مسبقاً، يرجى اختيار يوزر آخر.');
-                  return;
-                }
-                if (studentLoginUser.length < 3) {
-                  alert('⚠️ يجب أن يكون اسم المستخدم 3 أحرف على الأقل.');
-                  return;
-                }
-                if (studentLoginPass.length < 6) {
-                  alert('⚠️ يجب أن تكون كلمة المرور 6 أحرف أو أرقام على الأقل.');
                   return;
                 }
 
@@ -350,7 +360,9 @@ export function App() {
                 try {
                   const docRef = await addDoc(collection(db, 'students'), newSt);
                   const savedSt = { id: docRef.id, ...newSt };
-                  setStudentsList([savedSt, ...studentsList]);
+                  const updatedStuds = [savedSt, ...studentsList];
+                  setStudentsList(updatedStuds);
+                  localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
                   setLoggedStudent(savedSt);
                   setShowStudentAuthModal(false);
                   setSuccessMessage('تم إنشاء الحساب وتسجيل الدخول بنجاح!');
@@ -369,16 +381,16 @@ export function App() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم الطالب الثلاثي</label>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">الاسم الثلاثي الصريح</label>
                   <input type="text" required value={newStudentName} onChange={(e) => setNewStudentName(e.target.value)} placeholder="مثال: محمد قاسم كريم" className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم المستخدم (3 أحرف على الأقل)</label>
-                  <input type="text" required value={studentLoginUser} onChange={(e) => setStudentLoginUser(e.target.value)} placeholder="اختر يوزر..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
+                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم المستخدم (4 أحرف إنجليزية على الأقل)</label>
+                  <input type="text" required value={studentLoginUser} onChange={(e) => setStudentLoginUser(e.target.value)} placeholder="مثال: mohamed123" className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور (6 رموز على الأقل)</label>
-                  <input type="password" required value={studentLoginPass} onChange={(e) => setStudentLoginPass(e.target.value)} placeholder="كلمة المرور..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
+                  <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور (8 أحرف تحوي أحرف وأرقام)</label>
+                  <input type="password" required value={studentLoginPass} onChange={(e) => setStudentLoginPass(e.target.value)} placeholder="كلمة المرور القوية..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
                 </div>
 
                 <button type="submit" className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md">
@@ -391,10 +403,17 @@ export function App() {
                 </div>
               </form>
             ) : (
-              <form onSubmit={(e) => {
+              <form onSubmit={async (e) => {
                 e.preventDefault();
                 const found = studentsList.find(st => st.username === studentLoginUser && st.pass === studentLoginPass);
                 if (found) {
+                  // قيد تسجيل اليوزر لجهاز واحد فقط
+                  if (found.status === 'متصل الآن') {
+                    alert('⚠️ عذراً، هذا اليوزر متصل حالياً عند شخص آخر (على جهاز آخر). لا يمكن فتح نفس الحساب في جهازين في نفس الوقت.');
+                    return;
+                  }
+                  await updateDoc(doc(db, 'students', found.id), { status: 'متصل الآن', lastSeen: 'الآن' });
+                  found.status = 'متصل الآن';
                   setLoggedStudent(found);
                   setShowStudentAuthModal(false);
                   setSuccessMessage(`أهلاً بك يا ${found.name}!`);
@@ -567,7 +586,7 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة والنظيف */}
+      {/* رأس الصفحة */}
       <div className="w-full bg-slate-900 py-3 px-4 sm:px-8 shadow-md flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-base shadow">ن</div>
@@ -583,7 +602,12 @@ export function App() {
               خروج من وضع الأدمن
             </button>
           ) : loggedStudent ? (
-            <button onClick={() => { 
+            <button onClick={async () => {
+              if (loggedStudent) {
+                try {
+                  await updateDoc(doc(db, 'students', loggedStudent.id), { status: 'غير متصل' });
+                } catch(e) {}
+              }
               localStorage.removeItem('nabough_logged_student');
               setLoggedStudent(null); 
             }} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow">
@@ -662,7 +686,7 @@ export function App() {
           </div>
         </div>
 
-        {/* 1. تبويب المنهج الدراسي وقائمة اختيار الصف */}
+        {/* 1. تبويب المنهج الدراسي والقائمة المنسدلة للزوار */}
         {activeTab === 'curriculum' && !selectedSubjectId && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -673,12 +697,12 @@ export function App() {
                     {isAdmin ? 'اختر الصف الدراسي المطلوب' : loggedStudent ? `مرحلتك الدراسية الحصرية: ${loggedStudent?.stage}` : 'اختر الصف الدراسي لتصفح المناهج'}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {isAdmin ? 'يتضمن كافة المراحل والصفوف الدراسية التسع في العراق' : loggedStudent ? 'تظهر لك مواد صفك حصراً' : 'يمكنك استخدام القائمة المنسدلة لاختيار أي صف وتصفح مواده، وعند محاولة فتح مادة سيُطلب منك تسجيل الدخول'}
+                    {isAdmin ? 'يتضمن كافة المراحل والصفوف الدراسية التسع في العراق' : loggedStudent ? 'تظهر لك مواد صفك حصراً' : 'استخدم القائمة المنسدلة لاختيار أي صف وتصفح مواده، وعند محاولة فتح مادة سيُطلب منك تسجيل الدخول'}
                   </p>
                 </div>
               </div>
 
-              {/* قائمة منسدلة لاختيار الصفوف تظهر للزوار والأدمن */}
+              {/* القائمة المنسدلة تظهر للزوار والأدمن ليختاروا أي صف */}
               {(!loggedStudent || isAdmin) && (
                 <div className="relative w-full sm:w-96">
                   <select 
@@ -701,7 +725,7 @@ export function App() {
                 <div 
                   key={sub.id}
                   onClick={() => {
-                    // إذا لم يكن مسجلاً، نفتح له نافذة تسجيل الدخول عند النقر على المادة
+                    // إذا لم يكن مسجلاً، نفتح له نافذة تسجيل الدخول عند النقر على أي مادة
                     if (!loggedStudent && !isAdmin) {
                       setShowStudentAuthModal(true);
                     } else {
@@ -1156,7 +1180,9 @@ export function App() {
                             <div className="flex gap-2 pt-1">
                               <button onClick={async () => {
                                 await updateDoc(doc(db, 'students', st.id), { username: editUser, pass: editPass });
-                                setStudentsList(studentsList.map(item => item.id === st.id ? {...item, username: editUser, pass: editPass} : item));
+                                const updatedStuds = studentsList.map(item => item.id === st.id ? {...item, username: editUser, pass: editPass} : item);
+                                setStudentsList(updatedStuds);
+                                localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
                                 setEditingStudentId(null);
                                 setSuccessMessage('تم تحديث بيانات الدخول بنجاح.');
                                 setTimeout(() => setSuccessMessage(null), 3000);
@@ -1186,7 +1212,9 @@ export function App() {
                         <button onClick={async () => {
                           const newVip = !st.isVip;
                           await updateDoc(doc(db, 'students', st.id), { isVip: newVip });
-                          setStudentsList(studentsList.map(item => item.id === st.id ? {...item, isVip: newVip} : item));
+                          const updatedStuds = studentsList.map(item => item.id === st.id ? {...item, isVip: newVip} : item);
+                          setStudentsList(updatedStuds);
+                          localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
                           setSuccessMessage('تم تحديث اشتراك الـ VIP.');
                           setTimeout(() => setSuccessMessage(null), 3000);
                         }} className={`px-3 py-1.5 rounded-xl text-[11px] font-black whitespace-nowrap ${st.isVip ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-700'}`}>
@@ -1197,7 +1225,9 @@ export function App() {
                       <td className="p-4 text-center">
                         <button onClick={async () => {
                           await deleteDoc(doc(db, 'students', st.id));
-                          setStudentsList(studentsList.filter(item => item.id !== st.id));
+                          const updatedStuds = studentsList.filter(item => item.id !== st.id);
+                          setStudentsList(updatedStuds);
+                          localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
                           setSuccessMessage('تم حذف الطالب.');
                           setTimeout(() => setSuccessMessage(null), 3000);
                         }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg">
@@ -1240,7 +1270,9 @@ export function App() {
               };
               try {
                 const docRef = await addDoc(collection(db, 'subjects'), newObj);
-                setSubjects([{ id: docRef.id, ...newObj }, ...subjects]);
+                const updatedSubs = [{ id: docRef.id, ...newObj }, ...subjects];
+                setSubjects(updatedSubs);
+                localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                 setNewSubName(''); setNewSubImage('');
                 setSuccessMessage('تمت إضافة المادة وحفظها في قاعدة البيانات بنجاح!');
                 setTimeout(() => setSuccessMessage(null), 3000);
@@ -1303,7 +1335,7 @@ export function App() {
           </div>
         )}
 
-        {/* 6. إعدادات الأدمن وتغيير الباسورد وحفظه في الـ LocalStorage */}
+        {/* 6. إعدادات الأدمن وحفظ الباسورد محلياً ودائماً */}
         {activeTab === 'settings' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
             <h2 className="text-2xl font-black text-slate-900">إعدادات حساب المدير العام والصلاحيات</h2>
@@ -1312,7 +1344,7 @@ export function App() {
               localStorage.setItem('nabough_admin_pass', adminPassword);
               localStorage.setItem('nabough_admin_user', adminUsername);
               localStorage.setItem('nabough_admin_name', adminName);
-              setSuccessMessage('تم تحديث كلمة المرور وحفظها بشكل دائم في الذاكرة!');
+              setSuccessMessage('تم تحديث كلمة المرور وحفظها بشكل دائم في الجهاز!');
               setTimeout(() => setSuccessMessage(null), 3000);
             }} className="bg-slate-50 p-6 rounded-2xl border space-y-4 max-w-xl">
               <div>
@@ -1326,7 +1358,7 @@ export function App() {
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور الجديدة الخاصة بك (Password)</label>
                 <input type="text" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="أدخل كلمة مرور قوية جديدة..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
-                <p className="text-[11px] text-slate-500 mt-1">هذه الكلمة ستبقى محفوظة بشكل دائم، وهي المطلوبة عند الضغط على رمز القفل 🔒 بالأسفل.</p>
+                <p className="text-[11px] text-slate-500 mt-1">هذه الكلمة ستبقى محفوظة بشكل دائم في متصفحك، وهي المطلوبة عند الضغط على رمز القفل 🔒 بالأسفل.</p>
               </div>
               <button type="submit" className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl text-xs shadow-md">
                 حفظ كلمة المرور الجديدة والأمان
