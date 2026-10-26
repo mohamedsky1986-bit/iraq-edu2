@@ -23,7 +23,7 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // تحديث أيقونة التطبيق التعليمية الاحترافية للـ PWA
+  // حقن ملف التثبيت (PWA Manifest) برمجياً ليعمل التطبيق بكل سلاسة
   useEffect(() => {
     const manifest = {
       name: "منصة النابغة التعليمية",
@@ -151,7 +151,7 @@ export function App() {
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
 
-  // دالة ذكية لمعالجة روابط الـ PDF وتجاوز القيود
+  // معالجة روابط الـ PDF لعرضها مباشرة بدون إيميل أو تسجيل دخول
   const getEmbedPdfUrl = (url: string) => {
     if (!url) return '';
     if (url.includes('drive.google.com')) {
@@ -196,6 +196,7 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
+  // تتبع النشاط اللحظي وتحديث آخر ظهور
   useEffect(() => {
     if (loggedStudent) {
       const updateInterval = setInterval(async () => {
@@ -653,7 +654,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة تفاصيل الدفع VIP مع تنظيف رقم الواتساب تلقائياً */}
+      {/* نافذة تفاصيل الدفع VIP */}
       {vipModalItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative space-y-6 text-right">
@@ -713,7 +714,7 @@ export function App() {
         </div>
       )}
 
-      {/* قارئ PDF مع زر التحميل والفتح الخارجي المباشر */}
+      {/* قارئ PDF */}
       {activePdfUrl && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-4xl w-full h-[85vh] p-4 shadow-2xl relative flex flex-col">
@@ -812,7 +813,7 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة مع زر تثبيت التطبيق وزر تواصل مع الإدارة النازك */}
+      {/* رأس الصفحة مع زر تثبيت التطبيق وزر تواصل مع الإدارة */}
       <div className="w-full bg-slate-900 py-3 px-4 sm:px-8 shadow-md flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-base shadow">ن</div>
@@ -823,7 +824,6 @@ export function App() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* زر تواصل مع الإدارة / اشتراك VIP النازك */}
           <a 
             href={`https://wa.me/${vipSettings.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent('مرحباً، أود التواصل مع إدارة منصة النابغة التعليمية والاستفسار عن الاشتراكات.')}`}
             target="_blank" 
@@ -1275,7 +1275,7 @@ export function App() {
                 )}
               </div>
 
-              {/* ج) ملازم PDF مع زر تحميل وفتح مباشر */}
+              {/* ج) ملازم PDF */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <FileText className="w-5 h-5 text-emerald-600" /> ملازم وقارئ الـ PDF ({currentSub.booklets?.length || 0})
@@ -1778,8 +1778,7 @@ export function App() {
             
             {/* زر القفل السري لدخول الأدمن */}
             <button 
-              onClick={() => setShowAdminLoginModal: () => setShowAdminLoginModal(true)} 
-              onClickCapture={() => setShowAdminLoginModal(true)}
+              onClick={() => setShowAdminLoginModal(true)} 
               className="w-7 h-7 bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-400 rounded-full flex items-center justify-center transition-all shadow-sm"
               title="دخول المدير العام (الأدمن)"
             >
