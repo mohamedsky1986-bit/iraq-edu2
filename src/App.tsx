@@ -8,7 +8,9 @@ import {
   Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink
 } from 'lucide-react';
 
-// دالة أمان صارمة لمنع الشاشة البيضاء نهائياً وتصفية البيانات التالفة
+// 🔴 ضع رقم الواتساب الخاص بك هنا (مع رمز الدولة، مثلاً: 9647712345678) ليعمل مباشرة بدون أي أخطاء
+const MY_WHATSAPP_NUMBER = '9647701234567'; 
+
 const safeGetStorage = (key: string, fallback: any) => {
   try {
     const item = localStorage.getItem(key);
@@ -24,8 +26,12 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // حققنا أيقونة تطبيق احترافية وجذابة (قبعة التخرج التعليمية) للـ PWA
+  // حقن أيقونة التطبيق الاحترافية (قبعة تخرج وكتب) للـ PWA لتظهر بشكل جذاب على شاشة الهاتف
   useEffect(() => {
+    const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><rect width="512" height="512" rx="110" fill="#0f172a"/><path d="M256 120L60 210l196 90 196-90-196-90z" fill="#3b82f6"/><path d="M120 250v100c0 40 60 70 136 70s136-30 136-70V250L256 310l-136-60z" fill="#1e3a8a"/><path d="M410 230v110a15 15 0 01-30 0V245l-35 16v59a50 50 0 11-30 0v-59l-85 39 196 90 196-90-182-83z" fill="#fbbf24"/></svg>`;
+    const blobIcon = new Blob([svgIcon], { type: 'image/svg+xml' });
+    const iconUrl = URL.createObjectURL(blobIcon);
+
     const manifest = {
       name: "منصة النابغة التعليمية",
       short_name: "النابغة",
@@ -35,9 +41,9 @@ export function App() {
       theme_color: "#0f172a",
       icons: [
         {
-          src: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=192&h=192&q=80",
-          sizes: "192x192",
-          type: "image/png"
+          src: iconUrl,
+          sizes: "512x512",
+          type: "image/svg+xml"
         }
       ]
     };
@@ -105,7 +111,7 @@ export function App() {
       price: '25,000 دينار عراقي / شهرياً',
       mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
       transferPhone: '07701234567 (زين كاش / آسياسيل)',
-      whatsapp: '9647701234567'
+      whatsapp: MY_WHATSAPP_NUMBER
     });
   });
 
@@ -113,9 +119,10 @@ export function App() {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
 
-  // دالة تصفية رقم الواتساب برمجياً لضمان العمل بدون أخطاء
+  // دالة تصفية وتجهيز رقم الواتساب برمجياً لضمان عدم حدوث أي خطأ
   const getCleanWhatsAppUrl = (phone: string, text: string) => {
-    let cleanPhone = (phone || '9647701234567').replace(/\D/g, '');
+    let targetPhone = phone || MY_WHATSAPP_NUMBER;
+    let cleanPhone = targetPhone.replace(/\D/g, '');
     if (cleanPhone.startsWith('0')) {
       cleanPhone = '964' + cleanPhone.substring(1);
     }
