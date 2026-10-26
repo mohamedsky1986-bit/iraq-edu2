@@ -9,6 +9,9 @@ import {
 } from 'lucide-react';
 
 export function App() {
+  // شاشة التحميل الاحترافية لمنع ظهور الشاشة البيضاء كلياً على أي جهاز
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     return localStorage.getItem('nabough_is_admin') === 'true';
   });
@@ -22,7 +25,7 @@ export function App() {
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
 
-  // حالة زر تثبيت التطبيق (PWA Install Prompt)
+  // حالة زر تثبيت التطبيق السريع (PWA)
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState<boolean>(false);
 
@@ -38,7 +41,7 @@ export function App() {
 
   const handleInstallApp = async () => {
     if (!deferredPrompt) {
-      alert('التطبيق جاهز للاستخدام أو أن متصفحك يدعم التثبيت المباشر من إعدادات المتصفح (إضافة إلى الشاشة الرئيسية).');
+      alert('التطبيق جاهز! يمكنك تثبيته مباشرة من إعدادات متصفحك (اختيار: إضافة إلى الشاشة الرئيسية).');
       return;
     }
     deferredPrompt.prompt();
@@ -155,6 +158,7 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
+  // تتبع النشاط اللحظي وآخر ظهور دقيق
   useEffect(() => {
     if (loggedStudent) {
       const updateInterval = setInterval(async () => {
@@ -162,11 +166,12 @@ export function App() {
         try {
           await updateDoc(doc(db, 'students', loggedStudent.id), { lastSeen: nowTime });
         } catch(e) {}
-      }, 60000);
+      }, 30000);
       return () => clearInterval(updateInterval);
     }
   }, [loggedStudent]);
 
+  // تحميل البيانات السريع وإلغاء شاشة التحميل فوراً لمنع أي شاشة بيضاء
   useEffect(() => {
     async function loadDataFromFirebase() {
       try {
@@ -185,9 +190,16 @@ export function App() {
         }
       } catch (e) {
         console.error('Offline mode / Firebase load error:', e);
+      } finally {
+        setIsLoading(false);
       }
     }
     loadDataFromFirebase();
+
+    const safetyTimer = setTimeout(() => {
+      setIsLoading(false);
+    }, 1500);
+    return () => clearTimeout(safetyTimer);
   }, []);
 
   const [newVideoTitle, setNewVideoTitle] = useState('');
@@ -343,6 +355,20 @@ export function App() {
       return selectedStage === 'all' || s.stage === selectedStage;
     }
   });
+
+  // شاشة التحميل الاحترافية لمنع الشاشة البيضاء تماماً
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
+        <div className="w-24 h-24 rounded-3xl bg-gradient-to-tr from-indigo-600 to-violet-500 text-white flex items-center justify-center font-black text-4xl shadow-2xl animate-bounce mb-6">ن</div>
+        <h2 className="text-2xl font-black tracking-wide">منصة النابغة التعليمية</h2>
+        <p className="text-xs text-slate-400 mt-2">جاري تجهيز المنصة بثبات...</p>
+        <div className="w-40 h-1.5 bg-slate-800 rounded-full overflow-hidden mt-6">
+          <div className="w-full h-full bg-indigo-500 animate-pulse"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
@@ -714,7 +740,7 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة مع زر تثبيت التطبيق إذا كان متاحاً */}
+      {/* رأس الصفحة مع زر تثبيت التطبيق */}
       <div className="w-full bg-slate-900 py-3 px-4 sm:px-8 shadow-md flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-base shadow">ن</div>
