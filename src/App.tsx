@@ -8,7 +8,6 @@ import {
   Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone
 } from 'lucide-react';
 
-// دالة أمان لمنع الشاشة البيضاء في حال تلف الذاكرة المحلية أو وجود قيم فارغة
 const safeGetStorage = (key: string, fallback: any) => {
   try {
     const item = localStorage.getItem(key);
@@ -35,7 +34,7 @@ export function App() {
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
 
-  // حالة زر تثبيت التطبيق السريع (PWA)
+  // زر تثبيت التطبيق السريع (PWA)
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState<boolean>(false);
 
@@ -51,7 +50,7 @@ export function App() {
 
   const handleInstallApp = async () => {
     if (!deferredPrompt) {
-      alert('التطبيق جاهز! يمكنك تثبيته مباشرة من خيارات متصفحك (اختر: إضافة إلى الشاشة الرئيسية).');
+      alert('التطبيق جاهز! يمكنك تثبيته مباشرة من إعدادات متصفحك (اختر: إضافة إلى الشاشة الرئيسية).');
       return;
     }
     deferredPrompt.prompt();
@@ -130,6 +129,7 @@ export function App() {
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editUser, setEditUser] = useState('');
   const [editPass, setEditPass] = useState('');
+  const [editStage, setEditStage] = useState('');
 
   const allStagesList = [
     { id: 'first_intermediate', name: 'الأول المتوسط' },
@@ -143,7 +143,7 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
-  // تتبع النشاط اللحظي وتحديث آخر ظهور للطالب المتصل
+  // تتبع النشاط اللحظي وتحديث آخر ظهور
   useEffect(() => {
     if (loggedStudent) {
       const updateInterval = setInterval(async () => {
@@ -156,7 +156,6 @@ export function App() {
     }
   }, [loggedStudent]);
 
-  // جلب البيانات من السيرفر وإلغاء شاشة التحميل بسلاسة
   useEffect(() => {
     async function loadDataFromFirebase() {
       try {
@@ -202,6 +201,7 @@ export function App() {
   
   const [quizTitle, setQuizTitle] = useState('');
   const [quizIsVip, setQuizIsVip] = useState(false);
+  const [quizDurationMinutes, setQuizDurationMinutes] = useState<number>(15); // وقت الامتحان بالدقائق
   const [questionType, setQuestionType] = useState<'mcq' | 'fill' | 'true_false'>('mcq');
   const [questionText, setQuestionText] = useState('');
   const [mcqOptions, setMcqOptions] = useState(['', '', '', '']);
@@ -236,19 +236,41 @@ export function App() {
     return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
   };
 
-  const checkAnswerFlexible = (userAns: string, correctAns: string) => {
-    if (!userAns) return false;
+  // التصحيح الذكي المتقدم (يدعم الكلمات المفتاحية، المرادفات، النصف درجة، وجزء التعريف)
+  const evaluateAnswerSmart = (userAns: string, correctAns: string, qType: string) => {
+    if (!userAns) return { isCorrect: false, scoreRatio: 0 };
     const cleanUser = userAns.trim().toLowerCase();
     const cleanCorrect = correctAns.trim().toLowerCase();
-    if (cleanUser === cleanCorrect) return true;
-    const correctWords = cleanCorrect.split(' ').filter((w: string) => w.length > 1);
-    let matched = 0;
-    correctWords.forEach((w: string) => {
-      if (cleanUser.includes(w)) matched++;
+
+    if (qType === 'mcq' || qType === 'true_false') {
+      return { isCorrect: cleanUser === cleanCorrect, scoreRatio: cleanUser === cleanCorrect ? 1 : 0 };
+    }
+
+    if (cleanUser === cleanCorrect) {
+      return { isCorrect: true, scoreRatio: 1 };
+    }
+
+    // استخراج الكلمات الأساسية (التي طولها أكبر من حرفين) من الإجابة النموذجية
+    const correctWords = cleanCorrect.split(/[\s,،.؛\-]+/).filter(w => w.length > 2);
+    if (correctWords.length === 0) {
+      return { isCorrect: cleanUser.includes(cleanCorrect) || cleanCorrect.includes(cleanUser), scoreRatio: 0.5 };
+    }
+
+    let matchedCount = 0;
+    correctWords.forEach(w => {
+      if (cleanUser.includes(w)) matchedCount++;
     });
-    if (correctWords.length > 0 && (matched / correctWords.length) >= 0.5) return true;
-    if (cleanCorrect.includes(cleanUser) && cleanUser.length >= (cleanCorrect.length - 3)) return true;
-    return false;
+
+    const ratio = matchedCount / correctWords.length;
+    if (ratio >= 0.8) {
+      return { isCorrect: true, scoreRatio: 1 }; // صحيحة تماماً أو بفارق بسيط جداً
+    } else if (ratio >= 0.4) {
+      return { isCorrect: false, scoreRatio: 0.6 }; // إجابة ناقصة أو جزء من التعريف (تحصل على درجة جزئية مثلاً 60%)
+    } else if (cleanCorrect.includes(cleanUser) && cleanUser.length >= 3) {
+      return { isCorrect: false, scoreRatio: 0.4 }; // كتابة جزء بسيط
+    }
+
+    return { isCorrect: false, scoreRatio: 0 };
   };
 
   const handleAddQuestionToQuiz = () => {
@@ -273,7 +295,7 @@ export function App() {
       alert('يرجى كتابة عنوان الامتحان وإضافة سؤال واحد على الأقل.');
       return;
     }
-    const newQuizObj = { id: Date.now().toString(), title: quizTitle, isVip: quizIsVip, questions: currentQuestionsList };
+    const newQuizObj = { id: Date.now().toString(), title: quizTitle, isVip: quizIsVip, durationMinutes: quizDurationMinutes, questions: currentQuestionsList };
     const targetSub = subjects.find(s => s.id === subjectId);
     if (!targetSub) return;
     const updatedQuizzes = [...(targetSub.quizzes || []), newQuizObj];
@@ -285,6 +307,7 @@ export function App() {
       localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
       setQuizTitle('');
       setQuizIsVip(false);
+      setQuizDurationMinutes(15);
       setCurrentQuestionsList([]);
       setSuccessMessage('تم نشر الامتحان بنجاح في قاعدة البيانات!');
       setTimeout(() => setSuccessMessage(null), 4000);
@@ -296,20 +319,25 @@ export function App() {
   const handleGradeQuiz = async () => {
     if (!activeQuiz || !activeQuiz.questions) return;
     setTimerActive(false);
-    let score = 0;
+    let totalScoreEarned = 0;
+    const maxPossibleScore = activeQuiz.questions.length * 100;
+
     const details = activeQuiz.questions.map((q: any, idx: number) => {
       const userAns = quizAnswers[idx] || '';
-      let isCorrect = false;
-      if (q.type === 'mcq' || q.type === 'true_false') {
-        isCorrect = userAns === q.correct;
-      } else {
-        isCorrect = checkAnswerFlexible(userAns, q.correct);
-      }
-      if (isCorrect) score += (100 / activeQuiz.questions.length);
-      return { q: q.q, userAns, correct: q.correct, isCorrect };
+      const evaluation = evaluateAnswerSmart(userAns, q.correct, q.type);
+      const questionGrade = Math.round(evaluation.scoreRatio * 100);
+      totalScoreEarned += questionGrade;
+
+      return { 
+        q: q.q, 
+        userAns, 
+        correct: q.correct, 
+        isCorrect: evaluation.isCorrect || evaluation.scoreRatio >= 0.8,
+        partialScore: questionGrade
+      };
     });
 
-    const finalScore = Math.round(score);
+    const finalScore = Math.round((totalScoreEarned / maxPossibleScore) * 100);
     setQuizResult({ score: finalScore, total: 100, details });
 
     if (loggedStudent) {
@@ -341,7 +369,6 @@ export function App() {
     }
   });
 
-  // شاشة التحميل الاحترافية التي תمنع الشاشة البيضاء تماماً
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
@@ -399,7 +426,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة عرض إجابات الطالب للأدمن */}
+      {/* نافذة عرض إجابات الطالب ونقاط الضعف */}
       {viewingStudentAnswers && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative space-y-6 text-right">
@@ -407,7 +434,7 @@ export function App() {
               <X className="w-5 h-5" />
             </button>
             <div className="text-center space-y-1 pb-3 border-b">
-              <h3 className="text-xl font-black text-slate-900">إجابات الطالب: {viewingStudentAnswers.name}</h3>
+              <h3 className="text-xl font-black text-slate-900">إجابات الطالب ونقاط الضعف: {viewingStudentAnswers.name}</h3>
               <p className="text-xs text-indigo-600 font-bold">المرحلة: {viewingStudentAnswers.stage} | الدرجة الكلية: {viewingStudentAnswers.examScore}</p>
             </div>
 
@@ -418,13 +445,13 @@ export function App() {
                     <div className="font-bold text-sm">س{dIdx+1}: {det.q}</div>
                     <div className="text-xs mt-1.5 flex flex-col gap-1">
                       <span>إجابة الطالب: <b>{det.userAns || 'بدون إجابة'}</b></span>
-                      <span>الإجابة الصحيحة: <b>{det.correct}</b></span>
-                      <span className="font-black">{det.isCorrect ? '✅ صحيحة' : '❌ خاطئة (نقطة ضعف محتملة للتركيز عليها)'}</span>
+                      <span>الإجابة النموذجية: <b>{det.correct}</b></span>
+                      <span className="font-black">درجة السؤال: {det.partialScore}/100 {det.isCorrect ? '✅ صحيحة' : '❌ نقطة ضعف محتملة للتركيز عليها'}</span>
                     </div>
                   </div>
                 ))
               ) : (
-                <p className="text-center text-slate-500 py-6 text-sm font-bold">لم يتقدم هذا الطالب لأي امتحان تفاعلي بعد أو لا توجد تفاصيل محفوظة.</p>
+                <p className="text-center text-slate-500 py-6 text-sm font-bold">لم يتقدم هذا الطالب لأي امتحان تفاعلي بعد.</p>
               )}
             </div>
 
@@ -576,7 +603,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة تفاصيل الدفع VIP المتضمنة اسم الطالب ويوزره ورقم الواتساب الخاص بالأدمن */}
+      {/* نافذة تفاصيل الدفع VIP */}
       {vipModalItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative space-y-6 text-right">
@@ -683,7 +710,7 @@ export function App() {
                   {quizResult.details.map((det: any, dIdx: number) => (
                     <div key={dIdx} className={`p-4 rounded-2xl border ${det.isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
                       <div className="font-bold text-sm">س{dIdx+1}: {det.q}</div>
-                      <div className="text-xs mt-1">إجابتك: <b>{det.userAns || 'بدون إجابة'}</b> {det.isCorrect ? '✅ صحيحة' : `❌ خاطئة (الصحيح: ${det.correct})`}</div>
+                      <div className="text-xs mt-1">إجابتك: <b>{det.userAns || 'بدون إجابة'}</b> (درجة السؤال: {det.partialScore}/100) {det.isCorrect ? '✅ صحيحة' : '❌ نقطة ضعف'}</div>
                     </div>
                   ))}
                 </div>
@@ -951,7 +978,7 @@ export function App() {
                 </button>
               </div>
 
-              {/* أ) الشروحات والتعاليل */}
+              {/* أ) الشروحات والتعاليل والملاحظات */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <NoteIcon className="w-5 h-5 text-amber-600" /> الشروحات والتعاليل والملاحظات التعليمية ({currentSub.notes?.length || 0})
@@ -1177,7 +1204,7 @@ export function App() {
                 )}
               </div>
 
-              {/* د) الامتحانات */}
+              {/* د) الامتحانات مع إمكانية استيراد الأسئلة من الشروحات والملاحظات */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <CheckSquare className="w-5 h-5 text-indigo-600" /> الامتحانات والاختبارات التفاعلية ({currentSub.quizzes?.length || 0})
@@ -1186,7 +1213,7 @@ export function App() {
                   {currentSub.quizzes?.map((quiz: any) => (
                     <div key={quiz.id} className="p-4 bg-white rounded-xl border border-slate-200 flex items-center justify-between shadow-sm flex-wrap gap-3">
                       <span className="font-bold text-slate-800 text-sm flex items-center gap-2 flex-wrap">
-                        📝 {quiz.title} {quiz.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
+                        📝 {quiz.title} ({quiz.durationMinutes || 15} دقيقة) {quiz.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
                       </span>
                       <div className="flex items-center gap-2">
                         {quiz.isVip && !isVipActive && isAdmin === false ? (
@@ -1194,7 +1221,7 @@ export function App() {
                             <Lock className="w-3.5 h-3.5" /> قفل VIP
                           </button>
                         ) : (
-                          <button onClick={() => { setActiveQuiz(quiz); setTimeLeft(900); setTimerActive(true); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md">
+                          <button onClick={() => { setActiveQuiz(quiz); setTimeLeft((quiz.durationMinutes || 15) * 60); setTimerActive(true); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md">
                             بدء الامتحان
                           </button>
                         )}
@@ -1224,20 +1251,43 @@ export function App() {
                         <label className="block text-xs font-bold text-slate-700 mb-1">عنوان الامتحان الرئيسي</label>
                         <input type="text" value={quizTitle} onChange={(e) => setQuizTitle(e.target.value)} placeholder="مثال: امتحان الفصل الأول الشامل..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" />
                       </div>
-                      <div className="flex items-end">
-                        <label className="flex items-center gap-2 p-3 bg-slate-50 rounded-xl border font-bold text-xs cursor-pointer w-full justify-center">
-                          <input type="checkbox" checked={quizIsVip} onChange={(e) => setQuizIsVip(e.target.checked)} className="w-4 h-4 text-amber-600 rounded" />
-                          <span>امتحان VIP حصري؟</span>
-                        </label>
+                      <div>
+                        <label className="block text-xs font-bold text-slate-700 mb-1">وقت الامتحان (بالدقائق)</label>
+                        <input type="number" value={quizDurationMinutes} onChange={(e) => setQuizDurationMinutes(Number(e.target.value))} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" min={1} max={180} />
                       </div>
                     </div>
+
+                    {/* خيار استيراد السؤال مباشرة من الشروحات والتعاليل والملاحظات الكاتبة */}
+                    {currentSub.notes && currentSub.notes.length > 0 && (
+                      <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl space-y-2">
+                        <label className="block text-xs font-black text-indigo-900">💡 استيراد سريع من الشروحات والتعاليل المضافة للمادة:</label>
+                        <select 
+                          onChange={(e) => {
+                            const noteId = e.target.value;
+                            if (!noteId) return;
+                            const foundNote = currentSub.notes.find((n: any) => n.id === noteId);
+                            if (foundNote) {
+                              setQuestionText(foundNote.title);
+                              setFillCorrect(foundNote.content);
+                              setQuestionType('fill');
+                            }
+                          }}
+                          className="w-full px-3 py-2 bg-white border rounded-lg text-xs font-bold text-slate-800"
+                        >
+                          <option value="">-- اضغط لاختيار تعليل أو شرح لإضافته كسؤال --</option>
+                          {currentSub.notes.map((n: any) => (
+                            <option key={n.id} value={n.id}>{n.title}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
                     <div className="p-4 bg-slate-50 rounded-xl border space-y-3">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <span className="text-xs font-black text-slate-800">إضافة سؤال جديد ({currentQuestionsList.length} أسئلة مضافة)</span>
                         <select value={questionType} onChange={(e) => setQuestionType(e.target.value as any)} className="px-3 py-1 bg-white border rounded-lg text-xs font-bold">
                           <option value="mcq">اختيار من متعدد (MCQ)</option>
-                          <option value="fill">ملء فراغات (تصحيح مرن)</option>
+                          <option value="fill">ملء فراغات (تصحيح ذكي مرن)</option>
                           <option value="true_false">صح وخطأ</option>
                         </select>
                       </div>
@@ -1260,7 +1310,7 @@ export function App() {
                       )}
 
                       {questionType === 'fill' && (
-                        <input type="text" value={fillCorrect} onChange={(e) => setFillCorrect(e.target.value)} placeholder="الكلمة الصحيحة للفراغ..." className="w-full px-3 py-2 bg-emerald-50 border border-emerald-300 rounded-lg text-xs font-bold text-emerald-900" />
+                        <input type="text" value={fillCorrect} onChange={(e) => setFillCorrect(e.target.value)} placeholder="الإجابة النموذجية أو المفاتيح الصحيحة..." className="w-full px-3 py-2 bg-emerald-50 border border-emerald-300 rounded-lg text-xs font-bold text-emerald-900" />
                       )}
 
                       {questionType === 'true_false' && (
@@ -1291,7 +1341,7 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة مع تصفية المراحل وعرض الإجابات ونقاط الضعف */}
+        {/* 3. لوحة إدارة الطلبة مع تصفية المراحل، ترقية المرحلة، وعرض الإجابات */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-4">
@@ -1299,7 +1349,7 @@ export function App() {
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
                   <Users className="w-6 h-6 text-indigo-600" /> لوحة إدارة الطلبة وحسابات الـ VIP
                 </h2>
-                <p className="text-sm text-slate-600 mt-1">تصفية حسب المرحلة، عرض تاريخ التسجيل، آخر ظهور، ونقاط ضعف الامتحانات.</p>
+                <p className="text-sm text-slate-600 mt-1">تصفية حسب المرحلة، ترقية المرحلة الدراسية، عرض آخر ظهور ونقاط الضعف.</p>
               </div>
               
               <div className="flex items-center gap-2">
@@ -1321,7 +1371,7 @@ export function App() {
               <table className="w-full text-right border-collapse min-w-[700px]">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-black">
-                    <th className="p-4">الطالب والمرحلة</th>
+                    <th className="p-4">الطالب والمرحلة (وترقية المرحلة)</th>
                     <th className="p-4">تاريخ التسجيل & آخر ظهور</th>
                     <th className="p-4">بيانات الدخول</th>
                     <th className="p-4">الحالة والدرجة ونقاط الضعف</th>
@@ -1336,7 +1386,34 @@ export function App() {
                     <tr key={st.id} className="hover:bg-slate-50/80 transition-all">
                       <td className="p-4">
                         <div className="font-black text-slate-900">{st.name}</div>
-                        <div className="text-indigo-600 text-[11px]">{st.stage}</div>
+                        {editingStudentId === st.id ? (
+                          <div className="mt-2 flex items-center gap-2">
+                            <select 
+                              value={editStage} 
+                              onChange={(e) => setEditStage(e.target.value)}
+                              className="px-2 py-1 bg-white border rounded text-xs font-bold"
+                            >
+                              {allStagesList.map(s => (
+                                <option key={s.id} value={s.name}>{s.name}</option>
+                              ))}
+                            </select>
+                            <button onClick={async () => {
+                              await updateDoc(doc(db, 'students', st.id), { stage: editStage });
+                              const updatedStuds = studentsList.map(item => item.id === st.id ? {...item, stage: editStage} : item);
+                              setStudentsList(updatedStuds);
+                              localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
+                              setEditingStudentId(null);
+                              setSuccessMessage('تم ترقية مرحلة الطالب بنجاح!');
+                              setTimeout(() => setSuccessMessage(null), 3000);
+                            }} className="px-2.5 py-1 bg-emerald-600 text-white rounded text-[10px]">حفظ</button>
+                            <button onClick={() => setEditingStudentId(null)} className="px-2 py-1 bg-slate-200 rounded text-[10px]">إلغاء</button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-indigo-600 text-[11px] bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">{st.stage}</span>
+                            <button onClick={() => { setEditingStudentId(st.id); setEditStage(st.stage); }} className="text-[10px] text-slate-500 hover:text-indigo-600 underline">ترقية المرحلة ↗</button>
+                          </div>
+                        )}
                       </td>
 
                       <td className="p-4 text-slate-600">
@@ -1345,34 +1422,10 @@ export function App() {
                       </td>
 
                       <td className="p-4">
-                        {editingStudentId === st.id ? (
-                          <div className="flex flex-col gap-1.5 bg-slate-50 p-2 rounded-xl border border-indigo-200">
-                            <input type="text" value={editUser} onChange={(e) => setEditUser(e.target.value)} placeholder="اليوزر الجديد" className="px-2 py-1 rounded bg-white border text-xs font-bold" />
-                            <input type="text" value={editPass} onChange={(e) => setEditPass(e.target.value)} placeholder="الباسورد الجديد" className="px-2 py-1 rounded bg-white border text-xs font-bold" />
-                            <div className="flex gap-2 pt-1">
-                              <button onClick={async () => {
-                                await updateDoc(doc(db, 'students', st.id), { username: editUser, pass: editPass });
-                                const updatedStuds = studentsList.map(item => item.id === st.id ? {...item, username: editUser, pass: editPass} : item);
-                                setStudentsList(updatedStuds);
-                                localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
-                                setEditingStudentId(null);
-                                setSuccessMessage('تم تحديث بيانات الدخول بنجاح.');
-                                setTimeout(() => setSuccessMessage(null), 3000);
-                              }} className="px-2 py-1 bg-emerald-600 text-white rounded text-[10px]">حفظ</button>
-                              <button onClick={() => setEditingStudentId(null)} className="px-2 py-1 bg-slate-200 rounded text-[10px]">إلغاء</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl border gap-2">
-                            <div>
-                              <div className="text-slate-900">👤 اليوزر: <span className="font-mono text-indigo-700">{st.username}</span></div>
-                              <div className="text-slate-600">🔑 الباسورد: <span className="font-mono text-slate-900">{st.pass}</span></div>
-                            </div>
-                            <button onClick={() => { setEditingStudentId(st.id); setEditUser(st.username); setEditPass(st.pass); }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg flex-shrink-0">
-                              <Edit3 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
+                        <div className="bg-slate-50 p-2 rounded-xl border">
+                          <div className="text-slate-900">👤 اليوزر: <span className="font-mono text-indigo-700">{st.username}</span></div>
+                          <div className="text-slate-600">🔑 الباسورد: <span className="font-mono text-slate-900">{st.pass}</span></div>
+                        </div>
                       </td>
 
                       <td className="p-4">
