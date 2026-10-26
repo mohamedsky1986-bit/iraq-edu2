@@ -5,7 +5,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
-  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone
+  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink
 } from 'lucide-react';
 
 const safeGetStorage = (key: string, fallback: any) => {
@@ -23,7 +23,7 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // تحديث أيقونة التطبيق لتصبح بصورة تعليمية جذابة (كتب وقبعة تخرج) واسم المنصة الرسمي
+  // تحديث أيقونة التطبيق التعليمية الاحترافية للـ PWA
   useEffect(() => {
     const manifest = {
       name: "منصة النابغة التعليمية",
@@ -34,7 +34,7 @@ export function App() {
       theme_color: "#0f172a",
       icons: [
         {
-          src: "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=192&h=192&q=80",
+          src: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=192&h=192&q=80",
           sizes: "192x192",
           type: "image/png"
         }
@@ -151,11 +151,10 @@ export function App() {
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
 
-  // دالة ذكية لمعالجة روابط الـ PDF وتجاوز حماية جوجل درايف بدون إيميل
+  // دالة ذكية لمعالجة روابط الـ PDF وتجاوز القيود
   const getEmbedPdfUrl = (url: string) => {
     if (!url) return '';
     if (url.includes('drive.google.com')) {
-      // تحويل رابط جوجل درايف تلقائياً لعرض مباشر بدون تسجيل دخول
       return `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
     }
     return url;
@@ -168,7 +167,7 @@ export function App() {
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // حالات التعديل للمواد، الشروحات، والطلبة
+  // حالات التعديل
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
   const [editSubName, setEditSubName] = useState('');
   const [editSubImage, setEditSubImage] = useState('');
@@ -197,7 +196,6 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
-  // تتبع النشاط اللحظي وتحديث آخر ظهور
   useEffect(() => {
     if (loggedStudent) {
       const updateInterval = setInterval(async () => {
@@ -655,7 +653,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة تفاصيل الدفع VIP */}
+      {/* نافذة تفاصيل الدفع VIP مع تنظيف رقم الواتساب تلقائياً */}
       {vipModalItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative space-y-6 text-right">
@@ -690,7 +688,7 @@ export function App() {
             </div>
 
             <a 
-              href={`https://wa.me/${vipSettings.whatsapp}?text=${encodeURIComponent(`مرحباً، أود تفعيل اشتراك الـ VIP في منصة النابغة التعليمية.\nمعلومات الطالب:\nالاسم الثلاثي: ${loggedStudent ? loggedStudent.name : 'زائر'}\nاليوزر: ${loggedStudent ? loggedStudent.username : 'غير مسجل'}\nوهذا إيصال الدفع:`)}`} 
+              href={`https://wa.me/${vipSettings.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(`مرحباً، أود تفعيل اشتراك الـ VIP في منصة النابغة التعليمية.\nمعلومات الطالب:\nالاسم الثلاثي: ${loggedStudent ? loggedStudent.name : 'زائر'}\nاليوزر: ${loggedStudent ? loggedStudent.username : 'غير مسجل'}\nوهذا إيصال الدفع:`)}`} 
               target="_blank" 
               rel="noreferrer"
               className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm"
@@ -715,15 +713,25 @@ export function App() {
         </div>
       )}
 
-      {/* قارئ PDF مع دعم فتح روابط جوجل درايف تلقائياً بدون تسجيل دخول */}
+      {/* قارئ PDF مع زر التحميل والفتح الخارجي المباشر */}
       {activePdfUrl && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-4xl w-full h-[80vh] p-4 shadow-2xl relative flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b">
-              <h3 className="font-black text-lg">قارئ الملزمة والملخصات (PDF)</h3>
-              <button onClick={() => setActivePdfUrl(null)} className="w-10 h-10 bg-rose-600 text-white rounded-full flex items-center justify-center font-bold">
-                <X className="w-5 h-5" />
-              </button>
+          <div className="bg-white rounded-3xl max-w-4xl w-full h-[85vh] p-4 shadow-2xl relative flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b gap-3 flex-wrap">
+              <h3 className="font-black text-base text-slate-900">قارئ الملزمة والملخصات (PDF)</h3>
+              <div className="flex items-center gap-2">
+                <a 
+                  href={activePdfUrl} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> فتح / تحميل خارجي 📥
+                </a>
+                <button onClick={() => setActivePdfUrl(null)} className="w-9 h-9 bg-rose-600 text-white rounded-full flex items-center justify-center font-bold">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
             <div className="flex-1 w-full rounded-2xl overflow-hidden bg-slate-100 mt-3">
               <iframe src={getEmbedPdfUrl(activePdfUrl)} className="w-full h-full border-0"></iframe>
@@ -804,7 +812,7 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة مع زر تثبيت التطبيق باللون الذهبي البارز */}
+      {/* رأس الصفحة مع زر تثبيت التطبيق وزر تواصل مع الإدارة النازك */}
       <div className="w-full bg-slate-900 py-3 px-4 sm:px-8 shadow-md flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-base shadow">ن</div>
@@ -814,15 +822,22 @@ export function App() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* زر تثبيت التطبيق بلون ذهبي بارز وأنيق */}
-          <button 
-            onClick={handleInstallApp} 
-            className="px-3.5 py-2 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 animate-pulse border border-yellow-200 cursor-pointer"
-            title="تثبيت منصة النابغة على شاشة هاتفك"
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* زر تواصل مع الإدارة / اشتراك VIP النازك */}
+          <a 
+            href={`https://wa.me/${vipSettings.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent('مرحباً، أود التواصل مع إدارة منصة النابغة التعليمية والاستفسار عن الاشتراكات.')}`}
+            target="_blank" 
+            rel="noreferrer"
+            className="px-3 py-1.5 bg-emerald-600/30 border border-emerald-500/50 text-emerald-300 rounded-xl text-xs font-bold hover:bg-emerald-600/40 transition-all flex items-center gap-1.5 shadow"
           >
-            <Smartphone className="w-4 h-4 text-slate-950" /> تثبيت التطبيق 📱
-          </button>
+            <MessageCircle className="w-3.5 h-3.5 text-emerald-400" /> تواصل مع الإدارة / اشتراك VIP 💬
+          </a>
+
+          {showInstallBtn && (
+            <button onClick={handleInstallApp} className="px-3.5 py-2 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 animate-pulse border border-yellow-200 cursor-pointer">
+              <Smartphone className="w-4 h-4 text-slate-950" /> تثبيت التطبيق 📱
+            </button>
+          )}
 
           {isAdmin ? (
             <button onClick={() => setIsAdmin(false)} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow">
@@ -1260,7 +1275,7 @@ export function App() {
                 )}
               </div>
 
-              {/* ج) ملازم PDF */}
+              {/* ج) ملازم PDF مع زر تحميل وفتح مباشر */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <FileText className="w-5 h-5 text-emerald-600" /> ملازم وقارئ الـ PDF ({currentSub.booklets?.length || 0})
@@ -1281,9 +1296,14 @@ export function App() {
                             <Lock className="w-3.5 h-3.5" /> قفل VIP
                           </button>
                         ) : (
-                          <button onClick={() => setActivePdfUrl(book.url)} className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-md">
-                            <Eye className="w-3.5 h-3.5" /> قراءة
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button onClick={() => setActivePdfUrl(book.url)} className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-md">
+                              <Eye className="w-3.5 h-3.5" /> قراءة
+                            </button>
+                            <a href={book.url} target="_blank" rel="noreferrer" className="px-2.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold flex items-center gap-1" title="فتح أو تحميل خارجي">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                          </div>
                         )}
                         {isAdmin && (
                           <button onClick={async () => {
@@ -1758,7 +1778,8 @@ export function App() {
             
             {/* زر القفل السري لدخول الأدمن */}
             <button 
-              onClick={() => setShowAdminLoginModal(true)} 
+              onClick={() => setShowAdminLoginModal: () => setShowAdminLoginModal(true)} 
+              onClickCapture={() => setShowAdminLoginModal(true)}
               className="w-7 h-7 bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-400 rounded-full flex items-center justify-center transition-all shadow-sm"
               title="دخول المدير العام (الأدمن)"
             >
