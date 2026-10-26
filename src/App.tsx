@@ -9,22 +9,39 @@ import {
 } from 'lucide-react';
 
 export function App() {
-  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  // حفظ حالة الأدمن في الـ LocalStorage لكي لا يخرج عند الـ Refresh
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    return localStorage.getItem('nabough_is_admin') === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('nabough_is_admin', isAdmin ? 'true' : 'false');
+  }, [isAdmin]);
+
   const [showAdminLoginModal, setShowAdminLoginModal] = useState<boolean>(false);
   const [adminPinInput, setAdminPinInput] = useState<string>('');
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
 
-  // كلمة المرور الافتتاحية 123456 وتتحدث تلقائياً بما تحفظه أنت من الإعدادات
+  // عرض تفاصيل إجابات الطالب في الامتحان للأدمن
+  const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
+
   const [adminName, setAdminName] = useState<string>(() => localStorage.getItem('nabough_admin_name') || 'مدير المنصة');
   const [adminUsername, setAdminUsername] = useState<string>(() => localStorage.getItem('nabough_admin_user') || 'admin');
   const [adminPassword, setAdminPassword] = useState<string>(() => localStorage.getItem('nabough_admin_pass') || '123456');
   
-  const [vipSettings, setVipSettings] = useState({
-    price: '25,000 دينار عراقي / شهرياً',
-    mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
-    transferPhone: '07701234567 (زين كاش / آسياسيل)',
-    whatsapp: '9647701234567'
+  const [vipSettings, setVipSettings] = useState(() => {
+    const saved = localStorage.getItem('nabough_vip_settings');
+    return saved ? JSON.parse(saved) : {
+      price: '25,000 دينار عراقي / شهرياً',
+      mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
+      transferPhone: '07701234567 (زين كاش / آسياسيل)',
+      whatsapp: '9647701234567'
+    };
   });
+
+  useEffect(() => {
+    localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
+  }, [vipSettings]);
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
@@ -218,7 +235,7 @@ export function App() {
     }
   };
 
-  const handleGradeQuiz = () => {
+  const handleGradeQuiz = async () => {
     if (!activeQuiz || !activeQuiz.questions) return;
     setTimerActive(false);
     let score = 0;
@@ -238,9 +255,22 @@ export function App() {
     setQuizResult({ score: finalScore, total: 100, details });
 
     if (loggedStudent) {
-      const updatedStudents = studentsList.map(st => st.id === loggedStudent.id ? {...st, examScore: `${finalScore}/100`} : st);
-      setStudentsList(updatedStudents);
-      localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStudents));
+      const nowTime = new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
+      const updatedStuds = studentsList.map(st => st.id === loggedStudent.id ? {
+        ...st, 
+        examScore: `${finalScore}/100`, 
+        examDetails: details,
+        lastSeen: nowTime
+      } : st);
+      setStudentsList(updatedStuds);
+      localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
+      try {
+        await updateDoc(doc(db, 'students', loggedStudent.id), {
+          examScore: `${finalScore}/100`,
+          examDetails: details,
+          lastSeen: nowTime
+        });
+      } catch(e) {}
     }
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
@@ -298,6 +328,42 @@ export function App() {
         </div>
       )}
 
+      {/* نافذة عرض إجابات الطالب للأدمن */}
+      {viewingStudentAnswers && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative space-y-6 text-right">
+            <button onClick={() => setViewingStudentAnswers(null)} className="absolute top-4 left-4 w-10 h-10 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
+              <X className="w-5 h-5" />
+            </button>
+            <div className="text-center space-y-1 pb-3 border-b">
+              <h3 className="text-xl font-black text-slate-900">إجابات الطالب: {viewingStudentAnswers.name}</h3>
+              <p className="text-xs text-indigo-600 font-bold">المرحلة: {viewingStudentAnswers.stage} | الدرجة الكلية: {viewingStudentAnswers.examScore}</p>
+            </div>
+
+            <div className="space-y-4">
+              {viewingStudentAnswers.examDetails && viewingStudentAnswers.examDetails.length > 0 ? (
+                viewingStudentAnswers.examDetails.map((det: any, dIdx: number) => (
+                  <div key={dIdx} className={`p-4 rounded-2xl border ${det.isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
+                    <div className="font-bold text-sm">س{dIdx+1}: {det.q}</div>
+                    <div className="text-xs mt-1.5 flex flex-col gap-1">
+                      <span>إجابة الطالب: <b>{det.userAns || 'بدون إجابة'}</b></span>
+                      <span>الإجابة الصحيحة: <b>{det.correct}</b></span>
+                      <span className="font-black">{det.isCorrect ? '✅ صحيحة' : '❌ خاطئة (نقطة ضعف محتملة)'}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-center text-slate-500 py-6 text-sm font-bold">لم يتقدم هذا الطالب لأي امتحان تفاعلي بعد أو لا توجد تفاصيل محفوظة.</p>
+              )}
+            </div>
+
+            <button onClick={() => setViewingStudentAnswers(null)} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl text-xs">
+              إغلاق النافذة
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* نافذة تسجيل دخول أو إنشاء حساب طالب بالشروط الصارمة */}
       {showStudentAuthModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
@@ -343,6 +409,7 @@ export function App() {
                   return;
                 }
 
+                const nowTime = new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
                 const newSt = {
                   name: newStudentName,
                   username: studentLoginUser,
@@ -350,7 +417,7 @@ export function App() {
                   stage: newStudentStage,
                   isVip: false,
                   status: 'متصل الآن',
-                  lastSeen: new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'}),
+                  lastSeen: nowTime,
                   regDate: new Date().toISOString().split('T')[0],
                   examScore: 'لم يتقدم'
                 };
@@ -405,13 +472,14 @@ export function App() {
                 e.preventDefault();
                 const found = studentsList.find(st => st.username === studentLoginUser && st.pass === studentLoginPass);
                 if (found) {
-                  // قيد تسجيل اليوزر لجهاز واحد فقط
                   if (found.status === 'متصل الآن') {
                     alert('⚠️ عذراً، هذا اليوزر متصل حالياً عند شخص آخر (على جهاز آخر). لا يمكن فتح نفس الحساب في جهازين في نفس الوقت.');
                     return;
                   }
-                  await updateDoc(doc(db, 'students', found.id), { status: 'متصل الآن', lastSeen: 'الآن' });
+                  const nowTime = new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
+                  await updateDoc(doc(db, 'students', found.id), { status: 'متصل الآن', lastSeen: nowTime });
                   found.status = 'متصل الآن';
+                  found.lastSeen = nowTime;
                   setLoggedStudent(found);
                   setShowStudentAuthModal(false);
                   setSuccessMessage(`أهلاً بك يا ${found.name}!`);
@@ -441,7 +509,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة تفاصيل الدفع VIP */}
+      {/* نافذة تفاصيل الدفع VIP (متضمنة الاسم الثلاثي واليوزر ورقم الواتساب الخاص بالأدمن) */}
       {vipModalItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative space-y-6 text-right">
@@ -467,10 +535,16 @@ export function App() {
                 <span>تحويل رصيد:</span>
                 <span className="font-mono text-indigo-700">{vipSettings.transferPhone}</span>
               </div>
+              {loggedStudent && (
+                <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-200 text-indigo-950 space-y-1">
+                  <div>👤 اسم الطالب: <b>{loggedStudent.name}</b></div>
+                  <div>🔑 اليوزر: <span className="font-mono">{loggedStudent.username}</span></div>
+                </div>
+              )}
             </div>
 
             <a 
-              href={`https://wa.me/${vipSettings.whatsapp}?text=${encodeURIComponent('مرحباً، أود تفعيل اشتراك الـ VIP في منصة النابغة التعليمية.')}`} 
+              href={`https://wa.me/${vipSettings.whatsapp}?text=${encodeURIComponent(`مرحباً، أود تفعيل اشتراك الـ VIP في منصة النابغة التعليمية.\nمعلومات الطالب:\nالاسم الثلاثي: ${loggedStudent ? loggedStudent.name : 'زائر'}\nاليوزر: ${loggedStudent ? loggedStudent.username : 'غير مسجل'}\nوهذا إيصال الدفع:`)}`} 
               target="_blank" 
               rel="noreferrer"
               className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm"
@@ -684,7 +758,7 @@ export function App() {
           </div>
         </div>
 
-        {/* 1. تبويب المنهج الدراسي والقائمة المنسدلة للزوار */}
+        {/* 1. تبويب المنهج الدراسي */}
         {activeTab === 'curriculum' && !selectedSubjectId && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -700,7 +774,6 @@ export function App() {
                 </div>
               </div>
 
-              {/* القائمة المنسدلة تظهر للزوار والأدمن ليختاروا أي صف */}
               {(!loggedStudent || isAdmin) && (
                 <div className="relative w-full sm:w-96">
                   <select 
@@ -723,7 +796,6 @@ export function App() {
                 <div 
                   key={sub.id}
                   onClick={() => {
-                    // إذا لم يكن مسجلاً، نفتح له نافذة تسجيل الدخول عند النقر على أي مادة
                     if (!loggedStudent && !isAdmin) {
                       setShowStudentAuthModal(true);
                     } else {
@@ -883,7 +955,7 @@ export function App() {
                 )}
               </div>
 
-              {/* ب) الفيديوهات الشارحة */}
+              {/* ب) والفيديوهات */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <Video className="w-5 h-5 text-indigo-600" /> الدروس المرئية والمحاضرات ({currentSub.videos?.length || 0})
@@ -958,7 +1030,7 @@ export function App() {
                 )}
               </div>
 
-              {/* ج) ملازم وقارئ PDF */}
+              {/* ج) ملازم PDF */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <FileText className="w-5 h-5 text-emerald-600" /> ملازم وقارئ الـ PDF ({currentSub.booklets?.length || 0})
@@ -1146,7 +1218,7 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة (أدمن فقط) */}
+        {/* 3. لوحة إدارة الطلبة مع زر عرض الإجابات ونقاط الضعف */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-3">
@@ -1220,6 +1292,11 @@ export function App() {
                       <td className="p-4">
                         <span className="px-2.5 py-1 rounded-full text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200">{st.status}</span>
                         <div className="text-[11px] text-amber-600 font-black mt-1">الدرجة: {st.examScore}</div>
+                        {st.examDetails && (
+                          <button onClick={() => setViewingStudentAnswers(st)} className="mt-2 px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-[10px] font-bold shadow hover:bg-indigo-700 block">
+                            🔍 عرض الإجابات ونقاط الضعف
+                          </button>
+                        )}
                       </td>
 
                       <td className="p-4">
@@ -1321,13 +1398,13 @@ export function App() {
           </div>
         )}
 
-        {/* 5. إعدادات VIP */}
+        {/* 5. إعدادات VIP وتعديل رقم الواتساب */}
         {activeTab === 'vipSettings' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-amber-200 space-y-6">
             <h2 className="text-2xl font-black text-slate-900">إعدادات أسعار وطرق دفع اشتراكات الـ VIP</h2>
             <form onSubmit={(e) => {
               e.preventDefault();
-              setSuccessMessage('تم تحديث إعدادات الدفع واشتراكات الـ VIP بنجاح!');
+              setSuccessMessage('تم تحديث إعدادات الدفع ورقم الواتساب بنجاح!');
               setTimeout(() => setSuccessMessage(null), 3000);
             }} className="bg-slate-50 p-6 rounded-2xl border space-y-4 max-w-xl">
               <div>
@@ -1342,14 +1419,18 @@ export function App() {
                 <label className="block text-xs font-bold text-slate-700 mb-1">رقم تحويل الرصيد</label>
                 <input type="text" value={vipSettings.transferPhone} onChange={(e) => setVipSettings({...vipSettings, transferPhone: e.target.value})} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
               </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">رقم الواتساب لاستلام الإيصالات (بدون +، مثلاً: 96477...)</label>
+                <input type="text" value={vipSettings.whatsapp} onChange={(e) => setVipSettings({...vipSettings, whatsapp: e.target.value})} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
+              </div>
               <button type="submit" className="w-full py-3 bg-amber-600 text-white font-bold rounded-xl text-xs shadow-md">
-                حفظ تعديلات طرق الدفع والـ VIP
+                حفظ إعدادات الـ VIP ورقم الواتساب
               </button>
             </form>
           </div>
         )}
 
-        {/* 6. إعدادات الأدمن وحفظ الباسورد محلياً ودائماً */}
+        {/* 6. إعدادات الأدمن وتغيير الباسورد */}
         {activeTab === 'settings' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
             <h2 className="text-2xl font-black text-slate-900">إعدادات حساب المدير العام والصلاحيات</h2>
