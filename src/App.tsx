@@ -8,6 +8,7 @@ import {
   Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink
 } from 'lucide-react';
 
+// دالة أمان صارمة لمنع الشاشة البيضاء نهائياً وتصفية البيانات التالفة
 const safeGetStorage = (key: string, fallback: any) => {
   try {
     const item = localStorage.getItem(key);
@@ -23,7 +24,7 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // تحديث أيقونة وتثبيت التطبيق باللوجو التعليمي الجديد الجذاب
+  // حققنا أيقونة تطبيق احترافية وجذابة (قبعة التخرج التعليمية) للـ PWA
   useEffect(() => {
     const manifest = {
       name: "منصة النابغة التعليمية",
@@ -34,8 +35,8 @@ export function App() {
       theme_color: "#0f172a",
       icons: [
         {
-          src: "1000565385.png",
-          sizes: "512x512",
+          src: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=192&h=192&q=80",
+          sizes: "192x192",
           type: "image/png"
         }
       ]
@@ -112,7 +113,7 @@ export function App() {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
 
-  // دالة ذكية لتنظيف وتنسيق رقم الواتساب لضمان عدم حدوث خطأ "ليس في واتساب"
+  // دالة تصفية رقم الواتساب برمجياً لضمان العمل بدون أخطاء
   const getCleanWhatsAppUrl = (phone: string, text: string) => {
     let cleanPhone = (phone || '9647701234567').replace(/\D/g, '');
     if (cleanPhone.startsWith('0')) {
@@ -204,6 +205,7 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
+  // تتبع النشاط اللحظي وتحديث آخر ظهور
   useEffect(() => {
     if (loggedStudent) {
       const updateInterval = setInterval(async () => {
@@ -831,7 +833,6 @@ export function App() {
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap">
-          {/* زر تواصل مع الإدارة / VIP */}
           <a 
             href={getCleanWhatsAppUrl(vipSettings.whatsapp, 'مرحباً، أود التواصل مع إدارة منصة النابغة التعليمية والاستفسار عن الاشتراكات.')}
             target="_blank" 
@@ -841,7 +842,6 @@ export function App() {
             <MessageCircle className="w-3.5 h-3.5 text-emerald-400" /> تواصل / VIP 💬
           </a>
 
-          {/* زر تثبيت التطبيق على اليسار بشكل أنيق وناعم */}
           {showInstallBtn && (
             <button onClick={handleInstallApp} className="px-2.5 py-1.5 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 rounded-xl text-[11px] font-black shadow-md flex items-center gap-1 border border-yellow-200 cursor-pointer">
               <Smartphone className="w-3.5 h-3.5 text-slate-950" /> تثبيت التطبيق 📱
