@@ -8,8 +8,8 @@ import {
   Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink
 } from 'lucide-react';
 
-// 🔴 ضع رقم الواتساب الحقيقي الخاص بك هنا (مع رمز الدولة، مثلاً: 9647783849831) لتهيئة رسائل الإيصالات والاتصال
-const MY_WHATSAPP_NUMBER = '9647783849831'; 
+// 🔴 ضع رقم الواتساب الحقيقي الخاص بك هنا (مع رمز الدولة، مثلاً: 9647712345678) لضمان وصول الرسائل لرقمك مباشرة
+const MY_WHATSAPP_NUMBER = '9647701234567'; 
 
 const safeGetStorage = (key: string, fallback: any) => {
   try {
@@ -115,7 +115,7 @@ export function App() {
       setDeferredPrompt(null);
       (window as any).deferredPrompt = null;
     } else {
-      alert('📱 لتثبيت منصة النابغة على شاشة هاتفك:\n- أندرويد (متصفح كروم): افتح قائمة المتصفح (⋮) ثم اختر "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".\n- آيفون (متصفح سفاري): اضغط زر المشاركة (📤) ثم اختر "إضافة إلى الشاشة الرئيسية".');
+      alert('📱 التطبيق جاهز للتثبيت! يمكنك إضافته لشاشة هاتفك عبر قائمة المتصفح (⋮) واختيار "إضافة إلى الشاشة الرئيسية".');
     }
   };
 
@@ -178,6 +178,9 @@ export function App() {
   const [isStudentSignup, setIsStudentSignup] = useState(false);
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentStage, setNewStudentStage] = useState('الثالث المتوسط');
+
+  // حالة التحكم بظهور قائمة تغيير المرحلة الدراسية المصغرة
+  const [isChangingStage, setIsChangingStage] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings'>('curriculum');
   const [selectedStage, setSelectedStage] = useState<string>('all'); 
@@ -447,7 +450,7 @@ export function App() {
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
 
-  // تصفية المواد بحيث إذا كان الطالب مسجلاً تظهر مواد مرحلته فوراً وبشكل تلقائي
+  // تصفية المواد فوراً تلقائياً حسب مرحلة الطالب المسجل
   const filteredSubjects = subjects.filter(s => {
     if (isAdmin) {
       return selectedStage === 'all' || s.stage === selectedStage || s.stageName === selectedStage;
@@ -851,7 +854,7 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة مع ترتيب الأزرار وتثبيت التطبيق على اليسار وإخفائه إذا كان التطبيق مثبتًا */}
+      {/* رأس الصفحة مع أزرار منسقة ومرتبة */}
       <div className="w-full bg-slate-900 py-2.5 px-4 sm:px-6 shadow-md flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow">ن</div>
@@ -954,7 +957,7 @@ export function App() {
       {/* المحتوى الرئيسي */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8 overflow-x-hidden">
         
-        {/* البانر العلوي مع خيار تغيير المرحلة مباشرة للطالب */}
+        {/* البانر العلوي مع خيار تغيير المرحلة بشكل مصغر ونظيف */}
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-3xl shadow-xl text-white p-6 sm:p-8 relative overflow-hidden mt-1">
           <div className="relative z-10 max-w-3xl space-y-4">
             <div className="inline-flex items-center gap-2 bg-indigo-800/60 border border-indigo-600/30 px-3 py-1 rounded-xl text-xs font-bold text-indigo-200 flex-wrap">
@@ -965,31 +968,48 @@ export function App() {
               {isAdmin ? 'لوحة تحكم المدير العام والإدارة 🎓' : loggedStudent ? `مرحباً بك يا ${loggedStudent?.name} في مرحلة ${loggedStudent?.stage} 📚` : 'تصفح المناهج الدراسية والامتحانات التفاعلية 🎓'}
             </h1>
 
-            {/* زر تعديل المرحلة الدراسية مباشرة للطالب مع تحديث المناهج تلقائياً */}
+            {/* زر تعديل المرحلة الدراسية بشكل مصغر وغير مزعج */}
             {!isAdmin && loggedStudent && (
-              <div className="flex items-center gap-2 bg-indigo-900/90 border border-indigo-500/40 p-3 rounded-2xl max-w-sm">
-                <span className="text-xs font-bold text-indigo-200 whitespace-nowrap">🔄 تغيير مرحلتي:</span>
-                <select 
-                  value={loggedStudent.stage}
-                  onChange={async (e) => {
-                    const newStage = e.target.value;
-                    const updatedSt = { ...loggedStudent, stage: newStage };
-                    setLoggedStudent(updatedSt);
-                    localStorage.setItem('nabough_logged_student', JSON.stringify(updatedSt));
-                    try {
-                      await updateDoc(doc(db, 'students', loggedStudent.id), { stage: newStage });
-                      setStudentsList(studentsList.map(s => s.id === loggedStudent.id ? {...s, stage: newStage} : s));
-                      setSelectedSubjectId(null); // العودة لقائمة المناهج لعرض مواد المرحلة الجديدة فوراً
-                      setSuccessMessage(`تم تحديث مرحلتك بنجاح إلى: ${newStage}`);
-                      setTimeout(() => setSuccessMessage(null), 3000);
-                    } catch(err) { console.error(err); }
-                  }}
-                  className="w-full bg-white text-slate-900 text-xs font-black rounded-xl px-3 py-1.5 cursor-pointer shadow-sm"
-                >
-                  {allStagesList.map(st => (
-                    <option key={st.id} value={st.name}>{st.name}</option>
-                  ))}
-                </select>
+              <div className="pt-1">
+                {!isChangingStage ? (
+                  <button 
+                    onClick={() => setIsChangingStage(true)}
+                    className="px-3 py-1.5 bg-indigo-800/70 hover:bg-indigo-700 text-indigo-200 rounded-xl text-xs font-bold border border-indigo-500/30 transition-all shadow-sm inline-flex items-center gap-1.5"
+                  >
+                    <span>🔄 تغيير المرحلة الدراسية</span>
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2 bg-indigo-950 border border-indigo-500/50 p-2.5 rounded-2xl max-w-xs animate-fadeIn">
+                    <select 
+                      value={loggedStudent.stage}
+                      onChange={async (e) => {
+                        const newStage = e.target.value;
+                        const updatedSt = { ...loggedStudent, stage: newStage };
+                        setLoggedStudent(updatedSt);
+                        localStorage.setItem('nabough_logged_student', JSON.stringify(updatedSt));
+                        try {
+                          await updateDoc(doc(db, 'students', loggedStudent.id), { stage: newStage });
+                          setStudentsList(studentsList.map(s => s.id === loggedStudent.id ? {...s, stage: newStage} : s));
+                          setSelectedSubjectId(null);
+                          setIsChangingStage(false);
+                          setSuccessMessage(`تم تحديث مرحلتك بنجاح إلى: ${newStage} وتم جلب مناهجك الجديدة!`);
+                          setTimeout(() => setSuccessMessage(null), 3500);
+                        } catch(err) { console.error(err); }
+                      }}
+                      className="w-full bg-white text-slate-900 text-xs font-black rounded-xl px-3 py-1.5 cursor-pointer shadow-sm"
+                    >
+                      {allStagesList.map(st => (
+                        <option key={st.id} value={st.name}>{st.name}</option>
+                      ))}
+                    </select>
+                    <button 
+                      onClick={() => setIsChangingStage(false)}
+                      className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1126,7 +1146,7 @@ export function App() {
 
             {filteredSubjects.length === 0 && (
               <div className="bg-white rounded-3xl p-12 text-center border border-slate-200">
-                <p className="text-slate-500 font-bold text-base">لا توجد مواد دراسية مضافة لهذه المرحلة حالياً.</p>
+                <p className="text-slate-500 font-bold text-base">لا توجد مواد دراسية مضافة لهذه المرحلة حالياً. (قم بإضافة مواد خاصة بهذه المرحلة من لوحة الأدمن).</p>
               </div>
             )}
           </div>
