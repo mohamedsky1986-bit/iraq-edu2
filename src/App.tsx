@@ -21,8 +21,9 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // تم تصحيح القوس هنا لتصبح الدالة سليمة 100%
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    return localStorage.getItem('nabough_is_admin'] === 'true';
+    return localStorage.getItem('nabough_is_admin') === 'true';
   });
 
   useEffect(() => {
@@ -45,10 +46,7 @@ export function App() {
       setShowInstallBtn(true);
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    
-    // إظهار زر التثبيت تلقائياً كخيار متاح للجميع
     setShowInstallBtn(true);
-
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
@@ -61,7 +59,7 @@ export function App() {
       }
       setDeferredPrompt(null);
     } else {
-      alert('📱 لتثبيت التطبيق على هاتفك:\n- أندرويد (متصفح كروم): اضغط على القائمة (⋮) ثم اختر "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".\n- آيفون (متصفح سفاري): اضغط على زر المشاركة (📤) ثم اختر "إضافة إلى الشاشة الرئيسية (Add to Home Screen)".');
+      alert('التطبيق جاهز! يمكنك تثبيته مباشرة من إعدادات متصفحك (اختر: إضافة إلى الشاشة الرئيسية).');
     }
   };
 
@@ -765,14 +763,11 @@ export function App() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* زر تثبيت التطبيق بلون ذهبي بارز وأنيق */}
-          <button 
-            onClick={handleInstallApp} 
-            className="px-3.5 py-2 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 animate-pulse border border-yellow-200 cursor-pointer"
-            title="تثبيت منصة النابغة على شاشة هاتفك"
-          >
-            <Smartphone className="w-4 h-4 text-slate-950" /> تثبيت التطبيق 📱
-          </button>
+          {showInstallBtn && (
+            <button onClick={handleInstallApp} className="px-3.5 py-2 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 animate-pulse border border-yellow-200 cursor-pointer">
+              <Smartphone className="w-4 h-4 text-slate-950" /> تثبيت التطبيق 📱
+            </button>
+          )}
 
           {isAdmin ? (
             <button onClick={() => setIsAdmin(false)} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow">
@@ -863,7 +858,7 @@ export function App() {
           </div>
         </div>
 
-        {/* 1. تبويب المنهج الدراسي مع خيارات التعديل للمواد */}
+        {/* 1. تبويب المنهج الدراسي */}
         {activeTab === 'curriculum' && !selectedSubjectId && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
