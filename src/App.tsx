@@ -8,7 +8,7 @@ import {
   Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink
 } from 'lucide-react';
 
-// 🔴 ضع رقم الواتساب الخاص بك هنا (مع رمز الدولة، مثلاً: 9647712345678) ليعمل مباشرة بدون أي أخطاء
+// 🔴 ضع رقم الواتساب الحقيقي الخاص بك هنا (مع رمز الدولة، مثلاً: 9647712345678) ليعمل مباشرة بدون أي أخطاء
 const MY_WHATSAPP_NUMBER = '9647701234567'; 
 
 const safeGetStorage = (key: string, fallback: any) => {
@@ -73,18 +73,33 @@ export function App() {
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
 
-  // زر تثبيت التطبيق السريع (PWA)
+  // زر تثبيت التطبيق السريع (PWA) مع إخفائه تلقائياً إذا تم التثبيت
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [showInstallBtn, setShowInstallBtn] = useState<boolean>(true);
 
   useEffect(() => {
+    // التحقق عما إذا كان التطبيق مثبتاً بالفعل أو يعمل كـ PWA
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+      setShowInstallBtn(false);
+    }
+
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
       setShowInstallBtn(true);
     };
+
+    const handleAppInstalled = () => {
+      setShowInstallBtn(false);
+    };
+
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
   }, []);
 
   const handleInstallApp = async () => {
@@ -103,7 +118,7 @@ export function App() {
   const [adminStageFilter, setAdminStageFilter] = useState<string>('all');
 
   const [adminName, setAdminName] = useState<string>(() => localStorage.getItem('nabough_admin_name') || 'مدير المنصة');
-  const [adminUsername, setAdminUsername] = useState<string>(() => localStorage.getItem('nabough_admin_user') || 'admin');
+  const [adminUsername, setAdminUsername] = useState<string>('admin');
   const [adminPassword, setAdminPassword] = useState<string>(() => localStorage.getItem('nabough_admin_pass') || '123456');
   
   const [vipSettings, setVipSettings] = useState(() => {
@@ -119,7 +134,7 @@ export function App() {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
 
-  // دالة تصفية وتجهيز رقم الواتساب برمجياً لضمان عدم حدوث أي خطأ
+  // دالة تصفية وتجهيز رقم الواتساب برمجياً لضمان العمل بدون أخطاء
   const getCleanWhatsAppUrl = (phone: string, text: string) => {
     let targetPhone = phone || MY_WHATSAPP_NUMBER;
     let cleanPhone = targetPhone.replace(/\D/g, '');
@@ -829,7 +844,7 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة مع ترتيب الأزرار لتقليل المساحة (تثبيت التطبيق يساراً، والتواصل ودخول الحساب يميناً) */}
+      {/* رأس الصفحة مع ترتيب الأزرار وتثبيت التطبيق على اليسار وإخفائه إذا كان التطبيق مثبتًا */}
       <div className="w-full bg-slate-900 py-2.5 px-4 sm:px-6 shadow-md flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow">ن</div>
@@ -849,6 +864,7 @@ export function App() {
             <MessageCircle className="w-3.5 h-3.5 text-emerald-400" /> تواصل / VIP 💬
           </a>
 
+          {/* زر تثبيت التطبيق يظهر فقط إذا لم يكن التطبيق مثبتًا */}
           {showInstallBtn && (
             <button onClick={handleInstallApp} className="px-2.5 py-1.5 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 rounded-xl text-[11px] font-black shadow-md flex items-center gap-1 border border-yellow-200 cursor-pointer">
               <Smartphone className="w-3.5 h-3.5 text-slate-950" /> تثبيت التطبيق 📱
@@ -931,16 +947,43 @@ export function App() {
       {/* المحتوى الرئيسي */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8 overflow-x-hidden">
         
-        {/* البانر العلوي */}
+        {/* البانر العلوي مع خيار تغيير المرحلة مباشرة للطالب */}
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-3xl shadow-xl text-white p-6 sm:p-8 relative overflow-hidden mt-1">
-          <div className="relative z-10 max-w-3xl">
-            <div className="inline-flex items-center gap-2 bg-indigo-800/60 border border-indigo-600/30 px-3 py-1 rounded-xl text-xs font-bold mb-4 text-indigo-200 flex-wrap">
+          <div className="relative z-10 max-w-3xl space-y-4">
+            <div className="inline-flex items-center gap-2 bg-indigo-800/60 border border-indigo-600/30 px-3 py-1 rounded-xl text-xs font-bold text-indigo-200 flex-wrap">
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> منصة النابغة التعليمية - المنهج العراقي الرسمي
-              {!isAdmin && loggedStudent && <span className="bg-indigo-600 text-white px-2 py-0.5 rounded text-[10px] mr-2">مرحلتك الحصرية: {loggedStudent?.stage}</span>}
             </div>
-            <h1 className="text-2xl sm:text-4xl font-black mb-3 tracking-tight leading-snug">
+            
+            <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-snug">
               {isAdmin ? 'لوحة تحكم المدير العام والإدارة 🎓' : loggedStudent ? `مرحباً بك يا ${loggedStudent?.name} في مرحلة ${loggedStudent?.stage} 📚` : 'تصفح المناهج الدراسية والامتحانات التفاعلية 🎓'}
             </h1>
+
+            {/* زر تعديل المرحلة الدراسية مباشرة للطالب */}
+            {!isAdmin && loggedStudent && (
+              <div className="flex items-center gap-2 bg-indigo-900/90 border border-indigo-500/40 p-3 rounded-2xl max-w-sm">
+                <span className="text-xs font-bold text-indigo-200 whitespace-nowrap">🔄 تغيير مرحلتي:</span>
+                <select 
+                  value={loggedStudent.stage}
+                  onChange={async (e) => {
+                    const newStage = e.target.value;
+                    const updatedSt = { ...loggedStudent, stage: newStage };
+                    setLoggedStudent(updatedSt);
+                    localStorage.setItem('nabough_logged_student', JSON.stringify(updatedSt));
+                    try {
+                      await updateDoc(doc(db, 'students', loggedStudent.id), { stage: newStage });
+                      setStudentsList(studentsList.map(s => s.id === loggedStudent.id ? {...s, stage: newStage} : s));
+                      setSuccessMessage(`تم تحديث مرحلتك بنجاح إلى: ${newStage}`);
+                      setTimeout(() => setSuccessMessage(null), 3000);
+                    } catch(err) { console.error(err); }
+                  }}
+                  className="w-full bg-white text-slate-900 text-xs font-black rounded-xl px-3 py-1.5 cursor-pointer shadow-sm"
+                >
+                  {allStagesList.map(st => (
+                    <option key={st.id} value={st.name}>{st.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
         </div>
 
