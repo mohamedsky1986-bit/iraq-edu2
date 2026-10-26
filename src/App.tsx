@@ -8,7 +8,6 @@ import {
   Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone
 } from 'lucide-react';
 
-// دالة أمان صارمة لمنع الشاشة البيضاء نهائياً وتصفية البيانات التالفة
 const safeGetStorage = (key: string, fallback: any) => {
   try {
     const item = localStorage.getItem(key);
@@ -23,6 +22,36 @@ const safeGetStorage = (key: string, fallback: any) => {
 
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  // حقن ملف التثبيت (PWA Manifest) برمجياً لكي يتقبل الهاتف التثبيت بدون أي خطأ
+  useEffect(() => {
+    const manifest = {
+      name: "منصة النابغة التعليمية",
+      short_name: "النابغة",
+      start_url: "/",
+      display: "standalone",
+      background_color: "#0f172a",
+      theme_color: "#0f172a",
+      icons: [
+        {
+          src: "https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=192&h=192&q=80",
+          sizes: "192x192",
+          type: "image/png"
+        }
+      ]
+    };
+    const stringManifest = JSON.stringify(manifest);
+    const blob = new Blob([stringManifest], { type: 'application/json' });
+    const manifestURL = URL.createObjectURL(blob);
+    
+    let link = document.querySelector('link[rel="manifest"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'manifest';
+      document.head.appendChild(link);
+    }
+    link.setAttribute('href', manifestURL);
+  }, []);
 
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     return localStorage.getItem('nabough_is_admin') === 'true';
@@ -39,7 +68,7 @@ export function App() {
 
   // زر تثبيت التطبيق السريع (PWA)
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstallBtn, setShowInstallBtn] = useState<boolean>(false);
+  const [showInstallBtn, setShowInstallBtn] = useState<boolean>(true);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: any) => {
@@ -48,7 +77,6 @@ export function App() {
       setShowInstallBtn(true);
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    setShowInstallBtn(true);
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
@@ -61,7 +89,7 @@ export function App() {
       }
       setDeferredPrompt(null);
     } else {
-      alert('📱 لتثبيت التطبيق على هاتفك:\n- أندرويد: افتح قائمة المتصفح (⋮) واختار "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".\n- آيفون: اضغط زر المشاركة (📤) واختار "إضافة إلى الشاشة الرئيسية".');
+      alert('📱 لتثبيت منصة النابغة على شاشة هاتفك:\n- أندرويد (متصفح كروم): افتح قائمة المتصفح (⋮) ثم اختر "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".\n- آيفون (متصفح سفاري): اضغط زر المشاركة (📤) ثم اختر "إضافة إلى الشاشة الرئيسية".');
     }
   };
 
@@ -383,7 +411,6 @@ export function App() {
     }
   });
 
-  // شاشة التحميل الاحترافية التي تمنع الشاشة البيضاء تماماً
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
@@ -1708,7 +1735,6 @@ export function App() {
 
       {/* الفوتر مع رمز القفل السري للأدمن */}
       <footer className="border-t border-slate-200 bg-white py-6 mt-auto w-full">
-        {/* ... */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <div className="flex items-center gap-2">
             <GraduationCap className="w-5 h-5 text-emerald-600" />
