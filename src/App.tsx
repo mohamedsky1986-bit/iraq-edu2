@@ -23,7 +23,7 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // حقن ملف التثبيت (PWA Manifest) برمجياً ليعمل التطبيق بكل سلاسة
+  // تحديث أيقونة وتثبيت التطبيق باللوجو التعليمي الجديد الجذاب
   useEffect(() => {
     const manifest = {
       name: "منصة النابغة التعليمية",
@@ -34,8 +34,8 @@ export function App() {
       theme_color: "#0f172a",
       icons: [
         {
-          src: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=192&h=192&q=80",
-          sizes: "192x192",
+          src: "1000565385.png",
+          sizes: "512x512",
           type: "image/png"
         }
       ]
@@ -112,6 +112,15 @@ export function App() {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
 
+  // دالة ذكية لتنظيف وتنسيق رقم الواتساب لضمان عدم حدوث خطأ "ليس في واتساب"
+  const getCleanWhatsAppUrl = (phone: string, text: string) => {
+    let cleanPhone = (phone || '9647701234567').replace(/\D/g, '');
+    if (cleanPhone.startsWith('0')) {
+      cleanPhone = '964' + cleanPhone.substring(1);
+    }
+    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+  };
+
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
   const [loggedStudent, setLoggedStudent] = useState<any | null>(() => {
@@ -151,7 +160,6 @@ export function App() {
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
 
-  // معالجة روابط الـ PDF لعرضها مباشرة بدون إيميل أو تسجيل دخول
   const getEmbedPdfUrl = (url: string) => {
     if (!url) return '';
     if (url.includes('drive.google.com')) {
@@ -196,7 +204,6 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
-  // تتبع النشاط اللحظي وتحديث آخر ظهور
   useEffect(() => {
     if (loggedStudent) {
       const updateInterval = setInterval(async () => {
@@ -689,7 +696,7 @@ export function App() {
             </div>
 
             <a 
-              href={`https://wa.me/${vipSettings.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(`مرحباً، أود تفعيل اشتراك الـ VIP في منصة النابغة التعليمية.\nمعلومات الطالب:\nالاسم الثلاثي: ${loggedStudent ? loggedStudent.name : 'زائر'}\nاليوزر: ${loggedStudent ? loggedStudent.username : 'غير مسجل'}\nوهذا إيصال الدفع:`)}`} 
+              href={getCleanWhatsAppUrl(vipSettings.whatsapp, `مرحباً، أود تفعيل اشتراك الـ VIP في منصة النابغة التعليمية.\nمعلومات الطالب:\nالاسم الثلاثي: ${loggedStudent ? loggedStudent.name : 'زائر'}\nاليوزر: ${loggedStudent ? loggedStudent.username : 'غير مسجل'}\nوهذا إيصال الدفع:`)} 
               target="_blank" 
               rel="noreferrer"
               className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm"
@@ -813,35 +820,37 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة مع زر تثبيت التطبيق وزر تواصل مع الإدارة */}
-      <div className="w-full bg-slate-900 py-3 px-4 sm:px-8 shadow-md flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-base shadow">ن</div>
+      {/* رأس الصفحة مع ترتيب الأزرار لتقليل المساحة (تثبيت التطبيق يساراً، والتواصل ودخول الحساب يميناً) */}
+      <div className="w-full bg-slate-900 py-2.5 px-4 sm:px-6 shadow-md flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow">ن</div>
           <div>
-            <h2 className="text-white font-black text-sm sm:text-base tracking-wide">منصة النابغة التعليمية</h2>
-            <p className="text-[10px] text-slate-400">المنهج العراقي الرسمي</p>
+            <h2 className="text-white font-black text-xs sm:text-sm tracking-wide">منصة النابغة التعليمية</h2>
+            <p className="text-[9px] text-slate-400">المنهج العراقي الرسمي</p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* زر تواصل مع الإدارة / VIP */}
           <a 
-            href={`https://wa.me/${vipSettings.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent('مرحباً، أود التواصل مع إدارة منصة النابغة التعليمية والاستفسار عن الاشتراكات.')}`}
+            href={getCleanWhatsAppUrl(vipSettings.whatsapp, 'مرحباً، أود التواصل مع إدارة منصة النابغة التعليمية والاستفسار عن الاشتراكات.')}
             target="_blank" 
             rel="noreferrer"
-            className="px-3 py-1.5 bg-emerald-600/30 border border-emerald-500/50 text-emerald-300 rounded-xl text-xs font-bold hover:bg-emerald-600/40 transition-all flex items-center gap-1.5 shadow"
+            className="px-2.5 py-1.5 bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 rounded-xl text-[11px] font-bold hover:bg-emerald-600/40 transition-all flex items-center gap-1 shadow-sm"
           >
-            <MessageCircle className="w-3.5 h-3.5 text-emerald-400" /> تواصل مع الإدارة / اشتراك VIP 💬
+            <MessageCircle className="w-3.5 h-3.5 text-emerald-400" /> تواصل / VIP 💬
           </a>
 
+          {/* زر تثبيت التطبيق على اليسار بشكل أنيق وناعم */}
           {showInstallBtn && (
-            <button onClick={handleInstallApp} className="px-3.5 py-2 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 rounded-xl text-xs font-black shadow-lg flex items-center gap-1.5 animate-pulse border border-yellow-200 cursor-pointer">
-              <Smartphone className="w-4 h-4 text-slate-950" /> تثبيت التطبيق 📱
+            <button onClick={handleInstallApp} className="px-2.5 py-1.5 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 rounded-xl text-[11px] font-black shadow-md flex items-center gap-1 border border-yellow-200 cursor-pointer">
+              <Smartphone className="w-3.5 h-3.5 text-slate-950" /> تثبيت التطبيق 📱
             </button>
           )}
 
           {isAdmin ? (
-            <button onClick={() => setIsAdmin(false)} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow">
-              خروج من وضع الأدمن
+            <button onClick={() => setIsAdmin(false)} className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[11px] font-bold shadow-sm">
+              خروج الأدمن
             </button>
           ) : loggedStudent ? (
             <button onClick={async () => {
@@ -852,12 +861,12 @@ export function App() {
               }
               localStorage.removeItem('nabough_logged_student');
               setLoggedStudent(null); 
-            }} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow">
-              تسجيل الخروج ({loggedStudent.name})
+            }} className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[11px] font-bold shadow-sm">
+              خروج ({loggedStudent.name.split(' ')[0]})
             </button>
           ) : (
-            <button onClick={() => setShowStudentAuthModal(true)} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md">
-              تسجيل دخول / إنشاء حساب طالب
+            <button onClick={() => setShowStudentAuthModal(true)} className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[11px] font-bold shadow-md">
+              دخول / تسجيل
             </button>
           )}
         </div>
