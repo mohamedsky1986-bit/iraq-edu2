@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 
 export function App() {
-  // حفظ حالة الأدمن في الـ LocalStorage لكي لا يخرج عند الـ Refresh
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     return localStorage.getItem('nabough_is_admin') === 'true';
   });
@@ -21,9 +20,10 @@ export function App() {
   const [showAdminLoginModal, setShowAdminLoginModal] = useState<boolean>(false);
   const [adminPinInput, setAdminPinInput] = useState<string>('');
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
-
-  // عرض تفاصيل إجابات الطالب في الامتحان للأدمن
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
+
+  // تصفية الطلبة حسب المرحلة في لوحة الأدمن
+  const [adminStageFilter, setAdminStageFilter] = useState<string>('all');
 
   const [adminName, setAdminName] = useState<string>(() => localStorage.getItem('nabough_admin_name') || 'مدير المنصة');
   const [adminUsername, setAdminUsername] = useState<string>(() => localStorage.getItem('nabough_admin_user') || 'admin');
@@ -58,6 +58,10 @@ export function App() {
       localStorage.removeItem('nabough_logged_student');
     }
   }, [loggedStudent]);
+
+  // التحقق الفوري من حالة الـ VIP للطالب المسجل من أحدث قائمة طلاب
+  const currentLoggedStudentData = loggedStudent ? studentsList.find(s => s.id === loggedStudent.id) || loggedStudent : null;
+  const isVipActive = currentLoggedStudentData?.isVip || false;
 
   const [studentLoginUser, setStudentLoginUser] = useState('');
   const [studentLoginPass, setStudentLoginPass] = useState('');
@@ -105,6 +109,19 @@ export function App() {
     { id: 'sixth_sci', name: 'السادس العلمي' },
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
+
+  // تحديث دوري للنشاط وآخر ظهور للطالب المتصل
+  useEffect(() => {
+    if (loggedStudent) {
+      const updateInterval = setInterval(async () => {
+        const nowTime = new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
+        try {
+          await updateDoc(doc(db, 'students', loggedStudent.id), { lastSeen: nowTime });
+        } catch(e) {}
+      }, 60000); // كل دقيقة يحدث وقت النشاط
+      return () => clearInterval(updateInterval);
+    }
+  }, [loggedStudent]);
 
   useEffect(() => {
     async function loadDataFromFirebase() {
@@ -348,7 +365,7 @@ export function App() {
                     <div className="text-xs mt-1.5 flex flex-col gap-1">
                       <span>إجابة الطالب: <b>{det.userAns || 'بدون إجابة'}</b></span>
                       <span>الإجابة الصحيحة: <b>{det.correct}</b></span>
-                      <span className="font-black">{det.isCorrect ? '✅ صحيحة' : '❌ خاطئة (نقطة ضعف محتملة)'}</span>
+                      <span className="font-black">{det.isCorrect ? '✅ صحيحة' : '❌ خاطئة (نقطة ضعف محتملة للتركيز عليها)'}</span>
                     </div>
                   </div>
                 ))
@@ -364,7 +381,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة تسجيل دخول أو إنشاء حساب طالب بالشروط الصارمة */}
+      {/* نافذة تسجيل دخول أو إنشاء حساب طالب */}
       {showStudentAuthModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-8 shadow-2xl relative space-y-6 text-right">
@@ -382,28 +399,24 @@ export function App() {
                 e.preventDefault();
                 if (!newStudentName || !studentLoginUser || !studentLoginPass) return;
 
-                // 1. تدقيق الاسم الثلاثي الصريح
                 const nameParts = newStudentName.trim().split(/\s+/);
                 if (nameParts.length < 3) {
-                  alert('⚠️ يرجى إدخال الاسم الثلاثي الصريح صحيحاً (ثلاثة أسماء على الأقل).');
+                  alert('⚠️ يرجى إدخال الاسم الثلاثي الصريح صحيحاً.');
                   return;
                 }
 
-                // 2. تدقيق اليوزر (4 أحرف إنجليزية وأرقام على الأقل)
                 const userRegex = /^[a-zA-Z0-9_]{4,}$/;
                 if (!userRegex.test(studentLoginUser)) {
-                  alert('⚠️ اسم المستخدم يجب أن يكون 4 أحرف إنجليزية أو أرقام على الأقل وبدون مسافات أو رموز عربية.');
+                  alert('⚠️ اسم المستخدم يجب أن يكون 4 أحرف إنجليزية أو أرقام على الأقل.');
                   return;
                 }
 
-                // 3. تدقيق الباسورد (8 أحرف مع أحرف وأرقام إنجليزية)
                 const passRegex = /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*?&]{8,}$/;
                 if (!passRegex.test(studentLoginPass)) {
                   alert('⚠️ كلمة المرور يجب أن تكون 8 أحرف على الأقل وتتضمن أحرفاً إنجليزية وأرقاماً.');
                   return;
                 }
 
-                // 4. منع تكرار اليوزر
                 if (studentsList.some(st => st.username === studentLoginUser)) {
                   alert('⚠️ اسم المستخدم هذا مستخدم مسبقاً، يرجى اختيار يوزر آخر.');
                   return;
@@ -509,7 +522,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة تفاصيل الدفع VIP (متضمنة الاسم الثلاثي واليوزر ورقم الواتساب الخاص بالأدمن) */}
+      {/* نافذة تفاصيل الدفع VIP المتضمنة اسم الطالب ويوزره ورقم الواتساب الخاص بالأدمن */}
       {vipModalItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative space-y-6 text-right">
@@ -891,7 +904,7 @@ export function App() {
                           <h5 className="font-black text-slate-900 text-sm">💡 {note.title}</h5>
                           {note.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
                         </div>
-                        {note.isVip && !loggedStudent?.isVip && isAdmin === false ? (
+                        {note.isVip && !isVipActive && isAdmin === false ? (
                           <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between flex-wrap gap-2">
                             <span className="text-xs font-bold text-amber-800 flex items-center gap-1"><Lock className="w-3.5 h-3.5" /> هذا الشرح خاص بمشتركي الـ VIP</span>
                             <button onClick={() => setVipModalItem(note)} className="px-3 py-1.5 bg-amber-500 text-white font-bold rounded-lg text-xs">شاهد تفاصيل الاشتراك</button>
@@ -955,7 +968,7 @@ export function App() {
                 )}
               </div>
 
-              {/* ب) والفيديوهات */}
+              {/* ب) الفيديوهات الشارحة */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <Video className="w-5 h-5 text-indigo-600" /> الدروس المرئية والمحاضرات ({currentSub.videos?.length || 0})
@@ -971,7 +984,7 @@ export function App() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {vid.isVip && !loggedStudent?.isVip && isAdmin === false ? (
+                        {vid.isVip && !isVipActive && isAdmin === false ? (
                           <button onClick={() => setVipModalItem(vid)} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow">
                             <Lock className="w-3.5 h-3.5" /> قفل VIP
                           </button>
@@ -1030,7 +1043,7 @@ export function App() {
                 )}
               </div>
 
-              {/* ج) ملازم PDF */}
+              {/* ج) ملازم وقارئ PDF */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <FileText className="w-5 h-5 text-emerald-600" /> ملازم وقارئ الـ PDF ({currentSub.booklets?.length || 0})
@@ -1046,7 +1059,7 @@ export function App() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {book.isVip && !loggedStudent?.isVip && isAdmin === false ? (
+                        {book.isVip && !isVipActive && isAdmin === false ? (
                           <button onClick={() => setVipModalItem(book)} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow">
                             <Lock className="w-3.5 h-3.5" /> قفل VIP
                           </button>
@@ -1116,7 +1129,7 @@ export function App() {
                         📝 {quiz.title} {quiz.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
                       </span>
                       <div className="flex items-center gap-2">
-                        {quiz.isVip && !loggedStudent?.isVip && isAdmin === false ? (
+                        {quiz.isVip && !isVipActive && isAdmin === false ? (
                           <button onClick={() => setVipModalItem(quiz)} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow">
                             <Lock className="w-3.5 h-3.5" /> قفل VIP
                           </button>
@@ -1218,19 +1231,31 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة مع زر عرض الإجابات ونقاط الضعف */}
+        {/* 3. لوحة إدارة الطلبة مع تصفية المراحل وعرض الإجابات ونقاط الضعف */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-3">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-4">
               <div>
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
                   <Users className="w-6 h-6 text-indigo-600" /> لوحة إدارة الطلبة وحسابات الـ VIP
                 </h2>
-                <p className="text-sm text-slate-600 mt-1">عرض تاريخ التسجيل، آخر ظهور، تعديل اليوزر والباسورد، وتفعيل الـ VIP.</p>
+                <p className="text-sm text-slate-600 mt-1">تصفية حسب المرحلة، عرض تاريخ التسجيل، آخر ظهور، ونقاط ضعف الامتحانات.</p>
               </div>
-              <span className="bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-xl text-xs font-bold">
-                إجمالي الطلبة: {studentsList.length}
-              </span>
+              
+              {/* قائمة تصفية الطلبة حسب المرحلة */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-slate-700">تصفية بالمرحلة:</span>
+                <select 
+                  value={adminStageFilter} 
+                  onChange={(e) => setAdminStageFilter(e.target.value)}
+                  className="px-4 py-2 bg-slate-50 border-2 border-indigo-200 rounded-xl text-xs font-black text-slate-900 cursor-pointer"
+                >
+                  <option value="all">🌟 عرض كافة المراحل ({studentsList.length} طالب)</option>
+                  {allStagesList.map(st => (
+                    <option key={st.id} value={st.name}>{st.name}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -1240,13 +1265,15 @@ export function App() {
                     <th className="p-4">الطالب والمرحلة</th>
                     <th className="p-4">تاريخ التسجيل & آخر ظهور</th>
                     <th className="p-4">بيانات الدخول</th>
-                    <th className="p-4">الحالة والدرجة</th>
+                    <th className="p-4">الحالة والدرجة ونقاط الضعف</th>
                     <th className="p-4">اشتراك VIP</th>
                     <th className="p-4 text-center">التحكم</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-xs font-bold text-slate-800">
-                  {studentsList.map((st) => (
+                  {studentsList
+                    .filter(st => adminStageFilter === 'all' || st.stage === adminStageFilter)
+                    .map((st) => (
                     <tr key={st.id} className="hover:bg-slate-50/80 transition-all">
                       <td className="p-4">
                         <div className="font-black text-slate-900">{st.name}</div>
@@ -1398,7 +1425,7 @@ export function App() {
           </div>
         )}
 
-        {/* 5. إعدادات VIP وتعديل رقم الواتساب */}
+        {/* 5. إعدادات VIP */}
         {activeTab === 'vipSettings' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-amber-200 space-y-6">
             <h2 className="text-2xl font-black text-slate-900">إعدادات أسعار وطرق دفع اشتراكات الـ VIP</h2>
@@ -1430,7 +1457,7 @@ export function App() {
           </div>
         )}
 
-        {/* 6. إعدادات الأدمن وتغيير الباسورد */}
+        {/* 6. إعدادات الأدمن */}
         {activeTab === 'settings' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
             <h2 className="text-2xl font-black text-slate-900">إعدادات حساب المدير العام والصلاحيات</h2>
