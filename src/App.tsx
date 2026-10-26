@@ -126,10 +126,22 @@ export function App() {
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  // حالات التعديل الجديدة (للمواد، والشروحات، والطلبة)
+  const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
+  const [editSubName, setEditSubName] = useState('');
+  const [editSubImage, setEditSubImage] = useState('');
+
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [editNoteTitle, setEditNoteTitle] = useState('');
+  const [editNoteContent, setEditNoteContent] = useState('');
+  const [editNoteImage, setEditNoteImage] = useState('');
+  const [editNoteVip, setEditNoteVip] = useState(false);
+
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editUser, setEditUser] = useState('');
   const [editPass, setEditPass] = useState('');
   const [editStage, setEditStage] = useState('');
+  const [editName, setEditName] = useState('');
 
   const allStagesList = [
     { id: 'first_intermediate', name: 'الأول المتوسط' },
@@ -201,7 +213,7 @@ export function App() {
   
   const [quizTitle, setQuizTitle] = useState('');
   const [quizIsVip, setQuizIsVip] = useState(false);
-  const [quizDurationMinutes, setQuizDurationMinutes] = useState<number>(15); // وقت الامتحان بالدقائق
+  const [quizDurationMinutes, setQuizDurationMinutes] = useState<number>(15);
   const [questionType, setQuestionType] = useState<'mcq' | 'fill' | 'true_false'>('mcq');
   const [questionText, setQuestionText] = useState('');
   const [mcqOptions, setMcqOptions] = useState(['', '', '', '']);
@@ -236,7 +248,6 @@ export function App() {
     return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
   };
 
-  // التصحيح الذكي المتقدم (يدعم الكلمات المفتاحية، المرادفات، النصف درجة، وجزء التعريف)
   const evaluateAnswerSmart = (userAns: string, correctAns: string, qType: string) => {
     if (!userAns) return { isCorrect: false, scoreRatio: 0 };
     const cleanUser = userAns.trim().toLowerCase();
@@ -250,7 +261,6 @@ export function App() {
       return { isCorrect: true, scoreRatio: 1 };
     }
 
-    // استخراج الكلمات الأساسية (التي طولها أكبر من حرفين) من الإجابة النموذجية
     const correctWords = cleanCorrect.split(/[\s,،.؛\-]+/).filter(w => w.length > 2);
     if (correctWords.length === 0) {
       return { isCorrect: cleanUser.includes(cleanCorrect) || cleanCorrect.includes(cleanUser), scoreRatio: 0.5 };
@@ -263,11 +273,11 @@ export function App() {
 
     const ratio = matchedCount / correctWords.length;
     if (ratio >= 0.8) {
-      return { isCorrect: true, scoreRatio: 1 }; // صحيحة تماماً أو بفارق بسيط جداً
+      return { isCorrect: true, scoreRatio: 1 };
     } else if (ratio >= 0.4) {
-      return { isCorrect: false, scoreRatio: 0.6 }; // إجابة ناقصة أو جزء من التعريف (تحصل على درجة جزئية مثلاً 60%)
+      return { isCorrect: false, scoreRatio: 0.6 };
     } else if (cleanCorrect.includes(cleanUser) && cleanUser.length >= 3) {
-      return { isCorrect: false, scoreRatio: 0.4 }; // كتابة جزء بسيط
+      return { isCorrect: false, scoreRatio: 0.4 };
     }
 
     return { isCorrect: false, scoreRatio: 0 };
@@ -858,7 +868,7 @@ export function App() {
           </div>
         </div>
 
-        {/* 1. تبويب المنهج الدراسي */}
+        {/* 1. تبويب المنهج الدراسي مع خيارات التعديل للمواد */}
         {activeTab === 'curriculum' && !selectedSubjectId && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -905,26 +915,62 @@ export function App() {
                   className="bg-white rounded-3xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-slate-200/80 group flex flex-col justify-between relative cursor-pointer"
                 >
                   {isAdmin && (
-                    <button 
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        if (window.confirm(`هل أنت متأكد من حذف مادة ${sub.name}?`)) {
-                          try {
-                            await deleteDoc(doc(db, 'subjects', sub.id));
-                            const updatedSubs = subjects.filter(s => s.id !== sub.id);
-                            setSubjects(updatedSubs);
-                            localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                            setSuccessMessage('تم حذف المادة بنجاح.');
-                            setTimeout(() => setSuccessMessage(null), 3000);
-                          } catch (err) {
-                            console.error(err);
+                    <div className="absolute top-3 left-3 flex items-center gap-1.5 z-25">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingSubjectId(sub.id);
+                          setEditSubName(sub.name);
+                          setEditSubImage(sub.image || '');
+                        }}
+                        className="w-9 h-9 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl flex items-center justify-center shadow-lg transition-all"
+                        title="تعديل المادة"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button 
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`هل أنت متأكد من حذف مادة ${sub.name}?`)) {
+                            try {
+                              await deleteDoc(doc(db, 'subjects', sub.id));
+                              const updatedSubs = subjects.filter(s => s.id !== sub.id);
+                              setSubjects(updatedSubs);
+                              localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                              setSuccessMessage('تم حذف المادة بنجاح.');
+                              setTimeout(() => setSuccessMessage(null), 3000);
+                            } catch (err) {
+                              console.error(err);
+                            }
                           }
-                        }
-                      }}
-                      className="absolute top-3 left-3 w-9 h-9 bg-rose-600 hover:bg-rose-700 text-white rounded-xl flex items-center justify-center shadow-lg z-20 transition-all"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                        }}
+                        className="w-9 h-9 bg-rose-600 hover:bg-rose-700 text-white rounded-xl flex items-center justify-center shadow-lg transition-all"
+                        title="حذف المادة"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* نافذة تعديل المادة المصغرة */}
+                  {editingSubjectId === sub.id && (
+                    <div onClick={(e) => e.stopPropagation()} className="absolute inset-0 bg-white/95 backdrop-blur-md z-30 p-6 flex flex-col justify-center space-y-3 text-right">
+                      <h4 className="font-black text-sm text-slate-900">تعديل بيانات المادة</h4>
+                      <input type="text" value={editSubName} onChange={(e) => setEditSubName(e.target.value)} placeholder="اسم المادة..." className="px-3 py-2 border rounded-xl text-xs font-bold" />
+                      <input type="text" value={editSubImage} onChange={(e) => setEditSubImage(e.target.value)} placeholder="رابط الصورة..." className="px-3 py-2 border rounded-xl text-xs font-bold font-mono" />
+                      <div className="flex gap-2 pt-2">
+                        <button onClick={async () => {
+                          await updateDoc(doc(db, 'subjects', sub.id), { name: editSubName, image: editSubImage });
+                          const updatedSubs = subjects.map(s => s.id === sub.id ? {...s, name: editSubName, image: editSubImage} : s);
+                          setSubjects(updatedSubs);
+                          localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                          setEditingSubjectId(null);
+                          setSuccessMessage('تم تعديل المادة بنجاح!');
+                          setTimeout(() => setSuccessMessage(null), 3000);
+                        }} className="flex-1 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold">حفظ</button>
+                        <button onClick={() => setEditingSubjectId(null)} className="flex-1 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">إلغاء</button>
+                      </div>
+                    </div>
                   )}
 
                   <div className="h-40 w-full relative overflow-hidden bg-slate-200">
@@ -960,7 +1006,7 @@ export function App() {
           </div>
         )}
 
-        {/* 2. إدارة المادة الدراسية المفصلة */}
+        {/* 2. إدارة المادة الدراسية المفصلة مع خيارات التعديل للشروحات والتعاليل */}
         {selectedSubjectId && (() => {
           const currentSub = subjects.find(s => s.id === selectedSubjectId);
           if (!currentSub) return null;
@@ -978,48 +1024,89 @@ export function App() {
                 </button>
               </div>
 
-              {/* أ) الشروحات والتعاليل والملاحظات */}
+              {/* أ) الشروحات والتعاليل مع خيار التعديل */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <NoteIcon className="w-5 h-5 text-amber-600" /> الشروحات والتعاليل والملاحظات التعليمية ({currentSub.notes?.length || 0})
                 </h4>
                 <div className="space-y-4">
                   {currentSub.notes?.map((note: any) => (
-                    <div key={note.id} className="p-5 bg-white rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-sm gap-4">
-                      <div className="space-y-2 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h5 className="font-black text-slate-900 text-sm">💡 {note.title}</h5>
-                          {note.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
-                        </div>
-                        {note.isVip && !isVipActive && isAdmin === false ? (
-                          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between flex-wrap gap-2">
-                            <span className="text-xs font-bold text-amber-800 flex items-center gap-1"><Lock className="w-3.5 h-3.5" /> هذا الشرح خاص بمشتركي الـ VIP</span>
-                            <button onClick={() => setVipModalItem(note)} className="px-3 py-1.5 bg-amber-500 text-white font-bold rounded-lg text-xs">شاهد تفاصيل الاشتراك</button>
+                    <div key={note.id} className="p-5 bg-white rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-sm gap-4 relative">
+                      
+                      {/* نموذج تعديل الشرح أو التعليل */}
+                      {editingNoteId === note.id ? (
+                        <div className="w-full space-y-3 bg-slate-50 p-4 rounded-xl border">
+                          <h5 className="font-black text-xs text-indigo-900">تعديل الشرح أو التعليل</h5>
+                          <input type="text" value={editNoteTitle} onChange={(e) => setEditNoteTitle(e.target.value)} placeholder="العنوان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-white" />
+                          <textarea value={editNoteContent} onChange={(e) => setEditNoteContent(e.target.value)} placeholder="النص..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-white h-20" />
+                          <input type="text" value={editNoteImage} onChange={(e) => setEditNoteImage(e.target.value)} placeholder="رابط الصورة..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold font-mono bg-white" />
+                          <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
+                            <input type="checkbox" checked={editNoteVip} onChange={(e) => setEditNoteVip(e.target.checked)} className="w-4 h-4 text-amber-600" />
+                            <span>شرح خاص بـ VIP؟</span>
+                          </label>
+                          <div className="flex gap-2 pt-2">
+                            <button onClick={async () => {
+                              const updatedNotes = currentSub.notes.map((n: any) => n.id === note.id ? { ...n, title: editNoteTitle, content: editNoteContent, image: editNoteImage, isVip: editNoteVip } : n);
+                              await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
+                              const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s);
+                              setSubjects(updatedSubs);
+                              localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                              setEditingNoteId(null);
+                              setSuccessMessage('تم تعديل الشرح أو التعليل بنجاح!');
+                              setTimeout(() => setSuccessMessage(null), 3000);
+                            }} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold">حفظ التعديل</button>
+                            <button onClick={() => setEditingNoteId(null)} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">إلغاء</button>
                           </div>
-                        ) : (
-                          <>
-                            <p className="text-xs text-slate-600 mt-1 leading-relaxed">{note.content}</p>
-                            {note.image && (
-                              <div className="mt-3 h-48 w-full max-w-md rounded-xl overflow-hidden border">
-                                <img src={note.image} alt={note.title} className="w-full h-full object-cover" />
+                        </div>
+                      ) : (
+                        <>
+                          <div className="space-y-2 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h5 className="font-black text-slate-900 text-sm">💡 {note.title}</h5>
+                              {note.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
+                            </div>
+                            {note.isVip && !isVipActive && isAdmin === false ? (
+                              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between flex-wrap gap-2">
+                                <span className="text-xs font-bold text-amber-800 flex items-center gap-1"><Lock className="w-3.5 h-3.5" /> هذا الشرح خاص بمشتركي الـ VIP</span>
+                                <button onClick={() => setVipModalItem(note)} className="px-3 py-1.5 bg-amber-500 text-white font-bold rounded-lg text-xs">شاهد تفاصيل الاشتراك</button>
                               </div>
+                            ) : (
+                              <>
+                                <p className="text-xs text-slate-600 mt-1 leading-relaxed">{note.content}</p>
+                                {note.image && (
+                                  <div className="mt-3 h-48 w-full max-w-md rounded-xl overflow-hidden border">
+                                    <img src={note.image} alt={note.title} className="w-full h-full object-cover" />
+                                  </div>
+                                )}
+                              </>
                             )}
-                          </>
-                        )}
-                      </div>
+                          </div>
 
-                      {isAdmin && (
-                        <button onClick={async () => {
-                          const updatedNotes = currentSub.notes.filter((n: any) => n.id !== note.id);
-                          await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
-                          const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s);
-                          setSubjects(updatedSubs);
-                          localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                          setSuccessMessage('تم حذف الشرح بنجاح.');
-                          setTimeout(() => setSuccessMessage(null), 3000);
-                        }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg self-start">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                          {isAdmin && (
+                            <div className="flex items-center gap-2 self-start">
+                              <button onClick={() => {
+                                setEditingNoteId(note.id);
+                                setEditNoteTitle(note.title);
+                                setEditNoteContent(note.content);
+                                setEditNoteImage(note.image || '');
+                                setEditNoteVip(note.isVip || false);
+                              }} className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg" title="تعديل الشرح">
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                              <button onClick={async () => {
+                                const updatedNotes = currentSub.notes.filter((n: any) => n.id !== note.id);
+                                await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
+                                const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s);
+                                setSubjects(updatedSubs);
+                                localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                                setSuccessMessage('تم حذف الشرح بنجاح.');
+                                setTimeout(() => setSuccessMessage(null), 3000);
+                              }} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg" title="حذف الشرح">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   ))}
@@ -1204,7 +1291,7 @@ export function App() {
                 )}
               </div>
 
-              {/* د) الامتحانات مع إمكانية استيراد الأسئلة من الشروحات والملاحظات */}
+              {/* د) الامتحانات */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <CheckSquare className="w-5 h-5 text-indigo-600" /> الامتحانات والاختبارات التفاعلية ({currentSub.quizzes?.length || 0})
@@ -1257,7 +1344,6 @@ export function App() {
                       </div>
                     </div>
 
-                    {/* خيار استيراد السؤال مباشرة من الشروحات والتعاليل والملاحظات الكاتبة */}
                     {currentSub.notes && currentSub.notes.length > 0 && (
                       <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl space-y-2">
                         <label className="block text-xs font-black text-indigo-900">💡 استيراد سريع من الشروحات والتعاليل المضافة للمادة:</label>
@@ -1341,7 +1427,7 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة مع تصفية المراحل، ترقية المرحلة، وعرض الإجابات */}
+        {/* 3. لوحة إدارة الطلبة مع خيارات التعديل الشاملة (الاسم، اليوزر، الباسورد، المرحلة) */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-4">
@@ -1349,7 +1435,7 @@ export function App() {
                 <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
                   <Users className="w-6 h-6 text-indigo-600" /> لوحة إدارة الطلبة وحسابات الـ VIP
                 </h2>
-                <p className="text-sm text-slate-600 mt-1">تصفية حسب المرحلة، ترقية المرحلة الدراسية، عرض آخر ظهور ونقاط الضعف.</p>
+                <p className="text-sm text-slate-600 mt-1">تعديل بيانات الطالب بالكامل، ترقية المرحلة، وتفعيل الـ VIP.</p>
               </div>
               
               <div className="flex items-center gap-2">
@@ -1371,10 +1457,10 @@ export function App() {
               <table className="w-full text-right border-collapse min-w-[700px]">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-black">
-                    <th className="p-4">الطالب والمرحلة (وترقية المرحلة)</th>
+                    <th className="p-4">الطالب والمرحلة</th>
                     <th className="p-4">تاريخ التسجيل & آخر ظهور</th>
-                    <th className="p-4">بيانات الدخول</th>
-                    <th className="p-4">الحالة والدرجة ونقاط الضعف</th>
+                    <th className="p-4">بيانات الدخول (تعديل اليوزر والباسورد والاسم)</th>
+                    <th className="p-4">الحالة والدرجة</th>
                     <th className="p-4">اشتراك VIP</th>
                     <th className="p-4 text-center">التحكم</th>
                   </tr>
@@ -1386,34 +1472,9 @@ export function App() {
                     <tr key={st.id} className="hover:bg-slate-50/80 transition-all">
                       <td className="p-4">
                         <div className="font-black text-slate-900">{st.name}</div>
-                        {editingStudentId === st.id ? (
-                          <div className="mt-2 flex items-center gap-2">
-                            <select 
-                              value={editStage} 
-                              onChange={(e) => setEditStage(e.target.value)}
-                              className="px-2 py-1 bg-white border rounded text-xs font-bold"
-                            >
-                              {allStagesList.map(s => (
-                                <option key={s.id} value={s.name}>{s.name}</option>
-                              ))}
-                            </select>
-                            <button onClick={async () => {
-                              await updateDoc(doc(db, 'students', st.id), { stage: editStage });
-                              const updatedStuds = studentsList.map(item => item.id === st.id ? {...item, stage: editStage} : item);
-                              setStudentsList(updatedStuds);
-                              localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
-                              setEditingStudentId(null);
-                              setSuccessMessage('تم ترقية مرحلة الطالب بنجاح!');
-                              setTimeout(() => setSuccessMessage(null), 3000);
-                            }} className="px-2.5 py-1 bg-emerald-600 text-white rounded text-[10px]">حفظ</button>
-                            <button onClick={() => setEditingStudentId(null)} className="px-2 py-1 bg-slate-200 rounded text-[10px]">إلغاء</button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-indigo-600 text-[11px] bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">{st.stage}</span>
-                            <button onClick={() => { setEditingStudentId(st.id); setEditStage(st.stage); }} className="text-[10px] text-slate-500 hover:text-indigo-600 underline">ترقية المرحلة ↗</button>
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-indigo-600 text-[11px] bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">{st.stage}</span>
+                        </div>
                       </td>
 
                       <td className="p-4 text-slate-600">
@@ -1422,10 +1483,46 @@ export function App() {
                       </td>
 
                       <td className="p-4">
-                        <div className="bg-slate-50 p-2 rounded-xl border">
-                          <div className="text-slate-900">👤 اليوزر: <span className="font-mono text-indigo-700">{st.username}</span></div>
-                          <div className="text-slate-600">🔑 الباسورد: <span className="font-mono text-slate-900">{st.pass}</span></div>
-                        </div>
+                        {editingStudentId === st.id ? (
+                          <div className="flex flex-col gap-1.5 bg-slate-50 p-3 rounded-xl border border-indigo-200">
+                            <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="الاسم الثلاثي..." className="px-2 py-1 rounded bg-white border text-xs font-bold" />
+                            <input type="text" value={editUser} onChange={(e) => setEditUser(e.target.value)} placeholder="اليوزر الجديد" className="px-2 py-1 rounded bg-white border text-xs font-bold" />
+                            <input type="text" value={editPass} onChange={(e) => setEditPass(e.target.value)} placeholder="الباسورد الجديد" className="px-2 py-1 rounded bg-white border text-xs font-bold" />
+                            <select value={editStage} onChange={(e) => setEditStage(e.target.value)} className="px-2 py-1 rounded bg-white border text-xs font-bold">
+                              {allStagesList.map(s => (
+                                <option key={s.id} value={s.name}>{s.name}</option>
+                              ))}
+                            </select>
+                            <div className="flex gap-2 pt-1">
+                              <button onClick={async () => {
+                                await updateDoc(doc(db, 'students', st.id), { name: editName, username: editUser, pass: editPass, stage: editStage });
+                                const updatedStuds = studentsList.map(item => item.id === st.id ? {...item, name: editName, username: editUser, pass: editPass, stage: editStage} : item);
+                                setStudentsList(updatedStuds);
+                                localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
+                                setEditingStudentId(null);
+                                setSuccessMessage('تم تحديث بيانات الطالب وترقيته بنجاح!');
+                                setTimeout(() => setSuccessMessage(null), 3000);
+                              }} className="px-3 py-1 bg-emerald-600 text-white rounded text-xs font-bold">حفظ</button>
+                              <button onClick={() => setEditingStudentId(null)} className="px-3 py-1 bg-slate-200 rounded text-xs">إلغاء</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl border gap-2">
+                            <div>
+                              <div className="text-slate-900">👤 اليوزر: <span className="font-mono text-indigo-700">{st.username}</span></div>
+                              <div className="text-slate-600">🔑 الباسورد: <span className="font-mono text-slate-900">{st.pass}</span></div>
+                            </div>
+                            <button onClick={() => { 
+                              setEditingStudentId(st.id); 
+                              setEditName(st.name);
+                              setEditUser(st.username); 
+                              setEditPass(st.pass);
+                              setEditStage(st.stage);
+                            }} className="p-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg flex-shrink-0" title="تعديل بيانات الطالب">
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        )}
                       </td>
 
                       <td className="p-4">
