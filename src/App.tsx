@@ -14,10 +14,10 @@ export function App() {
   const [adminPinInput, setAdminPinInput] = useState<string>('');
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
 
-  // حفظ بيانات الأدمن وكلمة المرور بأمان دائم في الـ LocalStorage
+  // كلمة المرور الافتتاحية 123456 وتتحدث تلقائياً بما تحفظه أنت من الإعدادات
   const [adminName, setAdminName] = useState<string>(() => localStorage.getItem('nabough_admin_name') || 'مدير المنصة');
   const [adminUsername, setAdminUsername] = useState<string>(() => localStorage.getItem('nabough_admin_user') || 'admin');
-  const [adminPassword, setAdminPassword] = useState<string>(() => localStorage.getItem('nabough_admin_pass') || 'Nabough2026!');
+  const [adminPassword, setAdminPassword] = useState<string>(() => localStorage.getItem('nabough_admin_pass') || '123456');
   
   const [vipSettings, setVipSettings] = useState({
     price: '25,000 دينار عراقي / شهرياً',
@@ -63,7 +63,6 @@ export function App() {
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // تحميل سريع من الذاكرة المحلية (للعمل حتى بدون نت ولزيادة السرعة)
   const [studentsList, setStudentsList] = useState<any[]>(() => {
     const cached = localStorage.getItem('nabough_cached_students');
     return cached ? JSON.parse(cached) : [];
@@ -90,7 +89,6 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
-  // مزامنة البيانات مع Firebase وتخزينها محلياً للسرعة والعمل بدون إنترنت
   useEffect(() => {
     async function loadDataFromFirebase() {
       try {
@@ -741,7 +739,9 @@ export function App() {
                         if (window.confirm(`هل أنت متأكد من حذف مادة ${sub.name}?`)) {
                           try {
                             await deleteDoc(doc(db, 'subjects', sub.id));
-                            setSubjects(subjects.filter(s => s.id !== sub.id));
+                            const updatedSubs = subjects.filter(s => s.id !== sub.id);
+                            setSubjects(updatedSubs);
+                            localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                             setSuccessMessage('تم حذف المادة بنجاح.');
                             setTimeout(() => setSuccessMessage(null), 3000);
                           } catch (err) {
@@ -840,7 +840,9 @@ export function App() {
                         <button onClick={async () => {
                           const updatedNotes = currentSub.notes.filter((n: any) => n.id !== note.id);
                           await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
-                          setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s));
+                          const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s);
+                          setSubjects(updatedSubs);
+                          localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                           setSuccessMessage('تم حذف الشرح بنجاح.');
                           setTimeout(() => setSuccessMessage(null), 3000);
                         }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg self-start">
@@ -868,7 +870,9 @@ export function App() {
                       const newNoteObj = { id: Date.now().toString(), title: newNoteTitle, content: newNoteContent, image: newNoteImage, isVip: newNoteVip };
                       const updatedNotes = [...(currentSub.notes || []), newNoteObj];
                       await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
-                      setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s));
+                      const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s);
+                      setSubjects(updatedSubs);
+                      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                       setNewNoteTitle(''); setNewNoteContent(''); setNewNoteImage(''); setNewNoteVip(false);
                       setSuccessMessage('تمت إضافة الشرح أو التعليل بنجاح للمادة!');
                       setTimeout(() => setSuccessMessage(null), 3000);
@@ -908,7 +912,9 @@ export function App() {
                           <button onClick={async () => {
                             const updatedVids = currentSub.videos.filter((v: any) => v.id !== vid.id);
                             await updateDoc(doc(db, 'subjects', currentSub.id), { videos: updatedVids });
-                            setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s));
+                            const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s);
+                            setSubjects(updatedSubs);
+                            localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                             setSuccessMessage('تم حذف الفيديو بنجاح.');
                             setTimeout(() => setSuccessMessage(null), 3000);
                           }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg">
@@ -937,7 +943,9 @@ export function App() {
                           const newVidObj = { id: Date.now().toString(), title: newVideoTitle, url: formattedUrl, duration: '45 دقيقة', isVip: newVideoVip };
                           const updatedVids = [...(currentSub.videos || []), newVidObj];
                           await updateDoc(doc(db, 'subjects', currentSub.id), { videos: updatedVids });
-                          setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s));
+                          const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s);
+                          setSubjects(updatedSubs);
+                          localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                           setNewVideoTitle(''); setNewVideoUrl(''); setNewVideoVip(false);
                           setSuccessMessage('تمت إضافة الفيديو بنجاح!');
                           setTimeout(() => setSuccessMessage(null), 3000);
@@ -979,7 +987,9 @@ export function App() {
                           <button onClick={async () => {
                             const updatedBooks = currentSub.booklets.filter((b: any) => b.id !== book.id);
                             await updateDoc(doc(db, 'subjects', currentSub.id), { booklets: updatedBooks });
-                            setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, booklets: updatedBooks} : s));
+                            const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, booklets: updatedBooks} : s);
+                            setSubjects(updatedSubs);
+                            localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                             setSuccessMessage('تم حذف الملزمة بنجاح.');
                             setTimeout(() => setSuccessMessage(null), 3000);
                           }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg">
@@ -1007,7 +1017,9 @@ export function App() {
                           const newBookObj = { id: Date.now().toString(), title: newBookletTitle, url: newBookletUrl, size: '15 MB', isVip: newBookletVip };
                           const updatedBooks = [...(currentSub.booklets || []), newBookObj];
                           await updateDoc(doc(db, 'subjects', currentSub.id), { booklets: updatedBooks });
-                          setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, booklets: updatedBooks} : s));
+                          const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, booklets: updatedBooks} : s);
+                          setSubjects(updatedSubs);
+                          localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                           setNewBookletTitle(''); setNewBookletUrl(''); setNewBookletVip(false);
                           setSuccessMessage('تمت إضافة الملزمة بنجاح!');
                           setTimeout(() => setSuccessMessage(null), 3000);
@@ -1045,7 +1057,9 @@ export function App() {
                           <button onClick={async () => {
                             const updatedQuizzes = currentSub.quizzes.filter((q: any) => q.id !== quiz.id);
                             await updateDoc(doc(db, 'subjects', currentSub.id), { quizzes: updatedQuizzes });
-                            setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, quizzes: updatedQuizzes} : s));
+                            const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, quizzes: updatedQuizzes} : s);
+                            setSubjects(updatedSubs);
+                            localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                             setSuccessMessage('تم حذف الامتحان.');
                             setTimeout(() => setSuccessMessage(null), 3000);
                           }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg">
