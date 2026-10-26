@@ -8,8 +8,8 @@ import {
   Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink
 } from 'lucide-react';
 
-// 🔴 ضع رقم الواتساب الحقيقي الخاص بك هنا (مع رمز الدولة، مثلاً: 9647712345678) ليعمل مباشرة بدون أي أخطاء
-const MY_WHATSAPP_NUMBER = '9647701234567'; 
+// 🔴 ضع رقم الواتساب الحقيقي الخاص بك هنا (مع رمز الدولة، مثلاً: 9647712345678) لتهيئة رسائل الإيصالات والاتصال
+const MY_WHATSAPP_NUMBER = '9647783849831'; 
 
 const safeGetStorage = (key: string, fallback: any) => {
   try {
@@ -26,7 +26,7 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // حقن أيقونة التطبيق الاحترافية (قبعة تخرج وكتب) للـ PWA لتظهر بشكل جذاب على شاشة الهاتف
+  // حققنا أيقونة التطبيق الاحترافية (قبعة تخرج وكتب) للـ PWA لتظهر بشكل جذاب على شاشة الهاتف
   useEffect(() => {
     const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><rect width="512" height="512" rx="110" fill="#0f172a"/><path d="M256 120L60 210l196 90 196-90-196-90z" fill="#3b82f6"/><path d="M120 250v100c0 40 60 70 136 70s136-30 136-70V250L256 310l-136-60z" fill="#1e3a8a"/><path d="M410 230v110a15 15 0 01-30 0V245l-35 16v59a50 50 0 11-30 0v-59l-85 39 196 90 196-90-182-83z" fill="#fbbf24"/></svg>`;
     const blobIcon = new Blob([svgIcon], { type: 'image/svg+xml' });
@@ -73,24 +73,26 @@ export function App() {
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
 
-  // زر تثبيت التطبيق السريع (PWA) مع إخفائه تلقائياً إذا تم التثبيت
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [showInstallBtn, setShowInstallBtn] = useState<boolean>(true);
+  // زر تثبيت التطبيق السريع (PWA) مع إخفائه تلقائياً إذا تم تثبيته بالفعل
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(() => (window as any).deferredPrompt || null);
+  const [showInstallBtn, setShowInstallBtn] = useState<boolean>(() => {
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+      return false;
+    }
+    return true;
+  });
 
   useEffect(() => {
-    // التحقق عما إذا كان التطبيق مثبتاً بالفعل أو يعمل كـ PWA
-    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
-      setShowInstallBtn(false);
-    }
-
     const handleBeforeInstallPrompt = (e: any) => {
       e.preventDefault();
+      (window as any).deferredPrompt = e;
       setDeferredPrompt(e);
       setShowInstallBtn(true);
     };
 
     const handleAppInstalled = () => {
       setShowInstallBtn(false);
+      (window as any).deferredPrompt = null;
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -103,13 +105,15 @@ export function App() {
   }, []);
 
   const handleInstallApp = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
+    const promptEvent = deferredPrompt || (window as any).deferredPrompt;
+    if (promptEvent) {
+      promptEvent.prompt();
+      const { outcome } = await promptEvent.userChoice;
       if (outcome === 'accepted') {
         setShowInstallBtn(false);
       }
       setDeferredPrompt(null);
+      (window as any).deferredPrompt = null;
     } else {
       alert('📱 لتثبيت منصة النابغة على شاشة هاتفك:\n- أندرويد (متصفح كروم): افتح قائمة المتصفح (⋮) ثم اختر "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".\n- آيفون (متصفح سفاري): اضغط زر المشاركة (📤) ثم اختر "إضافة إلى الشاشة الرئيسية".');
     }
@@ -443,11 +447,14 @@ export function App() {
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
 
+  // تصفية المواد بحيث إذا كان الطالب مسجلاً تظهر مواد مرحلته فوراً وبشكل تلقائي
   const filteredSubjects = subjects.filter(s => {
     if (isAdmin) {
-      return selectedStage === 'all' || s.stage === selectedStage;
+      return selectedStage === 'all' || s.stage === selectedStage || s.stageName === selectedStage;
+    } else if (loggedStudent) {
+      return s.stageName === loggedStudent.stage || s.stage === loggedStudent.stage || s.stageName?.trim() === loggedStudent.stage?.trim();
     } else {
-      return selectedStage === 'all' || s.stage === selectedStage;
+      return selectedStage === 'all' || s.stage === selectedStage || s.stageName === selectedStage;
     }
   });
 
@@ -958,7 +965,7 @@ export function App() {
               {isAdmin ? 'لوحة تحكم المدير العام والإدارة 🎓' : loggedStudent ? `مرحباً بك يا ${loggedStudent?.name} في مرحلة ${loggedStudent?.stage} 📚` : 'تصفح المناهج الدراسية والامتحانات التفاعلية 🎓'}
             </h1>
 
-            {/* زر تعديل المرحلة الدراسية مباشرة للطالب */}
+            {/* زر تعديل المرحلة الدراسية مباشرة للطالب مع تحديث المناهج تلقائياً */}
             {!isAdmin && loggedStudent && (
               <div className="flex items-center gap-2 bg-indigo-900/90 border border-indigo-500/40 p-3 rounded-2xl max-w-sm">
                 <span className="text-xs font-bold text-indigo-200 whitespace-nowrap">🔄 تغيير مرحلتي:</span>
@@ -972,6 +979,7 @@ export function App() {
                     try {
                       await updateDoc(doc(db, 'students', loggedStudent.id), { stage: newStage });
                       setStudentsList(studentsList.map(s => s.id === loggedStudent.id ? {...s, stage: newStage} : s));
+                      setSelectedSubjectId(null); // العودة لقائمة المناهج لعرض مواد المرحلة الجديدة فوراً
                       setSuccessMessage(`تم تحديث مرحلتك بنجاح إلى: ${newStage}`);
                       setTimeout(() => setSuccessMessage(null), 3000);
                     } catch(err) { console.error(err); }
