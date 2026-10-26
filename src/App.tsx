@@ -5,13 +5,10 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
-  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard
+  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone
 } from 'lucide-react';
 
 export function App() {
-  // شاشة التحميل لمنع الشاشة البيضاء
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     return localStorage.getItem('nabough_is_admin') === 'true';
   });
@@ -24,6 +21,33 @@ export function App() {
   const [adminPinInput, setAdminPinInput] = useState<string>('');
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
+
+  // حالة زر تثبيت التطبيق (PWA Install Prompt)
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [showInstallBtn, setShowInstallBtn] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setShowInstallBtn(true);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) {
+      alert('التطبيق جاهز للاستخدام أو أن متصفحك يدعم التثبيت المباشر من إعدادات المتصفح (إضافة إلى الشاشة الرئيسية).');
+      return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setShowInstallBtn(false);
+    }
+    setDeferredPrompt(null);
+  };
 
   const [adminStageFilter, setAdminStageFilter] = useState<string>('all');
 
@@ -73,7 +97,7 @@ export function App() {
     }
   }, [loggedStudent]);
 
-  const currentLoggedStudentData = loggedStudent ? studentsList.find(s => s.id === loggedStudent.id) || loggedStudent : null;
+  const currentLoggedStudentData = loggedStudent ? studentsList?.find((s: any) => s.id === loggedStudent.id) || loggedStudent : null;
   const isVipActive = currentLoggedStudentData?.isVip || false;
 
   const [studentLoginUser, setStudentLoginUser] = useState('');
@@ -131,7 +155,6 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
-  // تحديث دوري للنشاط وآخر ظهور للطالب المتصل
   useEffect(() => {
     if (loggedStudent) {
       const updateInterval = setInterval(async () => {
@@ -144,7 +167,6 @@ export function App() {
     }
   }, [loggedStudent]);
 
-  // جلب البيانات مع إيقاف شاشة التحميل بأمان تام
   useEffect(() => {
     async function loadDataFromFirebase() {
       try {
@@ -163,17 +185,9 @@ export function App() {
         }
       } catch (e) {
         console.error('Offline mode / Firebase load error:', e);
-      } finally {
-        setIsLoading(false);
       }
     }
     loadDataFromFirebase();
-
-    // مؤقت أمان لضمان عدم بقاء شاشة التحميل معلقة أبداً
-    const safetyTimer = setTimeout(() => {
-      setIsLoading(false);
-    }, 2000);
-    return () => clearTimeout(safetyTimer);
   }, []);
 
   const [newVideoTitle, setNewVideoTitle] = useState('');
@@ -329,20 +343,6 @@ export function App() {
       return selectedStage === 'all' || s.stage === selectedStage;
     }
   });
-
-  // عرض شاشة التحميل الاحترافية بدلاً من الشاشة البيضاء عند فتح الموقع
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
-        <div className="w-20 h-20 rounded-3xl bg-indigo-600 text-white flex items-center justify-center font-black text-3xl shadow-2xl animate-bounce mb-4">ن</div>
-        <h2 className="text-xl font-black tracking-wide">منصة النابغة التعليمية</h2>
-        <p className="text-xs text-slate-400 mt-2">جاري تحميل المناهج والبيانات...</p>
-        <div className="w-32 h-1.5 bg-slate-800 rounded-full overflow-hidden mt-6">
-          <div className="w-full h-full bg-indigo-500 animate-pulse"></div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
@@ -714,7 +714,7 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة */}
+      {/* رأس الصفحة مع زر تثبيت التطبيق إذا كان متاحاً */}
       <div className="w-full bg-slate-900 py-3 px-4 sm:px-8 shadow-md flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-2xl bg-indigo-600 text-white flex items-center justify-center font-black text-base shadow">ن</div>
@@ -725,6 +725,12 @@ export function App() {
         </div>
 
         <div className="flex items-center gap-2">
+          {showInstallBtn && (
+            <button onClick={handleInstallApp} className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow flex items-center gap-1.5 animate-pulse">
+              <Smartphone className="w-4 h-4" /> تثبيت التطبيق 📱
+            </button>
+          )}
+
           {isAdmin ? (
             <button onClick={() => setIsAdmin(false)} className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow">
               خروج من وضع الأدمن
