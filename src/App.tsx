@@ -23,7 +23,7 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // حققنا أيقونة تطبيق احترافية وجذابة (قبعة التخرج التعليمية) لتظهر بشكل أنيق على شاشة الهاتف
+  // تحديث أيقونة التطبيق لتصبح بصورة تعليمية جذابة (كتب وقبعة تخرج) واسم المنصة الرسمي
   useEffect(() => {
     const manifest = {
       name: "منصة النابغة التعليمية",
@@ -34,7 +34,7 @@ export function App() {
       theme_color: "#0f172a",
       icons: [
         {
-          src: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=192&h=192&q=80",
+          src: "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=192&h=192&q=80",
           sizes: "192x192",
           type: "image/png"
         }
@@ -150,6 +150,16 @@ export function App() {
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
+
+  // دالة ذكية لمعالجة روابط الـ PDF وتجاوز حماية جوجل درايف بدون إيميل
+  const getEmbedPdfUrl = (url: string) => {
+    if (!url) return '';
+    if (url.includes('drive.google.com')) {
+      // تحويل رابط جوجل درايف تلقائياً لعرض مباشر بدون تسجيل دخول
+      return `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`;
+    }
+    return url;
+  };
 
   const [quizAnswers, setQuizAnswers] = useState<Record<number, string>>({});
   const [quizResult, setQuizResult] = useState<{score: number, total: number, details: any[]} | null>(null);
@@ -705,7 +715,7 @@ export function App() {
         </div>
       )}
 
-      {/* قارئ PDF */}
+      {/* قارئ PDF مع دعم فتح روابط جوجل درايف تلقائياً بدون تسجيل دخول */}
       {activePdfUrl && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-4xl w-full h-[80vh] p-4 shadow-2xl relative flex flex-col">
@@ -716,7 +726,7 @@ export function App() {
               </button>
             </div>
             <div className="flex-1 w-full rounded-2xl overflow-hidden bg-slate-100 mt-3">
-              <iframe src={activePdfUrl} className="w-full h-full border-0"></iframe>
+              <iframe src={getEmbedPdfUrl(activePdfUrl)} className="w-full h-full border-0"></iframe>
             </div>
           </div>
         </div>
