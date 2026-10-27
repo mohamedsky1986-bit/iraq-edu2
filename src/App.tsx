@@ -8,8 +8,8 @@ import {
   Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send
 } from 'lucide-react';
 
-// 🔴 ضع معرف تليجرام الحقيقي الخاص بك هنا (مثلاً: YourUsername بدون @)
-const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
+// 🔴 ضع معرف التليجرام الحقيقي الخاص بك هنا (مثلاً: YourUsername بدون علامة @)
+const MY_TELEGRAM_USERNAME = 'YourUsername'; 
 
 const safeGetStorage = (key: string, fallback: any) => {
   try {
@@ -26,7 +26,7 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // حقن ملف الـ Manifest الحقيقي وثابت برمجياً لضمان ظهور زر التثبيت الحقيقي بدون الحاجة لإنشاء ملفات يدوياً
+  // حقن ملف الـ Manifest مع رابط أيقونة حقيقي وثابت لضمان وضوحها التام على شاشة الهاتف
   useEffect(() => {
     const manifest = {
       name: "منصة النابغة التعليمية",
@@ -39,7 +39,8 @@ export function App() {
         {
           src: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=512&h=512&q=80",
           sizes: "512x512",
-          type: "image/png"
+          type: "image/png",
+          purpose: "any maskable"
         }
       ]
     };
@@ -128,7 +129,7 @@ export function App() {
       price: '25,000 دينار عراقي / شهرياً',
       mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
       transferPhone: '07701234567 (زين كاش / آسياسيل)',
-      telegram: MY_TELEGRAM_LINK
+      telegram: MY_TELEGRAM_USERNAME
     });
   });
 
@@ -136,10 +137,10 @@ export function App() {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
 
-  const getTelegramUrl = (link: string, text: string) => {
-    let targetLink = link || MY_TELEGRAM_LINK;
-    let username = targetLink.replace('https://t.me/', '').replace('t.me/', '').replace('@', '').trim();
-    return `https://t.me/${username}?text=${encodeURIComponent(text)}`;
+  // دالة تليجرام مدعومة للموبايل والحاسبة
+  const getTelegramUrl = (usernameOrLink: string, text: string) => {
+    let clean = (usernameOrLink || MY_TELEGRAM_USERNAME).replace('https://t.me/', '').replace('t.me/', '').replace('@', '').trim();
+    return `https://t.me/${clean}?text=${encodeURIComponent(text)}`;
   };
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
@@ -1962,4 +1963,4 @@ export function App() {
   );
 }
 
-export default App;
+, export default App;
