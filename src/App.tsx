@@ -8,7 +8,7 @@ import {
   Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send
 } from 'lucide-react';
 
-// 🔴 ضع معرف تليجرام الحقيقي الخاص بك هنا (مثلاً: YourUsername بدون @) ليعمل بدقة على الموبايل والحاسبة
+// 🔴 ضع معرف تليجرام الحقيقي الخاص بك هنا (مثلاً: YourUsername بدون @)
 const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
 
 const safeGetStorage = (key: string, fallback: any) => {
@@ -26,12 +26,8 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // حقن أيقونة التطبيق الاحترافية (قبعة تخرج وكتب) للـ PWA لتظهر بشكل جذاب على شاشة الهاتف
+  // حقن ملف الـ Manifest الحقيقي وثابت برمجياً لضمان ظهور زر التثبيت الحقيقي بدون الحاجة لإنشاء ملفات يدوياً
   useEffect(() => {
-    const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><rect width="512" height="512" rx="110" fill="#0f172a"/><path d="M256 120L60 210l196 90 196-90-196-90z" fill="#3b82f6"/><path d="M120 250v100c0 40 60 70 136 70s136-30 136-70V250L256 310l-136-60z" fill="#1e3a8a"/><path d="M410 230v110a15 15 0 01-30 0V245l-35 16v59a50 50 0 11-30 0v-59l-85 39 196 90 196-90-182-83z" fill="#fbbf24"/></svg>`;
-    const blobIcon = new Blob([svgIcon], { type: 'image/svg+xml' });
-    const iconUrl = URL.createObjectURL(blobIcon);
-
     const manifest = {
       name: "منصة النابغة التعليمية",
       short_name: "النابغة",
@@ -41,9 +37,9 @@ export function App() {
       theme_color: "#0f172a",
       icons: [
         {
-          src: iconUrl,
+          src: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=512&h=512&q=80",
           sizes: "512x512",
-          type: "image/svg+xml"
+          type: "image/png"
         }
       ]
     };
@@ -73,7 +69,6 @@ export function App() {
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
 
-  // نافذة إرشادات التثبيت الداخلية الأنيقة
   const [showInstallGuideModal, setShowInstallGuideModal] = useState<boolean>(false);
 
   // زر تثبيت التطبيق السريع (PWA) مع إخفائه تلقائياً إذا تم تثبيته بالفعل
@@ -141,7 +136,6 @@ export function App() {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
 
-  // دالة تليجرام معدلة لتفتح المحادثة بدقة على الموبايل والكمبيوتر بدون أخطاء "لم يتم العثور على المستخدم"
   const getTelegramUrl = (link: string, text: string) => {
     let targetLink = link || MY_TELEGRAM_LINK;
     let username = targetLink.replace('https://t.me/', '').replace('t.me/', '').replace('@', '').trim();
@@ -522,8 +516,8 @@ export function App() {
             </div>
             
             <div className="space-y-3 text-xs font-bold text-slate-700 bg-slate-50 p-4 rounded-2xl border">
-              <div>🤖 <b>أندرويد (متصفح كروم):</b> افتح قائمة المتصفح (⋮) بالأعلى، ثم اختر <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b>.</div>
-              <div className="border-t pt-2">🍏 <b>آيفون (متصفح سفاري):</b> اضغط على زر المشاركة (📤) بالأسفل، ثم اختر <b>"إضافة إلى الشاشة الرئيسية"</b>.</div>
+              <div>🤖 <b>أندرويد (متصفح كروم):</b> افتح قائمة المتصفح (⋮) بالأعلى، ثم اختر <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b>[cite: 26].</div>
+              <div className="border-t pt-2">🍏 <b>آيفون (متصفح سفاري):</b> اضغط على زر المشاركة (📤) بالأسفل، ثم اختر <b>"إضافة إلى الشاشة الرئيسية"</b>[cite: 26].</div>
             </div>
 
             <button onClick={() => setShowInstallGuideModal(false)} className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs shadow-md">
