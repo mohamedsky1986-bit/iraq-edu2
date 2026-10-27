@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { db } from './firebase';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
@@ -68,38 +68,50 @@ export function App() {
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
 
-  // نظام الدردشة العامة التفاعلية بين الطلاب
+  // نظام الدردشة العامة الفورية المرتبط بقاعدة البيانات السحابية (Firebase) لضمان ظهور الرسائل فوراً بين الموبايل والحاسبة
   const [showPublicChatModal, setShowPublicChatModal] = useState<boolean>(false);
   const [publicChatInput, setPublicChatInput] = useState<string>('');
-  const [publicChatMessages, setPublicChatMessages] = useState<any[]>(() => safeGetStorage('nabough_public_chat', [
-    { id: '1', sender: 'أحمد علي (الأول المتوسط)', text: 'أهلاً بالجميع، هل من يساعدني في حل مسألة الرياضيات؟', time: '10:00 ص' },
-    { id: '2', sender: 'فاطمة حسن (الثالث المتوسط)', text: 'مرحباً أحمد، اطرح المسألة هنا لنتعاون في حلها!', time: '10:05 ص' }
-  ]));
+  const [publicChatMessages, setPublicChatMessages] = useState<any[]>([]);
 
   useEffect(() => {
-    localStorage.setItem('nabough_public_chat', JSON.stringify(publicChatMessages));
-  }, [publicChatMessages]);
+    const q = query(collection(db, 'public_chat'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      // ترتيب الرسائل تصاعدياً حسب وقت الإرسال
+      msgs.sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+      setPublicChatMessages(msgs);
+    }, (error) => {
+      console.error("Chat sync error:", error);
+    });
+    return () => unsubscribe();
+  }, []);
 
-  const handleSendPublicMessage = (e: React.FormEvent) => {
+  const handleSendPublicMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!publicChatInput.trim()) return;
     
-    // كلمات مسيئة محظورة تلقائياً للحفاظ على نظافة الدردشة
-    const forbiddenWords = ['شتم', 'عيب', 'كلمة_سيئة'];
+    const forbiddenWords = ['شتم', 'كلمة_سيئة'];
     const hasForbidden = forbiddenWords.some(w => publicChatInput.includes(w));
     if (hasForbidden) {
       alert('⚠️ عذراً، هذه الكلمة محظورة وفقاً لسياسة وآداب النشر في منصة النابغة.');
       return;
     }
 
+    const nowTime = new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
     const newMsg = {
-      id: Date.now().toString(),
       sender: loggedStudent ? `${loggedStudent.name} (${loggedStudent.stage})` : (isAdmin ? 'مدير المنصة 🎓' : 'زائر كريم'),
       text: publicChatInput,
-      time: new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'})
+      time: nowTime,
+      createdAt: serverTimestamp()
     };
-    setPublicChatMessages([...publicChatMessages, newMsg]);
-    setPublicChatInput('');
+
+    try {
+      await addDoc(collection(db, 'public_chat'), newMsg);
+      setPublicChatInput('');
+    } catch (err) {
+      console.error(err);
+      alert('حدث خطأ أثناء إرسال الرسالة، يجى التحقق من الاتصال.');
+    }
   };
 
   const [showInstallGuideModal, setShowInstallGuideModal] = useState<boolean>(false);
@@ -533,7 +545,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
       
-      {/* نافذة الدردشة العامة التفاعلية بين الطلاب */}
+      {/* نافذة الدردشة العامة التفاعلية بين الطلاب المرتبطة بقاعدة البيانات */}
       {showPublicChatModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-xl w-full h-[85vh] p-6 shadow-2xl relative flex flex-col text-right">
@@ -544,7 +556,7 @@ export function App() {
               <div className="w-11 h-11 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-lg">🌐</div>
               <div>
                 <h3 className="font-black text-slate-900 text-base">الدردشة العامة للطلبة (سؤال وجواب ونقاشات)</h3>
-                <p className="text-xs text-slate-500">تواصل بحرية مع زملائك الطلبة في كافة المراحل الدراسية</p>
+                <p className="text-xs text-slate-500">الرسائل تظهر فوراً لجميع الطلبة على الموبايل والحاسبة</p>
               </div>
             </div>
 
@@ -557,9 +569,11 @@ export function App() {
                       <span className="text-slate-400 font-mono text-[10px]">{msg.time}</span>
                       {isAdmin && (
                         <button 
-                          onClick={() => {
+                          onClick={async () => {
                             if (window.confirm('هل تريد حذف هذه الرسالة؟')) {
-                              setPublicChatMessages(publicChatMessages.filter(m => m.id !== msg.id));
+                              try {
+                                await deleteDoc(doc(db, 'public_chat', msg.id));
+                              } catch(e) {}
                             }
                           }}
                           className="text-rose-500 hover:bg-rose-50 p-1 rounded font-bold"
@@ -606,8 +620,8 @@ export function App() {
             </div>
             
             <div className="space-y-3 text-xs font-bold text-slate-700 bg-slate-50 p-4 rounded-2xl border">
-              <div>🤖 <b>أندرويد (متصفح كروم):</b> افتح قائمة المتصفح (⋮) بالأعلى، ثم اختر <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b>.</div>
-              <div className="border-t pt-2">🍏 <b>آيفون (متصفح سفاري):</b> اضغط على زر المشاركة (📤) بالأسفل، ثم اختر <b>"إضافة إلى الشاشة الرئيسية"</b>.</div>
+              <div>🤖 <b>أندرويد (متصفح كروم):</b> افتح قائمة المتصفح (⋮) بالأعلى، ثم اختر <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b>[cite: 26].</div>
+              <div className="border-t pt-2">🍏 <b>آيفون (متصفح سفاري):</b> اضغط على زر المشاركة (📤) بالأسفل، ثم اختر <b>"إضافة إلى الشاشة الرئيسية"</b>[cite: 26].</div>
             </div>
 
             <button onClick={() => setShowInstallGuideModal(false)} className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs shadow-md">
@@ -784,7 +798,7 @@ export function App() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور (8 أحرف تحوي أحرف وأرقام)</label>
-                  <input type="password" required value={studentLoginPass} onChange={(e) => setNewStudentPass(e.target.value)} placeholder="كلمة المرور القوية..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
+                  <input type="password" required value={studentLoginPass} onChange={(e) => setStudentLoginPass(e.target.value)} placeholder="كلمة المرور القوية..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
                 </div>
 
                 <button type="submit" className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md">
@@ -1012,7 +1026,6 @@ export function App() {
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap">
-          {/* زر الدردشة العامة الفورية في الأعلى */}
           <button 
             onClick={() => setShowPublicChatModal(true)}
             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[11px] font-bold shadow transition-all flex items-center gap-1.5 cursor-pointer"
@@ -1185,7 +1198,7 @@ export function App() {
                   >
                     <option value="all">🌟 عرض كافة المراحل والصفوف الدراسية</option>
                     {allStagesList.map(st => (
-                      <option key={st.id} value={st.id}>{st.name}</option>
+                      <option key={st.id} value={st.name}>{st.name}</option>
                     ))}
                   </select>
                   <ChevronDown className="w-5 h-5 text-indigo-600 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
