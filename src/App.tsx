@@ -5,10 +5,9 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
-  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send
+  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send, MessageSquare
 } from 'lucide-react';
 
-// 🔴 ضع معرف التليجرام الحقيقي الخاص بك هنا (مثلاً: YourUsername بدون علامة @)
 const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
 
 const safeGetStorage = (key: string, fallback: any) => {
@@ -26,7 +25,6 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // حقن ملف الـ Manifest مع رابط أيقونة حقيقي وثابت لضمان وضوحها التام على شاشة الهاتف
   useEffect(() => {
     const manifest = {
       name: "منصة النابغة التعليمية",
@@ -70,9 +68,33 @@ export function App() {
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
 
+  // نافذة نظام الدردشة الداخلية الفورية مع الإدارة
+  const [showChatModal, setShowChatModal] = useState<boolean>(false);
+  const [chatMessageInput, setChatMessageInput] = useState<string>('');
+  const [chatMessagesList, setChatMessagesList] = useState<any[]>(() => safeGetStorage('nabough_chat_msgs', [
+    { sender: 'الإدارة', text: 'أهلاً بك يا بطل في منصة النابغة التعليمية! كيف يمكننا مساعدتك اليوم؟', time: 'الآن' }
+  ]));
+
+  useEffect(() => {
+    localStorage.setItem('nabough_chat_msgs', JSON.stringify(chatMessagesList));
+  }, [chatMessagesList]);
+
+  const handleSendChatMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatMessageInput.trim()) return;
+    const newMsg = {
+      sender: loggedStudent ? loggedStudent.name : 'زائر كريم',
+      text: chatMessageInput,
+      time: new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'})
+    };
+    setChatMessagesList([...chatMessagesList, newMsg]);
+    setChatMessageInput('');
+    setSuccessMessage('تم إرسال رسالتك بنجاح إلى الإدارة!');
+    setTimeout(() => setSuccessMessage(null), 3000);
+  };
+
   const [showInstallGuideModal, setShowInstallGuideModal] = useState<boolean>(false);
 
-  // زر تثبيت التطبيق السريع (PWA) مع إخفائه تلقائياً إذا تم تثبيته بالفعل
   const [deferredPrompt, setDeferredPrompt] = useState<any>(() => (window as any).deferredPrompt || null);
   const [showInstallBtn, setShowInstallBtn] = useState<boolean>(() => {
     if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
@@ -136,11 +158,6 @@ export function App() {
   useEffect(() => {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
-
-  const getTelegramUrl = (usernameOrLink: string, text: string) => {
-    let clean = (usernameOrLink || MY_TELEGRAM_LINK).replace('https://t.me/', '').replace('t.me/', '').replace('@', '').trim();
-    return `https://t.me/${clean}?text=${encodeURIComponent(text)}`;
-  };
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
@@ -502,6 +519,47 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
       
+      {/* نافذة نظام الدردشة الداخلية الفورية مع الإدارة */}
+      {showChatModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full h-[80vh] p-6 shadow-2xl relative flex flex-col text-right">
+            <button onClick={() => setShowChatModal(false)} className="absolute top-4 left-4 w-9 h-9 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
+              <X className="w-4 h-4" />
+            </button>
+            <div className="flex items-center gap-3 pb-4 border-b">
+              <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center font-bold">💬</div>
+              <div>
+                <h3 className="font-black text-slate-900 text-base">دردشة ودعم منصة النابغة</h3>
+                <p className="text-xs text-slate-500">تواصل مباشر مع الإدارة أو استفسر عن اشتراكات الـ VIP</p>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 my-3 bg-slate-50 rounded-2xl border">
+              {chatMessagesList.map((msg, mIdx) => (
+                <div key={mIdx} className={`p-3 rounded-2xl text-xs font-bold max-w-[80%] ${msg.sender === 'الإدارة' ? 'bg-indigo-600 text-white ml-auto' : 'bg-white border text-slate-800 mr-auto shadow-sm'}`}>
+                  <div className="text-[10px] opacity-75 mb-1">{msg.sender} • {msg.time}</div>
+                  <div>{msg.text}</div>
+                </div>
+              ))}
+            </div>
+
+            <form onSubmit={handleSendChatMessage} className="flex gap-2 pt-2 border-t">
+              <input 
+                type="text" 
+                value={chatMessageInput} 
+                onChange={(e) => setChatMessageInput(e.target.value)} 
+                placeholder="اكتب رسالتك أو استفسارك هنا..." 
+                className="flex-1 px-4 py-2.5 rounded-xl border text-xs font-bold bg-white" 
+                autoFocus
+              />
+              <button type="submit" className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow">
+                إرسال 🚀
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* نافذة إرشادات التثبيت الداخلية الأنيقة */}
       {showInstallGuideModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
@@ -516,8 +574,8 @@ export function App() {
             </div>
             
             <div className="space-y-3 text-xs font-bold text-slate-700 bg-slate-50 p-4 rounded-2xl border">
-              <div>🤖 <b>أندرويد (متصفح كروم):</b> افتح قائمة المتصفح (⋮) بالأعلى، ثم اختر <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b>[cite: 26].</div>
-              <div className="border-t pt-2">🍏 <b>آيفون (متصفح سفاري):</b> اضغط على زر المشاركة (📤) بالأسفل، ثم اختر <b>"إضافة إلى الشاشة الرئيسية"</b>[cite: 26].</div>
+              <div>🤖 <b>أندرويد (متصفح كروم):</b> افتح قائمة المتصفح (⋮) بالأعلى، ثم اختر <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b>.</div>
+              <div className="border-t pt-2">🍏 <b>آيفون (متصفح سفاري):</b> اضغط على زر المشاركة (📤) بالأسفل، ثم اختر <b>"إضافة إلى الشاشة الرئيسية"</b>.</div>
             </div>
 
             <button onClick={() => setShowInstallGuideModal(false)} className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs shadow-md">
@@ -782,14 +840,12 @@ export function App() {
               )}
             </div>
 
-            <a 
-              href={getTelegramUrl(vipSettings.telegram, `مرحباً، أود تفعيل اشتراك الـ VIP في منصة النابغة التعليمية.\nمعلومات الطالب:\nالاسم الثلاثي: ${loggedStudent ? loggedStudent.name : 'زائر'}\nاليوزر: ${loggedStudent ? loggedStudent.username : 'غير مسجل'}\nوهذا إيصال الدفع:`)} 
-              target="_blank" 
-              rel="noreferrer"
-              className="w-full py-3.5 bg-sky-500 hover:bg-sky-600 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm"
+            <button 
+              onClick={() => { setVipModalItem(null); setShowChatModal(true); }}
+              className="w-full py-3.5 bg-sky-500 hover:bg-sky-600 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm cursor-pointer"
             >
-              <Send className="w-5 h-5" /> إرسال إيصال الدفع عبر التليجرام
-            </a>
+              <MessageSquare className="w-5 h-5" /> إرسال إيصال الدفع عبر دردشة المنصة 💬
+            </button>
           </div>
         </div>
       )}
@@ -913,7 +969,7 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة مع أزرار منسقة */}
+      {/* رأس الصفحة مع زر الدردشة الفورية والـ VIP وزر التثبيت */}
       <div className="w-full bg-slate-900 py-2.5 px-4 sm:px-6 shadow-md flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow">ن</div>
@@ -924,16 +980,14 @@ export function App() {
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap">
-          <a 
-            href={getTelegramUrl(vipSettings.telegram, 'مرحباً، أود التواصل مع إدارة منصة النابغة التعليمية والاستفسار عن الاشتراكات.')}
-            target="_blank" 
-            rel="noreferrer"
-            className="px-2.5 py-1.5 bg-sky-600/30 border border-sky-500/40 text-sky-300 rounded-xl text-[11px] font-bold hover:bg-sky-600/40 transition-all flex items-center gap-1 shadow-sm"
+          {/* زر دردشة ورسائل الإدارة المباشر (يحل مشكلة التليجرام والموبايل نهائياً) */}
+          <button 
+            onClick={() => setShowChatModal(true)}
+            className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-[11px] font-bold shadow transition-all flex items-center gap-1.5 cursor-pointer"
           >
-            <Send className="w-3.5 h-3.5 text-sky-400" /> تواصل / VIP 💬
-          </a>
+            <MessageSquare className="w-3.5 h-3.5" /> دردشة ورسائل الإدارة 💬
+          </button>
 
-          {/* زر تثبيت التطبيق يظهر فقط إذا لم يكن التطبيق مثبتًا */}
           {showInstallBtn && (
             <button onClick={handleInstallApp} className="px-2.5 py-1.5 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 rounded-xl text-[11px] font-black shadow-md flex items-center gap-1 border border-yellow-200 cursor-pointer">
               <Smartphone className="w-3.5 h-3.5 text-slate-950" /> تثبيت التطبيق 📱
@@ -1016,7 +1070,7 @@ export function App() {
       {/* المحتوى الرئيسي */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8 overflow-x-hidden">
         
-        {/* البانر العلوي مع زر تغيير المرحلة المصغر والأنيق */}
+        {/* البانر العلوي مع زر تغيير المرحلة المصغر وأيقونة الدردشة */}
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-3xl shadow-xl text-white p-6 sm:p-8 relative overflow-hidden mt-1">
           <div className="relative z-10 max-w-3xl space-y-4">
             <div className="inline-flex items-center gap-2 bg-indigo-800/60 border border-indigo-600/30 px-3 py-1 rounded-xl text-xs font-bold text-indigo-200 flex-wrap">
