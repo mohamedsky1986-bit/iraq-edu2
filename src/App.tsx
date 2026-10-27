@@ -5,7 +5,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
-  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send, MessageSquare
+  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send, MessageSquare, Globe
 } from 'lucide-react';
 
 const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
@@ -68,29 +68,38 @@ export function App() {
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
 
-  // نافذة نظام الدردشة الداخلية الفورية مع الإدارة
-  const [showChatModal, setShowChatModal] = useState<boolean>(false);
-  const [chatMessageInput, setChatMessageInput] = useState<string>('');
-  const [chatMessagesList, setChatMessagesList] = useState<any[]>(() => safeGetStorage('nabough_chat_msgs', [
-    { sender: 'الإدارة', text: 'أهلاً بك يا بطل في منصة النابغة التعليمية! كيف يمكننا مساعدتك اليوم؟', time: 'الآن' }
+  // نظام الدردشة العامة التفاعلية بين الطلاب
+  const [showPublicChatModal, setShowPublicChatModal] = useState<boolean>(false);
+  const [publicChatInput, setPublicChatInput] = useState<string>('');
+  const [publicChatMessages, setPublicChatMessages] = useState<any[]>(() => safeGetStorage('nabough_public_chat', [
+    { id: '1', sender: 'أحمد علي (الأول المتوسط)', text: 'أهلاً بالجميع، هل من يساعدني في حل مسألة الرياضيات؟', time: '10:00 ص' },
+    { id: '2', sender: 'فاطمة حسن (الثالث المتوسط)', text: 'مرحباً أحمد، اطرح المسألة هنا لنتعاون في حلها!', time: '10:05 ص' }
   ]));
 
   useEffect(() => {
-    localStorage.setItem('nabough_chat_msgs', JSON.stringify(chatMessagesList));
-  }, [chatMessagesList]);
+    localStorage.setItem('nabough_public_chat', JSON.stringify(publicChatMessages));
+  }, [publicChatMessages]);
 
-  const handleSendChatMessage = (e: React.FormEvent) => {
+  const handleSendPublicMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatMessageInput.trim()) return;
+    if (!publicChatInput.trim()) return;
+    
+    // كلمات مسيئة محظورة تلقائياً للحفاظ على نظافة الدردشة
+    const forbiddenWords = ['شتم', 'عيب', 'كلمة_سيئة'];
+    const hasForbidden = forbiddenWords.some(w => publicChatInput.includes(w));
+    if (hasForbidden) {
+      alert('⚠️ عذراً، هذه الكلمة محظورة وفقاً لسياسة وآداب النشر في منصة النابغة.');
+      return;
+    }
+
     const newMsg = {
-      sender: loggedStudent ? loggedStudent.name : 'زائر كريم',
-      text: chatMessageInput,
+      id: Date.now().toString(),
+      sender: loggedStudent ? `${loggedStudent.name} (${loggedStudent.stage})` : (isAdmin ? 'مدير المنصة 🎓' : 'زائر كريم'),
+      text: publicChatInput,
       time: new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'})
     };
-    setChatMessagesList([...chatMessagesList, newMsg]);
-    setChatMessageInput('');
-    setSuccessMessage('تم إرسال رسالتك بنجاح إلى الإدارة!');
-    setTimeout(() => setSuccessMessage(null), 3000);
+    setPublicChatMessages([...publicChatMessages, newMsg]);
+    setPublicChatInput('');
   };
 
   const [showInstallGuideModal, setShowInstallGuideModal] = useState<boolean>(false);
@@ -158,6 +167,11 @@ export function App() {
   useEffect(() => {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
+
+  const getTelegramUrl = (usernameOrLink: string, text: string) => {
+    let clean = (usernameOrLink || MY_TELEGRAM_LINK).replace('https://t.me/', '').replace('t.me/', '').replace('@', '').trim();
+    return `https://t.me/${clean}?text=${encodeURIComponent(text)}`;
+  };
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
@@ -519,41 +533,59 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
       
-      {/* نافذة نظام الدردشة الداخلية الفورية مع الإدارة */}
-      {showChatModal && (
+      {/* نافذة الدردشة العامة التفاعلية بين الطلاب */}
+      {showPublicChatModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full h-[80vh] p-6 shadow-2xl relative flex flex-col text-right">
-            <button onClick={() => setShowChatModal(false)} className="absolute top-4 left-4 w-9 h-9 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
+          <div className="bg-white rounded-3xl max-w-xl w-full h-[85vh] p-6 shadow-2xl relative flex flex-col text-right">
+            <button onClick={() => setShowPublicChatModal(false)} className="absolute top-4 left-4 w-9 h-9 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
               <X className="w-4 h-4" />
             </button>
             <div className="flex items-center gap-3 pb-4 border-b">
-              <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center font-bold">💬</div>
+              <div className="w-11 h-11 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-lg">🌐</div>
               <div>
-                <h3 className="font-black text-slate-900 text-base">دردشة ودعم منصة النابغة</h3>
-                <p className="text-xs text-slate-500">تواصل مباشر مع الإدارة أو استفسر عن اشتراكات الـ VIP</p>
+                <h3 className="font-black text-slate-900 text-base">الدردشة العامة للطلبة (سؤال وجواب ونقاشات)</h3>
+                <p className="text-xs text-slate-500">تواصل بحرية مع زملائك الطلبة في كافة المراحل الدراسية</p>
               </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-3 my-3 bg-slate-50 rounded-2xl border">
-              {chatMessagesList.map((msg, mIdx) => (
-                <div key={mIdx} className={`p-3 rounded-2xl text-xs font-bold max-w-[80%] ${msg.sender === 'الإدارة' ? 'bg-indigo-600 text-white ml-auto' : 'bg-white border text-slate-800 mr-auto shadow-sm'}`}>
-                  <div className="text-[10px] opacity-75 mb-1">{msg.sender} • {msg.time}</div>
-                  <div>{msg.text}</div>
+              {publicChatMessages.map((msg) => (
+                <div key={msg.id} className="p-3.5 bg-white rounded-2xl border border-slate-200/80 shadow-sm relative group space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-indigo-700 border-b pb-1">
+                    <span>👤 {msg.sender}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-400 font-mono text-[10px]">{msg.time}</span>
+                      {isAdmin && (
+                        <button 
+                          onClick={() => {
+                            if (window.confirm('هل تريد حذف هذه الرسالة؟')) {
+                              setPublicChatMessages(publicChatMessages.filter(m => m.id !== msg.id));
+                            }
+                          }}
+                          className="text-rose-500 hover:bg-rose-50 p-1 rounded font-bold"
+                          title="حذف رسالة مخالفة"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs font-bold text-slate-800 leading-relaxed pt-1">{msg.text}</p>
                 </div>
               ))}
             </div>
 
-            <form onSubmit={handleSendChatMessage} className="flex gap-2 pt-2 border-t">
+            <form onSubmit={handleSendPublicMessage} className="flex gap-2 pt-2 border-t">
               <input 
                 type="text" 
-                value={chatMessageInput} 
-                onChange={(e) => setChatMessageInput(e.target.value)} 
-                placeholder="اكتب رسالتك أو استفسارك هنا..." 
-                className="flex-1 px-4 py-2.5 rounded-xl border text-xs font-bold bg-white" 
+                value={publicChatInput} 
+                onChange={(e) => setPublicChatInput(e.target.value)} 
+                placeholder="اكتب سؤالك أو استفسارك لزملائك هنا..." 
+                className="flex-1 px-4 py-3 rounded-xl border text-xs font-bold bg-white" 
                 autoFocus
               />
-              <button type="submit" className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow">
-                إرسال 🚀
+              <button type="submit" className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow flex items-center gap-1">
+                <Send className="w-3.5 h-3.5" /> إرسال
               </button>
             </form>
           </div>
@@ -752,7 +784,7 @@ export function App() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور (8 أحرف تحوي أحرف وأرقام)</label>
-                  <input type="password" required value={studentLoginPass} onChange={(e) => setStudentLoginPass(e.target.value)} placeholder="كلمة المرور القوية..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
+                  <input type="password" required value={studentLoginPass} onChange={(e) => setNewStudentPass(e.target.value)} placeholder="كلمة المرور القوية..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold font-mono" />
                 </div>
 
                 <button type="submit" className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs shadow-md">
@@ -841,10 +873,10 @@ export function App() {
             </div>
 
             <button 
-              onClick={() => { setVipModalItem(null); setShowChatModal(true); }}
-              className="w-full py-3.5 bg-sky-500 hover:bg-sky-600 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm cursor-pointer"
+              onClick={() => { setVipModalItem(null); setShowPublicChatModal(true); }}
+              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm cursor-pointer"
             >
-              <MessageSquare className="w-5 h-5" /> إرسال إيصال الدفع عبر دردشة المنصة 💬
+              <Globe className="w-5 h-5" /> إرسال إيصال الدفع عبر الدردشة العامة 🌐
             </button>
           </div>
         </div>
@@ -969,7 +1001,7 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة مع زر الدردشة الفورية والـ VIP وزر التثبيت */}
+      {/* رأس الصفحة مع زر الدردشة العامة بالاعلى */}
       <div className="w-full bg-slate-900 py-2.5 px-4 sm:px-6 shadow-md flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow">ن</div>
@@ -980,12 +1012,12 @@ export function App() {
         </div>
 
         <div className="flex items-center gap-1.5 flex-wrap">
-          {/* زر دردشة ورسائل الإدارة المباشر (يحل مشكلة التليجرام والموبايل نهائياً) */}
+          {/* زر الدردشة العامة الفورية في الأعلى */}
           <button 
-            onClick={() => setShowChatModal(true)}
-            className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-[11px] font-bold shadow transition-all flex items-center gap-1.5 cursor-pointer"
+            onClick={() => setShowPublicChatModal(true)}
+            className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[11px] font-bold shadow transition-all flex items-center gap-1.5 cursor-pointer"
           >
-            <MessageSquare className="w-3.5 h-3.5" /> دردشة ورسائل الإدارة 💬
+            <Globe className="w-3.5 h-3.5" /> الدردشة العامة للطلبة 🌐
           </button>
 
           {showInstallBtn && (
