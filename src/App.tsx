@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 
 // 🔴 ضع معرف التليجرام الحقيقي الخاص بك هنا (مثلاً: YourUsername بدون علامة @)
-const MY_TELEGRAM_USERNAME = 'YourUsername'; 
+const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
 
 const safeGetStorage = (key: string, fallback: any) => {
   try {
@@ -129,7 +129,7 @@ export function App() {
       price: '25,000 دينار عراقي / شهرياً',
       mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
       transferPhone: '07701234567 (زين كاش / آسياسيل)',
-      telegram: MY_TELEGRAM_USERNAME
+      telegram: MY_TELEGRAM_LINK
     });
   });
 
@@ -137,9 +137,8 @@ export function App() {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
 
-  // دالة تليجرام مدعومة للموبايل والحاسبة
   const getTelegramUrl = (usernameOrLink: string, text: string) => {
-    let clean = (usernameOrLink || MY_TELEGRAM_USERNAME).replace('https://t.me/', '').replace('t.me/', '').replace('@', '').trim();
+    let clean = (usernameOrLink || MY_TELEGRAM_LINK).replace('https://t.me/', '').replace('t.me/', '').replace('@', '').trim();
     return `https://t.me/${clean}?text=${encodeURIComponent(text)}`;
   };
 
@@ -1891,7 +1890,7 @@ export function App() {
                 <input type="text" value={vipSettings.transferPhone} onChange={(e) => setVipSettings({...vipSettings, transferPhone: e.target.value})} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">معرف التليجرام لاستلام الإيصالات والتواصل (مثلاً: https://t.me/YourUsername)</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">معرف التليجرام لاستلام الإيصالات والتواصل (مثلاً: YourUsername)</label>
                 <input type="text" value={vipSettings.telegram} onChange={(e) => setVipSettings({...vipSettings, telegram: e.target.value})} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
               </div>
               <button type="submit" className="w-full py-3 bg-amber-600 text-white font-bold rounded-xl text-xs shadow-md">
@@ -1963,4 +1962,4 @@ export function App() {
   );
 }
 
-, export default App;
+export default App;
