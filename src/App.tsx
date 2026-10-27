@@ -522,8 +522,8 @@ export function App() {
             </div>
             
             <div className="space-y-3 text-xs font-bold text-slate-700 bg-slate-50 p-4 rounded-2xl border">
-              <div>🤖 <b>أندرويد (متصفح كروم):</b> افتح قائمة المتصفح (⋮) بالأعلى، ثم اختر <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b>[cite: 26].</div>
-              <div className="border-t pt-2">🍏 <b>آيفون (متصفح سفاري):</b> اضغط على زر المشاركة (📤) بالأسفل، ثم اختر <b>"إضافة إلى الشاشة الرئيسية"</b>[cite: 26].</div>
+              <div>🤖 <b>أندرويد (متصفح كروم):</b> افتح قائمة المتصفح (⋮) بالأعلى، ثم اختر <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b>.</div>
+              <div className="border-t pt-2">🍏 <b>آيفون (متصفح سفاري):</b> اضغط على زر المشاركة (📤) بالأسفل، ثم اختر <b>"إضافة إلى الشاشة الرئيسية"</b>.</div>
             </div>
 
             <button onClick={() => setShowInstallGuideModal(false)} className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs shadow-md">
