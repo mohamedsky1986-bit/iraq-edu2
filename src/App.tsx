@@ -8,7 +8,7 @@ import {
   Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send
 } from 'lucide-react';
 
-// 🔴 ضع معرف تليجرام الخاص بك هنا (مثلاً: https://t.me/YourUsername أو معرفك) ليتواصل معك الطلاب مباشرة
+// 🔴 ضع معرف تليجرام الحقيقي الخاص بك هنا (مثلاً: YourUsername بدون @) ليعمل بدقة على الموبايل والحاسبة
 const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
 
 const safeGetStorage = (key: string, fallback: any) => {
@@ -73,7 +73,7 @@ export function App() {
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
 
-  // نافذة إرشادات التثبيت الأنيقة
+  // نافذة إرشادات التثبيت الداخلية الأنيقة
   const [showInstallGuideModal, setShowInstallGuideModal] = useState<boolean>(false);
 
   // زر تثبيت التطبيق السريع (PWA) مع إخفائه تلقائياً إذا تم تثبيته بالفعل
@@ -141,12 +141,11 @@ export function App() {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
 
+  // دالة تليجرام معدلة لتفتح المحادثة بدقة على الموبايل والكمبيوتر بدون أخطاء "لم يتم العثور على المستخدم"
   const getTelegramUrl = (link: string, text: string) => {
     let targetLink = link || MY_TELEGRAM_LINK;
-    if (!targetLink.startsWith('http')) {
-      targetLink = `https://t.me/${targetLink.replace('@', '')}`;
-    }
-    return `${targetLink}?text=${encodeURIComponent(text)}`;
+    let username = targetLink.replace('https://t.me/', '').replace('t.me/', '').replace('@', '').trim();
+    return `https://t.me/${username}?text=${encodeURIComponent(text)}`;
   };
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
