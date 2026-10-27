@@ -5,11 +5,11 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
-  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame
+  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send
 } from 'lucide-react';
 
-// 🔴 ضع رقم الواتساب الحقيقي الخاص بك هنا (مع رمز الدولة، مثلاً: 9647712345678) لضمان وصول الرسائل لرقمك مباشرة
-const MY_WHATSAPP_NUMBER = '9647701234567'; 
+// 🔴 ضع معرف تليجرام الخاص بك هنا (مثلاً: https://t.me/YourUsername أو معرفك) ليتواصل معك الطلاب مباشرة
+const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
 
 const safeGetStorage = (key: string, fallback: any) => {
   try {
@@ -61,7 +61,7 @@ export function App() {
   }, []);
 
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    return localStorage.getItem('nabough_is_admin') === 'true';
+    return localStorage.getItem('nabough_is_admin'] === 'true';
   });
 
   useEffect(() => {
@@ -72,6 +72,9 @@ export function App() {
   const [adminPinInput, setAdminPinInput] = useState<string>('');
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
+
+  // نافذة إرشادات التثبيت الأنيقة بدلاً من رسالة المتصفح المنفرة
+  const [showInstallGuideModal, setShowInstallGuideModal] = useState<boolean>(false);
 
   // زر تثبيت التطبيق السريع (PWA) مع إخفائه تلقائياً إذا تم تثبيته بالفعل
   const [deferredPrompt, setDeferredPrompt] = useState<any>(() => (window as any).deferredPrompt || null);
@@ -115,7 +118,8 @@ export function App() {
       setDeferredPrompt(null);
       (window as any).deferredPrompt = null;
     } else {
-      alert('📱 لتثبيت منصة النابغة على شاشة هاتفك:\n- أندرويد (متصفح كروم): افتح قائمة المتصفح (⋮) ثم اختر "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".\n- آيفون (متصفح سفاري): اضغط زر المشاركة (📤) ثم اختر "إضافة إلى الشاشة الرئيسية".');
+      // إظهار نافذة إرشادات التثبيت الداخلية الأنيقة
+      setShowInstallGuideModal(true);
     }
   };
 
@@ -130,7 +134,7 @@ export function App() {
       price: '25,000 دينار عراقي / شهرياً',
       mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
       transferPhone: '07701234567 (زين كاش / آسياسيل)',
-      whatsapp: MY_WHATSAPP_NUMBER
+      telegram: MY_TELEGRAM_LINK
     });
   });
 
@@ -138,21 +142,20 @@ export function App() {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
 
-  // دالة تصفية وتجهيز رابط الواتساب الرسمي (يعمل بدقة على الموبايل والحاسبة بدون أخطاء)
-  const getCleanWhatsAppUrl = (phone: string, text: string) => {
-    let targetPhone = phone || MY_WHATSAPP_NUMBER;
-    let cleanPhone = targetPhone.replace(/\D/g, '');
-    if (cleanPhone.startsWith('0')) {
-      cleanPhone = '964' + cleanPhone.substring(1);
+  // دالة توليد رابط التليجرام مع رسالة تفصيلية للطالب
+  const getTelegramUrl = (link: string, text: string) => {
+    let targetLink = link || MY_TELEGRAM_LINK;
+    if (!targetLink.startsWith('http')) {
+      targetLink = `https://t.me/${targetLink.replace('@', '')}`;
     }
-    return `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`;
+    return `${targetLink}?text=${encodeURIComponent(text)}`;
   };
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
-  const [loggedStudent, setLoggedStudent] = useState<any | null>(() => {
+  const [loggedStudent, setLoggedStudent] = useState<any | null>(([cite: 25] => {
     return safeGetStorage('nabough_logged_student', null);
-  });
+  })());
 
   useEffect(() => {
     if (loggedStudent) {
@@ -514,6 +517,31 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
       
+      {/* نافذة إرشادات التثبيت الداخلية الأنيقة بدلاً من رسالة المتصفح المنفرة */}
+      {showInstallGuideModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-right">
+            <button onClick={() => setShowInstallGuideModal(false)} className="absolute top-4 left-4 w-8 h-8 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
+              <X className="w-4 h-4" />
+            </button>
+            <div className="text-center space-y-1">
+              <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto text-xl font-black">📱</div>
+              <h3 className="text-lg font-black text-slate-900">تثبيت منصة النابغة على هاتفك</h3>
+              <p className="text-xs text-slate-500">اختر متصفحك لتثبيت التطبيق بسهولة:</p>
+            </div>
+            
+            <div className="space-y-3 text-xs font-bold text-slate-700 bg-slate-50 p-4 rounded-2xl border">
+              <div>🤖 <b>أندرويد (متصفح كروم):</b> افتح قائمة المتصفح (⋮) بالأعلى، ثم اختر <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b>[cite: 26].</div>
+              <div className="border-t pt-2">🍏 <b>آيفون (متصفح سفاري):</b> اضغط على زر المشاركة (📤) بالأسفل، ثم اختر <b>"إضافة إلى الشاشة الرئيسية"</b>[cite: 26].</div>
+            </div>
+
+            <button onClick={() => setShowInstallGuideModal(false)} className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs shadow-md">
+              حسناً، فهمت 🌟
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* نافذة تسجيل دخول الأدمن عبر القفل السري */}
       {showAdminLoginModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
@@ -735,7 +763,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة تفاصيل الدفع VIP */}
+      {/* نافذة تفاصيل الدفع VIP (باستخدام التليجرام أو الواتساب) */}
       {vipModalItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative space-y-6 text-right">
@@ -770,12 +798,12 @@ export function App() {
             </div>
 
             <a 
-              href={getCleanWhatsAppUrl(vipSettings.whatsapp, `مرحباً، أود تفعيل اشتراك الـ VIP في منصة النابغة التعليمية.\nمعلومات الطالب:\nالاسم الثلاثي: ${loggedStudent ? loggedStudent.name : 'زائر'}\nاليوزر: ${loggedStudent ? loggedStudent.username : 'غير مسجل'}\nوهذا إيصال الدفع:`)} 
+              href={getTelegramUrl(vipSettings.telegram, `مرحباً، أود تفعيل اشتراك الـ VIP في منصة النابغة التعليمية.\nمعلومات الطالب:\nالاسم الثلاثي: ${loggedStudent ? loggedStudent.name : 'زائر'}\nاليوزر: ${loggedStudent ? loggedStudent.username : 'غير مسجل'}\nوهذا إيصال الدفع:`)} 
               target="_blank" 
               rel="noreferrer"
-              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm"
+              className="w-full py-3.5 bg-sky-500 hover:bg-sky-600 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm"
             >
-              <MessageCircle className="w-5 h-5" /> إرسال إيصال الدفع عبر الواتساب
+              <Send className="w-5 h-5" /> إرسال إيصال الدفع عبر التليجرام
             </a>
           </div>
         </div>
@@ -900,7 +928,7 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة مع ترتيب الأزرار وتثبيت التطبيق على اليسار وإخفائه إذا كان التطبيق مثبتًا */}
+      {/* رأس الصفحة مع أزرار منسقة */}
       <div className="w-full bg-slate-900 py-2.5 px-4 sm:px-6 shadow-md flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow">ن</div>
@@ -912,12 +940,12 @@ export function App() {
 
         <div className="flex items-center gap-1.5 flex-wrap">
           <a 
-            href={getCleanWhatsAppUrl(vipSettings.whatsapp, 'مرحباً، أود التواصل مع إدارة منصة النابغة التعليمية والاستفسار عن الاشتراكات.')}
+            href={getTelegramUrl(vipSettings.telegram, 'مرحباً، أود التواصل مع إدارة منصة النابغة التعليمية والاستفسار عن الاشتراكات.')}
             target="_blank" 
             rel="noreferrer"
-            className="px-2.5 py-1.5 bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 rounded-xl text-[11px] font-bold hover:bg-emerald-600/40 transition-all flex items-center gap-1 shadow-sm"
+            className="px-2.5 py-1.5 bg-sky-600/30 border border-sky-500/40 text-sky-300 rounded-xl text-[11px] font-bold hover:bg-sky-600/40 transition-all flex items-center gap-1 shadow-sm"
           >
-            <MessageCircle className="w-3.5 h-3.5 text-emerald-400" /> تواصل / VIP 💬
+            <Send className="w-3.5 h-3.5 text-sky-400" /> تواصل / VIP 💬
           </a>
 
           {/* زر تثبيت التطبيق يظهر فقط إذا لم يكن التطبيق مثبتًا */}
@@ -1061,7 +1089,7 @@ export function App() {
           </div>
         </div>
 
-        {/* 1. تبويب المنهج الدراسي مع خيارات الترتيب (أعلى/أسفل) والتعديل */}
+        {/* 1. تبويب المنهج الدراسي */}
         {activeTab === 'curriculum' && !selectedSubjectId && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -1205,7 +1233,7 @@ export function App() {
             {filteredSubjects.length === 0 && (
               <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 space-y-3">
                 <p className="text-slate-500 font-bold text-base">لا توجد مواد دراسية مضافة لهذه المرحلة ({loggedStudent?.stage}) حالياً.</p>
-                <p className="text-xs text-indigo-600 font-bold">💡 نصيحة: يمكنك الذهاب للوحة الأدمن ونشر مواد دراسية خاصة بهذا الصف لكي تظهر للطالب فوراً.</p>
+                <p className="text-xs text-indigo-600 font-bold">💡 نصيحة: يمكنك الذهاب لوحة الأدمن ونشر مواد دراسية خاصة بهذا الصف لكي تظهر للطالب فوراً.</p>
               </div>
             )}
           </div>
@@ -1301,7 +1329,7 @@ export function App() {
                                 setEditNoteImage(note.image || '');
                                 setEditNoteVip(note.isVip || false);
                               }} className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg" title="تعديل الشرح">
-                                <Edit3 className="w-4 h-4" />
+                                <Edit3 className="w-3.5 h-3.5" />
                               </button>
                               <button onClick={async () => {
                                 const updatedNotes = currentSub.notes.filter((n: any) => n.id !== note.id);
@@ -1312,7 +1340,7 @@ export function App() {
                                 setSuccessMessage('تم حذف الشرح بنجاح.');
                                 setTimeout(() => setSuccessMessage(null), 3000);
                               }} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg" title="حذف الشرح">
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           )}
@@ -1877,11 +1905,11 @@ export function App() {
                 <input type="text" value={vipSettings.transferPhone} onChange={(e) => setVipSettings({...vipSettings, transferPhone: e.target.value})} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">رقم الواتساب لاستلام الإيصالات (بدون +، مثلاً: 96477...)</label>
-                <input type="text" value={vipSettings.whatsapp} onChange={(e) => setVipSettings({...vipSettings, whatsapp: e.target.value})} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
+                <label className="block text-xs font-bold text-slate-700 mb-1">رابط أو معرف التليجرام للتواصل (مثلاً: https://t.me/YourUsername)</label>
+                <input type="text" value={vipSettings.telegram} onChange={(e) => setVipSettings({...vipSettings, telegram: e.target.value})} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
               </div>
               <button type="submit" className="w-full py-3 bg-amber-600 text-white font-bold rounded-xl text-xs shadow-md">
-                حفظ إعدادات الـ VIP ورقم الواتساب
+                حفظ إعدادات الـ VIP ومعرف التليجرام
               </button>
             </form>
           </div>
