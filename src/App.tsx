@@ -5,7 +5,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from 'firebase
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
-  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink
+  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame
 } from 'lucide-react';
 
 // 🔴 ضع رقم الواتساب الحقيقي الخاص بك هنا (مع رمز الدولة، مثلاً: 9647712345678) لضمان وصول الرسائل لرقمك مباشرة
@@ -26,7 +26,7 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // حققنا أيقونة التطبيق الاحترافية (قبعة تخرج وكتب) للـ PWA لتظهر بشكل جذاب على شاشة الهاتف
+  // حقن أيقونة التطبيق الاحترافية (قبعة تخرج وكتب) للـ PWA لتظهر بشكل جذاب على شاشة الهاتف
   useEffect(() => {
     const svgIcon = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><rect width="512" height="512" rx="110" fill="#0f172a"/><path d="M256 120L60 210l196 90 196-90-196-90z" fill="#3b82f6"/><path d="M120 250v100c0 40 60 70 136 70s136-30 136-70V250L256 310l-136-60z" fill="#1e3a8a"/><path d="M410 230v110a15 15 0 01-30 0V245l-35 16v59a50 50 0 11-30 0v-59l-85 39 196 90 196-90-182-83z" fill="#fbbf24"/></svg>`;
     const blobIcon = new Blob([svgIcon], { type: 'image/svg+xml' });
@@ -115,7 +115,7 @@ export function App() {
       setDeferredPrompt(null);
       (window as any).deferredPrompt = null;
     } else {
-      alert('📱 التطبيق جاهز للتثبيت! يمكنك إضافته لشاشة هاتفك عبر قائمة المتصفح (⋮) واختيار "إضافة إلى الشاشة الرئيسية".');
+      alert('📱 لتثبيت منصة النابغة على شاشة هاتفك:\n- أندرويد (متصفح كروم): افتح قائمة المتصفح (⋮) ثم اختر "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".\n- آيفون (متصفح سفاري): اضغط زر المشاركة (📤) ثم اختر "إضافة إلى الشاشة الرئيسية".');
     }
   };
 
@@ -138,14 +138,14 @@ export function App() {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
 
-  // دالة تصفية وتجهيز رقم الواتساب برمجياً لضمان العمل بدون أخطاء
+  // دالة تصفية وتجهيز رابط الواتساب الرسمي (يعمل بدقة على الموبايل والحاسبة بدون أخطاء)
   const getCleanWhatsAppUrl = (phone: string, text: string) => {
     let targetPhone = phone || MY_WHATSAPP_NUMBER;
     let cleanPhone = targetPhone.replace(/\D/g, '');
     if (cleanPhone.startsWith('0')) {
       cleanPhone = '964' + cleanPhone.substring(1);
     }
-    return `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`;
+    return `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(text)}`;
   };
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
@@ -221,6 +221,9 @@ export function App() {
   const [editPass, setEditPass] = useState('');
   const [editStage, setEditStage] = useState('');
   const [editName, setEditName] = useState('');
+
+  // حالات إضافة الأسئلة للامتحان (مع خيار وزاري مهم)
+  const [isMinisterialQuestion, setIsMinisterialQuestion] = useState<boolean>(false);
 
   const allStagesList = [
     { id: 'first_intermediate', name: 'الأول المتوسط' },
@@ -365,16 +368,17 @@ export function App() {
   const handleAddQuestionToQuiz = () => {
     if (!questionText) return;
     if (questionType === 'mcq') {
-      setCurrentQuestionsList([...currentQuestionsList, { type: 'mcq', q: questionText, options: mcqOptions, correct: mcqCorrect }]);
+      setCurrentQuestionsList([...currentQuestionsList, { type: 'mcq', q: questionText, options: mcqOptions, correct: mcqCorrect, isMinisterial: isMinisterialQuestion }]);
     } else if (questionType === 'fill') {
-      setCurrentQuestionsList([...currentQuestionsList, { type: 'fill', q: questionText, correct: fillCorrect }]);
+      setCurrentQuestionsList([...currentQuestionsList, { type: 'fill', q: questionText, correct: fillCorrect, isMinisterial: isMinisterialQuestion }]);
     } else {
-      setCurrentQuestionsList([...currentQuestionsList, { type: 'true_false', q: questionText, options: ['صح', 'خطأ'], correct: tfCorrect }]);
+      setCurrentQuestionsList([...currentQuestionsList, { type: 'true_false', q: questionText, options: ['صح', 'خطأ'], correct: tfCorrect, isMinisterial: isMinisterialQuestion }]);
     }
     setQuestionText('');
     setMcqOptions(['', '', '', '']);
     setMcqCorrect('');
     setFillCorrect('');
+    setIsMinisterialQuestion(false);
     setSuccessMessage('تمت إضافة السؤال بنجاح إلى ورقة الامتحان!');
     setTimeout(() => setSuccessMessage(null), 2500);
   };
@@ -422,7 +426,8 @@ export function App() {
         userAns, 
         correct: q.correct, 
         isCorrect: evaluation.isCorrect || evaluation.scoreRatio >= 0.8,
-        partialScore: questionGrade
+        partialScore: questionGrade,
+        isMinisterial: q.isMinisterial
       };
     });
 
@@ -448,6 +453,38 @@ export function App() {
       } catch(e) {}
     }
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
+  };
+
+  // دوال تقديم وتأخير العناصر (المواد، الشروحات، الملازم، الامتحانات)
+  const handleMoveItem = async (subjectId: string, listKey: 'notes' | 'videos' | 'booklets' | 'quizzes', index: number, direction: 'up' | 'down') => {
+    const targetSub = subjects.find(s => s.id === subjectId);
+    if (!targetSub) return;
+    const list = [...(targetSub[listKey] || [])];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= list.length) return;
+
+    const temp = list[index];
+    list[index] = list[targetIndex];
+    list[targetIndex] = temp;
+
+    try {
+      await updateDoc(doc(db, 'subjects', subjectId), { [listKey]: list });
+      const updatedSubs = subjects.map(s => s.id === subjectId ? { ...s, [listKey]: list } : s);
+      setSubjects(updatedSubs);
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+    } catch(e) {}
+  };
+
+  const handleMoveSubject = async (index: number, direction: 'up' | 'down') => {
+    const list = [...subjects];
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= list.length) return;
+
+    const temp = list[index];
+    list[index] = list[targetIndex];
+    list[targetIndex] = temp;
+    setSubjects(list);
+    localStorage.setItem('nabough_cached_subjects', JSON.stringify(list));
   };
 
   // تصفية المواد فوراً تلقائياً حسب مرحلة الطالب المسجل
@@ -534,7 +571,10 @@ export function App() {
               {viewingStudentAnswers.examDetails && viewingStudentAnswers.examDetails.length > 0 ? (
                 viewingStudentAnswers.examDetails.map((det: any, dIdx: number) => (
                   <div key={dIdx} className={`p-4 rounded-2xl border ${det.isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
-                    <div className="font-bold text-sm">س{dIdx+1}: {det.q}</div>
+                    <div className="font-bold text-sm flex items-center gap-2">
+                      <span>س{dIdx+1}: {det.q}</span>
+                      {det.isMinisterial && <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded font-black">🔥 وزاري مهم</span>}
+                    </div>
                     <div className="text-xs mt-1.5 flex flex-col gap-1">
                       <span>إجابة الطالب: <b>{det.userAns || 'بدون إجابة'}</b></span>
                       <span>الإجابة النموذجية: <b>{det.correct}</b></span>
@@ -811,7 +851,10 @@ export function App() {
                 <div className="space-y-3 text-right">
                   {quizResult.details.map((det: any, dIdx: number) => (
                     <div key={dIdx} className={`p-4 rounded-2xl border ${det.isCorrect ? 'bg-emerald-50 border-emerald-200 text-emerald-900' : 'bg-rose-50 border-rose-200 text-rose-900'}`}>
-                      <div className="font-bold text-sm">س{dIdx+1}: {det.q}</div>
+                      <div className="font-bold text-sm flex items-center gap-2">
+                        <span>س{dIdx+1}: {det.q}</span>
+                        {det.isMinisterial && <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded font-black">🔥 وزاري مهم</span>}
+                      </div>
                       <div className="text-xs mt-1">إجابتك: <b>{det.userAns || 'بدون إجابة'}</b> (درجة السؤال: {det.partialScore}/100) {det.isCorrect ? '✅ صحيحة' : '❌ نقطة ضعف'}</div>
                     </div>
                   ))}
@@ -824,7 +867,10 @@ export function App() {
               <div className="space-y-6">
                 {activeQuiz.questions?.map((q: any, qIdx: number) => (
                   <div key={qIdx} className="p-5 rounded-2xl bg-slate-50 border border-slate-200 space-y-3">
-                    <div className="font-black text-slate-900 text-sm">السؤال {qIdx+1}: {q.q}</div>
+                    <div className="font-black text-slate-900 text-sm flex items-center gap-2 flex-wrap">
+                      <span>السؤال {qIdx+1}: {q.q}</span>
+                      {q.isMinisterial && <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded font-black">🔥 وزاري مهم</span>}
+                    </div>
                     {q.type === 'mcq' || q.type === 'true_false' ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {q.options.map((opt: string, oIdx: number) => (
@@ -854,7 +900,7 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة مع أزرار منسقة ومرتبة */}
+      {/* رأس الصفحة مع ترتيب الأزرار وتثبيت التطبيق على اليسار وإخفائه إذا كان التطبيق مثبتًا */}
       <div className="w-full bg-slate-900 py-2.5 px-4 sm:px-6 shadow-md flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow">ن</div>
@@ -957,7 +1003,7 @@ export function App() {
       {/* المحتوى الرئيسي */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8 overflow-x-hidden">
         
-        {/* البانر العلوي مع خيار تغيير المرحلة بشكل مصغر ونظيف */}
+        {/* البانر العلوي مع زر تغيير المرحلة المصغر والأنيق */}
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-3xl shadow-xl text-white p-6 sm:p-8 relative overflow-hidden mt-1">
           <div className="relative z-10 max-w-3xl space-y-4">
             <div className="inline-flex items-center gap-2 bg-indigo-800/60 border border-indigo-600/30 px-3 py-1 rounded-xl text-xs font-bold text-indigo-200 flex-wrap">
@@ -968,13 +1014,13 @@ export function App() {
               {isAdmin ? 'لوحة تحكم المدير العام والإدارة 🎓' : loggedStudent ? `مرحباً بك يا ${loggedStudent?.name} في مرحلة ${loggedStudent?.stage} 📚` : 'تصفح المناهج الدراسية والامتحانات التفاعلية 🎓'}
             </h1>
 
-            {/* زر تعديل المرحلة الدراسية بشكل مصغر وغير مزعج */}
+            {/* زر تعديل المرحلة الدراسية بشكل مصغر وأنيق */}
             {!isAdmin && loggedStudent && (
               <div className="pt-1">
                 {!isChangingStage ? (
                   <button 
                     onClick={() => setIsChangingStage(true)}
-                    className="px-3 py-1.5 bg-indigo-800/70 hover:bg-indigo-700 text-indigo-200 rounded-xl text-xs font-bold border border-indigo-500/30 transition-all shadow-sm inline-flex items-center gap-1.5"
+                    className="px-3 py-1.5 bg-indigo-800/70 hover:bg-indigo-700 text-indigo-200 rounded-xl text-xs font-bold border border-indigo-500/30 transition-all shadow-sm inline-flex items-center gap-1.5 cursor-pointer"
                   >
                     <span>🔄 تغيير المرحلة الدراسية</span>
                   </button>
@@ -1015,7 +1061,7 @@ export function App() {
           </div>
         </div>
 
-        {/* 1. تبويب المنهج الدراسي */}
+        {/* 1. تبويب المنهج الدراسي مع خيارات الترتيب (أعلى/أسفل) والتعديل */}
         {activeTab === 'curriculum' && !selectedSubjectId && (
           <div className="space-y-6">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -1049,7 +1095,7 @@ export function App() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredSubjects.map((sub) => (
+              {filteredSubjects.map((sub, sIdx) => (
                 <div 
                   key={sub.id}
                   onClick={() => {
@@ -1062,7 +1108,21 @@ export function App() {
                   className="bg-white rounded-3xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-slate-200/80 group flex flex-col justify-between relative cursor-pointer"
                 >
                   {isAdmin && (
-                    <div className="absolute top-3 left-3 flex items-center gap-1.5 z-25">
+                    <div className="absolute top-3 left-3 flex items-center gap-1 z-25">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleMoveSubject(sIdx, 'up'); }}
+                        className="w-7 h-7 bg-slate-800 hover:bg-slate-900 text-white rounded-lg flex items-center justify-center shadow"
+                        title="تقديم للأعلى"
+                      >
+                        <ArrowUp className="w-3.5 h-3.5" />
+                      </button>
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); handleMoveSubject(sIdx, 'down'); }}
+                        className="w-7 h-7 bg-slate-800 hover:bg-slate-900 text-white rounded-lg flex items-center justify-center shadow"
+                        title="تأخير للأسفل"
+                      >
+                        <ArrowDown className="w-3.5 h-3.5" />
+                      </button>
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1070,10 +1130,10 @@ export function App() {
                           setEditSubName(sub.name);
                           setEditSubImage(sub.image || '');
                         }}
-                        className="w-9 h-9 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl flex items-center justify-center shadow-lg transition-all"
+                        className="w-7 h-7 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center justify-center shadow"
                         title="تعديل المادة"
                       >
-                        <Edit3 className="w-4 h-4" />
+                        <Edit3 className="w-3.5 h-3.5" />
                       </button>
                       <button 
                         onClick={async (e) => {
@@ -1086,15 +1146,13 @@ export function App() {
                               localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                               setSuccessMessage('تم حذف المادة بنجاح.');
                               setTimeout(() => setSuccessMessage(null), 3000);
-                            } catch (err) {
-                              console.error(err);
-                            }
+                            } catch (err) { console.error(err); }
                           }
                         }}
-                        className="w-9 h-9 bg-rose-600 hover:bg-rose-700 text-white rounded-xl flex items-center justify-center shadow-lg transition-all"
+                        className="w-7 h-7 bg-rose-600 hover:bg-rose-700 text-white rounded-lg flex items-center justify-center shadow"
                         title="حذف المادة"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   )}
@@ -1145,8 +1203,9 @@ export function App() {
             </div>
 
             {filteredSubjects.length === 0 && (
-              <div className="bg-white rounded-3xl p-12 text-center border border-slate-200">
-                <p className="text-slate-500 font-bold text-base">لا توجد مواد دراسية مضافة لهذه المرحلة حالياً. (قم بإضافة مواد خاصة بهذه المرحلة من لوحة الأدمن).</p>
+              <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 space-y-3">
+                <p className="text-slate-500 font-bold text-base">لا توجد مواد دراسية مضافة لهذه المرحلة ({loggedStudent?.stage}) حالياً.</p>
+                <p className="text-xs text-indigo-600 font-bold">💡 نصيحة: يمكنك الذهاب للوحة الأدمن ونشر مواد دراسية خاصة بهذا الصف لكي تظهر للطالب فوراً.</p>
               </div>
             )}
           </div>
@@ -1170,13 +1229,13 @@ export function App() {
                 </button>
               </div>
 
-              {/* أ) الشروحات والتعاليل مع خيار التعديل */}
+              {/* أ) الشروحات والتعاليل مع أزرار الترتيب (أعلى/أسفل) والتعديل والحذف */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <NoteIcon className="w-5 h-5 text-amber-600" /> الشروحات والتعاليل والملاحظات التعليمية ({currentSub.notes?.length || 0})
                 </h4>
                 <div className="space-y-4">
-                  {currentSub.notes?.map((note: any) => (
+                  {currentSub.notes?.map((note: any, nIdx: number) => (
                     <div key={note.id} className="p-5 bg-white rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-sm gap-4 relative">
                       
                       {editingNoteId === note.id ? (
@@ -1228,7 +1287,13 @@ export function App() {
                           </div>
 
                           {isAdmin && (
-                            <div className="flex items-center gap-2 self-start">
+                            <div className="flex items-center gap-1.5 self-start">
+                              <button onClick={() => handleMoveItem(currentSub.id, 'notes', nIdx, 'up')} className="p-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg" title="تقديم للأعلى">
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => handleMoveItem(currentSub.id, 'notes', nIdx, 'down')} className="p-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg" title="تأخير للأسفل">
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
                               <button onClick={() => {
                                 setEditingNoteId(note.id);
                                 setEditNoteTitle(note.title);
@@ -1482,7 +1547,7 @@ export function App() {
 
                 {isAdmin && (
                   <div className="bg-white p-6 rounded-2xl border border-indigo-200 space-y-4">
-                    <h5 className="font-black text-slate-900 text-sm">🛠️ صياغة وإضافة امتحان تفاعلي جديد للمادة:</h5>
+                    <h5 className="font-black text-slate-900 text-sm">🛠️ صياغة وإضافة امتحان تفاعلي جديد للمادة (مع خيار وزاري مهم 🔥):</h5>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                       <div className="sm:col-span-2">
                         <label className="block text-xs font-bold text-slate-700 mb-1">عنوان الامتحان الرئيسي</label>
@@ -1529,6 +1594,12 @@ export function App() {
                       </div>
 
                       <input type="text" value={questionText} onChange={(e) => setQuestionText(e.target.value)} placeholder="نص السؤال..." className="w-full px-3 py-2 bg-white rounded-lg border text-xs font-bold" />
+
+                      {/* خيار وزاري مهم 🔥 */}
+                      <label className="flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-black text-amber-900 cursor-pointer">
+                        <input type="checkbox" checked={isMinisterialQuestion} onChange={(e) => setIsMinisterialQuestion(e.target.checked)} className="w-4 h-4 text-amber-600 rounded" />
+                        <span>🔥 تعليم هذا السؤال كـ (وزاري مهم)</span>
+                      </label>
 
                       {questionType === 'mcq' && (
                         <div className="space-y-2">
