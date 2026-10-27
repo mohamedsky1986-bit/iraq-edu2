@@ -61,7 +61,7 @@ export function App() {
   }, []);
 
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    return localStorage.getItem('nabough_is_admin'] === 'true';
+    return localStorage.getItem('nabough_is_admin') === 'true';
   });
 
   useEffect(() => {
@@ -73,7 +73,7 @@ export function App() {
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
 
-  // نافذة إرشادات التثبيت الأنيقة بدلاً من رسالة المتصفح المنفرة
+  // نافذة إرشادات التثبيت الأنيقة
   const [showInstallGuideModal, setShowInstallGuideModal] = useState<boolean>(false);
 
   // زر تثبيت التطبيق السريع (PWA) مع إخفائه تلقائياً إذا تم تثبيته بالفعل
@@ -118,7 +118,6 @@ export function App() {
       setDeferredPrompt(null);
       (window as any).deferredPrompt = null;
     } else {
-      // إظهار نافذة إرشادات التثبيت الداخلية الأنيقة
       setShowInstallGuideModal(true);
     }
   };
@@ -142,7 +141,6 @@ export function App() {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
 
-  // دالة توليد رابط التليجرام مع رسالة تفصيلية للطالب
   const getTelegramUrl = (link: string, text: string) => {
     let targetLink = link || MY_TELEGRAM_LINK;
     if (!targetLink.startsWith('http')) {
@@ -153,9 +151,9 @@ export function App() {
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
-  const [loggedStudent, setLoggedStudent] = useState<any | null>(([cite: 25] => {
+  const [loggedStudent, setLoggedStudent] = useState<any | null>(() => {
     return safeGetStorage('nabough_logged_student', null);
-  })());
+  });
 
   useEffect(() => {
     if (loggedStudent) {
@@ -182,7 +180,6 @@ export function App() {
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentStage, setNewStudentStage] = useState('الثالث المتوسط');
 
-  // حالة التحكم بظهور قائمة تغيير المرحلة الدراسية المصغرة
   const [isChangingStage, setIsChangingStage] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings'>('curriculum');
@@ -208,7 +205,6 @@ export function App() {
 
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // حالات التعديل
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
   const [editSubName, setEditSubName] = useState('');
   const [editSubImage, setEditSubImage] = useState('');
@@ -225,7 +221,6 @@ export function App() {
   const [editStage, setEditStage] = useState('');
   const [editName, setEditName] = useState('');
 
-  // حالات إضافة الأسئلة للامتحان (مع خيار وزاري مهم)
   const [isMinisterialQuestion, setIsMinisterialQuestion] = useState<boolean>(false);
 
   const allStagesList = [
@@ -240,7 +235,6 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
-  // تتبع النشاط اللحظي وتحديث آخر ظهور
   useEffect(() => {
     if (loggedStudent) {
       const updateInterval = setInterval(async () => {
@@ -458,7 +452,6 @@ export function App() {
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
 
-  // دوال تقديم وتأخير العناصر (المواد، الشروحات، الملازم، الامتحانات)
   const handleMoveItem = async (subjectId: string, listKey: 'notes' | 'videos' | 'booklets' | 'quizzes', index: number, direction: 'up' | 'down') => {
     const targetSub = subjects.find(s => s.id === subjectId);
     if (!targetSub) return;
@@ -490,7 +483,6 @@ export function App() {
     localStorage.setItem('nabough_cached_subjects', JSON.stringify(list));
   };
 
-  // تصفية المواد فوراً تلقائياً حسب مرحلة الطالب المسجل
   const filteredSubjects = subjects.filter(s => {
     if (isAdmin) {
       return selectedStage === 'all' || s.stage === selectedStage || s.stageName === selectedStage;
@@ -517,7 +509,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
       
-      {/* نافذة إرشادات التثبيت الداخلية الأنيقة بدلاً من رسالة المتصفح المنفرة */}
+      {/* نافذة إرشادات التثبيت الداخلية الأنيقة */}
       {showInstallGuideModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-right">
@@ -763,7 +755,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة تفاصيل الدفع VIP (باستخدام التليجرام أو الواتساب) */}
+      {/* نافذة تفاصيل الدفع VIP */}
       {vipModalItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl relative space-y-6 text-right">
@@ -1257,7 +1249,7 @@ export function App() {
                 </button>
               </div>
 
-              {/* أ) الشروحات والتعاليل مع أزرار الترتيب (أعلى/أسفل) والتعديل والحذف */}
+              {/* أ) الشروحات والتعاليل مع أزرار الترتيب والتعديل والحذف */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <NoteIcon className="w-5 h-5 text-amber-600" /> الشروحات والتعاليل والملاحظات التعليمية ({currentSub.notes?.length || 0})
@@ -1889,7 +1881,7 @@ export function App() {
             <h2 className="text-2xl font-black text-slate-900">إعدادات أسعار وطرق دفع اشتراكات الـ VIP</h2>
             <form onSubmit={(e) => {
               e.preventDefault();
-              setSuccessMessage('تم تحديث إعدادات الدفع ورقم الواتساب بنجاح!');
+              setSuccessMessage('تم تحديث إعدادات الدفع ومعرف التليجرام بنجاح!');
               setTimeout(() => setSuccessMessage(null), 3000);
             }} className="bg-slate-50 p-6 rounded-2xl border space-y-4 max-w-xl">
               <div>
@@ -1905,7 +1897,7 @@ export function App() {
                 <input type="text" value={vipSettings.transferPhone} onChange={(e) => setVipSettings({...vipSettings, transferPhone: e.target.value})} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">رابط أو معرف التليجرام للتواصل (مثلاً: https://t.me/YourUsername)</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">معرف التليجرام لاستلام الإيصالات والتواصل (مثلاً: https://t.me/YourUsername)</label>
                 <input type="text" value={vipSettings.telegram} onChange={(e) => setVipSettings({...vipSettings, telegram: e.target.value})} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
               </div>
               <button type="submit" className="w-full py-3 bg-amber-600 text-white font-bold rounded-xl text-xs shadow-md">
