@@ -1,0 +1,32 @@
+export default function ContactLinks() {
+  // ضع رقم هاتفك هنا مع رمز الدولة (مثال: العراق 964) بدون أصفار زائدة أو علامة +
+  const whatsappNumber = "9647800000000"; 
+  const whatsappMessage = encodeURIComponent("مرحباً، أواجه مشكلة أو استفسار بخصوص المنصة التعليمية.");
+  
+  // ضع معرف تليجرام الخاص بك هنا بدون علامة @
+  const telegramUsername = "YourTelegramUsername"; 
+
+  return (
+    <div className="flex gap-4 justify-center my-4">
+      {شیء -> زر الواتساب الآمن والمباشر}
+      <a
+        href={`https://wa.me/${whatsappNumber}?text=${whatsappMessage}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-green-700 transition"
+      >
+        تواصل عبر واتساب
+      </a>
+
+      {/* زر التليجرام الآمن والمباشر */}
+      <a
+        href={`https://t.me/${telegramUsername}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="bg-sky-500 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-sky-600 transition"
+      >
+        تواصل عبر تليجرام
+      </a>
+    </div>
+  );
+}
