@@ -287,7 +287,6 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
-  // تسجيل آخر ظهور دقيق مع التاريخ والساعة
   useEffect(() => {
     if (loggedStudent) {
       const updateInterval = setInterval(async () => {
@@ -1424,7 +1423,7 @@ export function App() {
                 </button>
               </div>
 
-              {/* أ) الشروحات والتعاليل مع دعم الأسئلة التفاعلية السريعة (اختيارات، فراغات، صح وخطأ) */}
+              {/* أ) الشروحات والتعاليل مع دعم إضافة صورة واضحة للشرح والأسئلة التفاعلية التابعة له */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <NoteIcon className="w-5 h-5 text-amber-600" /> الشروحات والتعاليل والملاحظات التعليمية ({currentSub.notes?.length || 0})
@@ -1438,7 +1437,7 @@ export function App() {
                           <h5 className="font-black text-xs text-indigo-900">تعديل الشرح أو التعليل</h5>
                           <input type="text" value={editNoteTitle} onChange={(e) => setEditNoteTitle(e.target.value)} placeholder="العنوان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-white" />
                           <textarea value={editNoteContent} onChange={(e) => setEditNoteContent(e.target.value)} placeholder="النص..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-white h-20" />
-                          <input type="text" value={editNoteImage} onChange={(e) => setEditNoteImage(e.target.value)} placeholder="رابط الصورة..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold font-mono bg-white" />
+                          <input type="text" value={editNoteImage} onChange={(e) => setEditNoteImage(e.target.value)} placeholder="رابط الصورة للشرح..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold font-mono bg-white" />
                           <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
                             <input type="checkbox" checked={editNoteVip} onChange={(e) => setEditNoteVip(e.target.checked)} className="w-4 h-4 text-amber-600" />
                             <span>شرح خاص بـ VIP؟</span>
@@ -1473,12 +1472,12 @@ export function App() {
                               <>
                                 <p className="text-xs text-slate-600 mt-1 leading-relaxed">{note.content}</p>
                                 {note.image && (
-                                  <div className="mt-3 h-48 w-full max-w-md rounded-xl overflow-hidden border">
+                                  <div className="mt-3 h-48 w-full max-w-md rounded-xl overflow-hidden border shadow-sm">
                                     <img src={note.image} alt={note.title} className="w-full h-full object-cover" />
                                   </div>
                                 )}
 
-                                {/* عرض الأسئلة التفاعلية السريعة المرفقة مع هذا الشرح لكسر الملوجة */}
+                                {/* عرض الأسئلة التفاعلية السريعة المرفقة مع هذا الشرح */}
                                 {note.interactiveQuestions && note.interactiveQuestions.length > 0 && (
                                   <div className="mt-4 p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-3">
                                     <h6 className="text-xs font-black text-indigo-900 flex items-center gap-1.5">
@@ -1515,7 +1514,7 @@ export function App() {
                                           <div className="flex items-center justify-between pt-1">
                                             <button 
                                               onClick={() => setInteractiveGradedStatus({...interactiveGradedStatus, [ansKey]: true})}
-                                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold shadow"
+                                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold shadow cursor-pointer"
                                             >
                                               تحقق من الإجابة ✓
                                             </button>
@@ -1572,11 +1571,14 @@ export function App() {
 
                 {isAdmin && (
                   <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-4 mt-4">
-                    <h5 className="text-xs font-black text-slate-800">إضافة شرح أو تعليل أو ملاحظة تعليمية (مع إمكانية إرفاق سؤال تفاعلي):</h5>
+                    <h5 className="text-xs font-black text-slate-800">إضافة شرح أو تعليل أو ملاحظة تعليمية (مع إمكانية إرفاق صورة الشرح وسؤال تفاعلي):</h5>
                     <input type="text" value={newNoteTitle} onChange={(e) => setNewNoteTitle(e.target.value)} placeholder="عنوان الشرح أو التعليل..." className="w-full px-4 py-2.5 rounded-xl border text-xs font-bold" />
                     <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="اكتب نص الشرح أو التعليل التفصيلي هنا..." className="w-full px-4 py-2.5 rounded-xl border text-xs font-bold h-24" />
                     
-                    {/* إضافة سؤال تفاعلي يتبع هذا الشرح */}
+                    {/* إضافة صورة توضيحية خاصة بالشرح (مثل خارطة العراق والتوضيح) */}
+                    <input type="text" value={newNoteImage} onChange={(e) => setNewNoteImage(e.target.value)} placeholder="رابط صورة توضيحية للشرح (اختياري)..." className="w-full px-4 py-2 rounded-xl border text-xs font-bold font-mono" />
+
+                    {/* إرفاق سؤال تفاعلي يتبع هذا الشرح */}
                     <div className="p-4 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-3">
                       <h6 className="text-xs font-black text-indigo-900">➕ إرفاق سؤال تفاعلي سريع لهذا الشرح (اختياري):</h6>
                       <div className="flex gap-2">
@@ -1608,13 +1610,16 @@ export function App() {
                       {interactiveType === 'true_false' && (
                         <div className="flex gap-4 text-xs font-bold items-center">
                           <span>الإجابة الصحيحة:</span>
-                          <label><input type="radio" name="itf" checked={interactiveTf === 'صح'} onChange={() => setInteractiveTf('صح')} /> صح</label>
-                          <label><input type="radio" name="itf" checked={interactiveTf === 'خطأ'} onChange={() => setInteractiveTf('خطأ')} /> خطأ</label>
+                          <label className="cursor-pointer"><input type="radio" name="itf" checked={interactiveTf === 'صح'} onChange={() => setInteractiveTf('صح')} /> صح</label>
+                          <label className="cursor-pointer"><input type="radio" name="itf" checked={interactiveTf === 'خطأ'} onChange={() => setInteractiveTf('خطأ')} /> خطأ</label>
                         </div>
                       )}
 
                       <button type="button" onClick={() => {
-                        if (!interactiveQText) return;
+                        if (!interactiveQText) {
+                          alert('يرجى كتابة نص السؤال التفاعلي أولاً.');
+                          return;
+                        }
                         const qObj = {
                           type: interactiveType,
                           q: interactiveQText,
@@ -1625,21 +1630,24 @@ export function App() {
                         setInteractiveQText('');
                         setInteractiveCorrect('');
                         setInteractiveFill('');
-                        alert('تم إضافه السؤال التفاعلي مؤقتاً لقائمة الشرح أدناه!');
-                      }} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold">
-                        + إضافة السؤال التفاعلي للقائمة ({interactiveList.length} أسئلة)
+                        alert('✅ تمت إضافة السؤال التفاعلي بنجاح إلى قائمة هذا الشرح!');
+                      }} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold cursor-pointer shadow">
+                        + إضافة السؤال التفاعلي للقائمة ({interactiveList.length} أسئلة مضافة)
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <input type="text" value={newNoteImage} onChange={(e) => setNewNoteImage(e.target.value)} placeholder="رابط صورة توضيحية (اختياري)..." className="px-4 py-2 rounded-xl border text-xs font-bold font-mono" />
-                      <label className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border font-bold text-xs cursor-pointer justify-center">
+                    <div className="flex items-center justify-between pt-2">
+                      <label className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border font-bold text-xs cursor-pointer">
                         <input type="checkbox" checked={newNoteVip} onChange={(e) => setNewNoteVip(e.target.checked)} className="w-4 h-4 text-amber-600 rounded" />
                         <span>شرح خاص بـ VIP؟</span>
                       </label>
                     </div>
+
                     <button onClick={async () => {
-                      if (!newNoteTitle || !newNoteContent) return;
+                      if (!newNoteTitle || !newNoteContent) {
+                        alert('يرجى كتابة عنوان الشرح والنص التفصيلي على الأقل.');
+                        return;
+                      }
                       const newNoteObj = { 
                         id: Date.now().toString(), 
                         title: newNoteTitle, 
@@ -1654,10 +1662,10 @@ export function App() {
                       setSubjects(updatedSubs);
                       localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                       setNewNoteTitle(''); setNewNoteContent(''); setNewNoteImage(''); setNewNoteVip(false); setInteractiveList([]);
-                      setSuccessMessage('تمت إضافة الشرح مع الأسئلة التفاعلية بنجاح للمادة!');
+                      setSuccessMessage('تمت إضافة الشرح مع الأسئلة والصورة بنجاح للمادة!');
                       setTimeout(() => setSuccessMessage(null), 3000);
-                    }} className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow">
-                      + نشر الشرح / التعليل التفاعلي في المادة
+                    }} className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow cursor-pointer">
+                      + نشر الشرح / التعليل التفاعلي نهائياً في المادة
                     </button>
                   </div>
                 )}
