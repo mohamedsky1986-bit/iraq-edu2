@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { db } from './firebase';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp } from 'firebase/firestore';
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
@@ -68,7 +68,7 @@ export function App() {
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
 
-  // نظام الدردشة العامة الفورية المرتبط بقاعدة البيانات السحابية (Firebase) لضمان ظهور الرسائل فوراً بين الموبايل والحاسبة
+  // نظام الدردشة العامة التفاعلية بين الطلاب المرتبطة بقاعدة البيانات
   const [showPublicChatModal, setShowPublicChatModal] = useState<boolean>(false);
   const [publicChatInput, setPublicChatInput] = useState<string>('');
   const [publicChatMessages, setPublicChatMessages] = useState<any[]>([]);
@@ -77,7 +77,6 @@ export function App() {
     const q = query(collection(db, 'public_chat'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      // ترتيب الرسائل تصاعدياً حسب وقت الإرسال
       msgs.sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
       setPublicChatMessages(msgs);
     }, (error) => {
@@ -110,7 +109,7 @@ export function App() {
       setPublicChatInput('');
     } catch (err) {
       console.error(err);
-      alert('حدث خطأ أثناء إرسال الرسالة، يجى التحقق من الاتصال.');
+      alert('حدث خطأ أثناء إرسال الرسالة، يرجى التحقق من الاتصال.');
     }
   };
 
@@ -363,6 +362,7 @@ export function App() {
     return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
   };
 
+  // نظام التصحيح الذكي المتطور (يعطي درجات جزئية للتعاريف والتعاليل بحسب نسبة تطابق الكلمات المفتاحية)
   const evaluateAnswerSmart = (userAns: string, correctAns: string, qType: string) => {
     if (!userAns) return { isCorrect: false, scoreRatio: 0 };
     const cleanUser = userAns.trim().toLowerCase();
@@ -376,9 +376,10 @@ export function App() {
       return { isCorrect: true, scoreRatio: 1 };
     }
 
+    // استخراج الكلمات المهمة في النموذج
     const correctWords = cleanCorrect.split(/[\s,،.؛\-]+/).filter(w => w.length > 2);
     if (correctWords.length === 0) {
-      return { isCorrect: cleanUser.includes(cleanCorrect) || cleanCorrect.includes(cleanUser), scoreRatio: 0.5 };
+      return { isCorrect: cleanUser.includes(cleanCorrect) || cleanCorrect.includes(cleanUser), scoreRatio: 0.6 };
     }
 
     let matchedCount = 0;
@@ -387,12 +388,16 @@ export function App() {
     });
 
     const ratio = matchedCount / correctWords.length;
-    if (ratio >= 0.8) {
+    
+    // منح درجات جزئية مرنة للتعاريف والتعاليل إذا كانت الفكرة قريبة
+    if (ratio >= 0.7) {
       return { isCorrect: true, scoreRatio: 1 };
     } else if (ratio >= 0.4) {
-      return { isCorrect: false, scoreRatio: 0.6 };
+      return { isCorrect: false, scoreRatio: 0.7 }; // يحصل على 70% من الدرجة لأن الإجابة قريبة جداً
+    } else if (ratio >= 0.2) {
+      return { isCorrect: false, scoreRatio: 0.4 }; // يحصل على 40% من الدرجة للإجابة الجزئية
     } else if (cleanCorrect.includes(cleanUser) && cleanUser.length >= 3) {
-      return { isCorrect: false, scoreRatio: 0.4 };
+      return { isCorrect: false, scoreRatio: 0.3 };
     }
 
     return { isCorrect: false, scoreRatio: 0 };
@@ -458,7 +463,7 @@ export function App() {
         q: q.q, 
         userAns, 
         correct: q.correct, 
-        isCorrect: evaluation.isCorrect || evaluation.scoreRatio >= 0.8,
+        isCorrect: evaluation.isCorrect || evaluation.scoreRatio >= 0.7,
         partialScore: questionGrade,
         isMinisterial: q.isMinisterial
       };
@@ -620,8 +625,8 @@ export function App() {
             </div>
             
             <div className="space-y-3 text-xs font-bold text-slate-700 bg-slate-50 p-4 rounded-2xl border">
-              <div>🤖 <b>أندرويد (متصفح كروم):</b> افتح قائمة المتصفح (⋮) بالأعلى، ثم اختر <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b>[cite: 26].</div>
-              <div className="border-t pt-2">🍏 <b>آيفون (متصفح سفاري):</b> اضغط على زر المشاركة (📤) بالأسفل، ثم اختر <b>"إضافة إلى الشاشة الرئيسية"</b>[cite: 26].</div>
+              <div>🤖 <b>أندرويد (متصفح كروم):</b> افتح قائمة المتصفح (⋮) بالأعلى، ثم اختر <b>"تثبيت التطبيق"</b> أو <b>"إضافة إلى الشاشة الرئيسية"</b>.</div>
+              <div className="border-t pt-2">🍏 <b>آيفون (متصفح سفاري):</b> اضغط على زر المشاركة (📤) بالأسفل، ثم اختر <b>"إضافة إلى الشاشة الرئيسية"</b>.</div>
             </div>
 
             <button onClick={() => setShowInstallGuideModal(false)} className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs shadow-md">
@@ -1198,7 +1203,7 @@ export function App() {
                   >
                     <option value="all">🌟 عرض كافة المراحل والصفوف الدراسية</option>
                     {allStagesList.map(st => (
-                      <option key={st.id} value={st.name}>{st.name}</option>
+                      <option key={st.id} value={st.id}>{st.name}</option>
                     ))}
                   </select>
                   <ChevronDown className="w-5 h-5 text-indigo-600 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -1323,7 +1328,7 @@ export function App() {
           </div>
         )}
 
-        {/* 2. إدارة المادة الدراسية المفصلة */}
+        {/* 2. إدارة المادة الدراسية المفصلة (عرض كافة الامتحانات بمرونة كاملة) */}
         {selectedSubjectId && (() => {
           const currentSub = subjects.find(s => s.id === selectedSubjectId);
           if (!currentSub) return null;
@@ -1618,16 +1623,16 @@ export function App() {
                 )}
               </div>
 
-              {/* د) الامتحانات */}
+              {/* د) الامتحانات (عرض كافة الامتحانات المنشورة بمرونة للأدمن والطالب) */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
-                  <CheckSquare className="w-5 h-5 text-indigo-600" /> الامتحانات والاختبارات التفاعلية ({currentSub.quizzes?.length || 0})
+                  <CheckSquare className="w-5 h-5 text-indigo-600" /> الامتحانات والاختبارات التفاعلية المتاحة ({currentSub.quizzes?.length || 0})
                 </h4>
                 <div className="space-y-3">
                   {currentSub.quizzes?.map((quiz: any) => (
                     <div key={quiz.id} className="p-4 bg-white rounded-xl border border-slate-200 flex items-center justify-between shadow-sm flex-wrap gap-3">
                       <span className="font-bold text-slate-800 text-sm flex items-center gap-2 flex-wrap">
-                        📝 {quiz.title} ({quiz.durationMinutes || 15} دقيقة) {quiz.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
+                        📝 {quiz.title} ({quiz.durationMinutes || 15} دقيقة) - عدد الأسئلة: {quiz.questions?.length || 0} {quiz.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
                       </span>
                       <div className="flex items-center gap-2">
                         {quiz.isVip && !isVipActive && isAdmin === false ? (
@@ -1636,7 +1641,7 @@ export function App() {
                           </button>
                         ) : (
                           <button onClick={() => { setActiveQuiz(quiz); setTimeLeft((quiz.durationMinutes || 15) * 60); setTimerActive(true); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md">
-                            بدء الامتحان
+                            بدء الامتحان 🚀
                           </button>
                         )}
                         {isAdmin && (
@@ -1648,13 +1653,16 @@ export function App() {
                             localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                             setSuccessMessage('تم حذف الامتحان.');
                             setTimeout(() => setSuccessMessage(null), 3000);
-                          }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg">
+                          }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg" title="حذف الامتحان">
                             <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                       </div>
                     </div>
                   ))}
+                  {(!currentSub.quizzes || currentSub.quizzes.length === 0) && (
+                    <p className="text-xs text-slate-500 text-center py-4 font-bold">لا توجد امتحانات منشورة لهذه المادة حتى الآن.</p>
+                  )}
                 </div>
 
                 {isAdmin && (
