@@ -264,6 +264,17 @@ export function App() {
 
   const [isMinisterialQuestion, setIsMinisterialQuestion] = useState<boolean>(false);
 
+  // حالات الأسئلة التفاعلية السريعة ضمن الشروحات
+  const [interactiveType, setInteractiveType] = useState<'mcq' | 'fill' | 'true_false'>('mcq');
+  const [interactiveQText, setInteractiveQText] = useState('');
+  const [interactiveOptions, setInteractiveOptions] = useState(['', '', '', '']);
+  const [interactiveCorrect, setInteractiveCorrect] = useState('');
+  const [interactiveFill, setInteractiveFill] = useState('');
+  const [interactiveTf, setInteractiveTf] = useState('صح');
+  const [interactiveList, setInteractiveList] = useState<any[]>([]);
+  const [studentInteractiveAnswers, setStudentInteractiveAnswers] = useState<Record<number, string>>({});
+  const [interactiveGradedStatus, setInteractiveGradedStatus] = useState<Record<number, boolean>>({});
+
   const allStagesList = [
     { id: 'first_intermediate', name: 'الأول المتوسط' },
     { id: 'second_intermediate', name: 'الثاني المتوسط' },
@@ -1413,7 +1424,7 @@ export function App() {
                 </button>
               </div>
 
-              {/* أ) الشروحات والتعاليل مع أزرار الترتيب والتعديل والحذف */}
+              {/* أ) الشروحات والتعاليل مع دعم الأسئلة التفاعلية السريعة (اختيارات، فراغات، صح وخطأ) */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <NoteIcon className="w-5 h-5 text-amber-600" /> الشروحات والتعاليل والملاحظات التعليمية ({currentSub.notes?.length || 0})
@@ -1448,7 +1459,7 @@ export function App() {
                         </div>
                       ) : (
                         <>
-                          <div className="space-y-2 flex-1">
+                          <div className="space-y-3 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
                               <h5 className="font-black text-slate-900 text-sm">💡 {note.title}</h5>
                               {note.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
@@ -1464,6 +1475,59 @@ export function App() {
                                 {note.image && (
                                   <div className="mt-3 h-48 w-full max-w-md rounded-xl overflow-hidden border">
                                     <img src={note.image} alt={note.title} className="w-full h-full object-cover" />
+                                  </div>
+                                )}
+
+                                {/* عرض الأسئلة التفاعلية السريعة المرفقة مع هذا الشرح لكسر الملوجة */}
+                                {note.interactiveQuestions && note.interactiveQuestions.length > 0 && (
+                                  <div className="mt-4 p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-3">
+                                    <h6 className="text-xs font-black text-indigo-900 flex items-center gap-1.5">
+                                      <Sparkles className="w-4 h-4 text-indigo-600" /> سؤال تفاعلي سريع لاختبار فهمك لهذا الشرح:
+                                    </h6>
+                                    {note.interactiveQuestions.map((iq: any, iqIdx: number) => {
+                                      const ansKey = `${note.id}_${iqIdx}`;
+                                      const userAns = studentInteractiveAnswers[ansKey] || '';
+                                      const isGraded = interactiveGradedStatus[ansKey];
+                                      const isCorrect = userAns.trim().toLowerCase() === iq.correct.trim().toLowerCase();
+
+                                      return (
+                                        <div key={iqIdx} className="bg-white p-3.5 rounded-xl border space-y-2">
+                                          <div className="text-xs font-bold text-slate-900">س: {iq.q}</div>
+                                          {iq.type === 'mcq' || iq.type === 'true_false' ? (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                              {iq.options.map((opt: string, oIdx: number) => (
+                                                <label key={oIdx} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer text-xs font-bold transition-all ${userAns === opt ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 hover:bg-slate-100'}`}>
+                                                  <input type="radio" name={`iq_${ansKey}`} checked={userAns === opt} onChange={() => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: opt})} className="hidden" />
+                                                  <span>{opt}</span>
+                                                </label>
+                                              ))}
+                                            </div>
+                                          ) : (
+                                            <input 
+                                              type="text" 
+                                              value={userAns} 
+                                              onChange={(e) => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: e.target.value})} 
+                                              placeholder="اضغط واكتب إجابتك في الفراغ هنا..." 
+                                              className="w-full px-3 py-2 bg-slate-50 border rounded-lg text-xs font-bold" 
+                                            />
+                                          )}
+
+                                          <div className="flex items-center justify-between pt-1">
+                                            <button 
+                                              onClick={() => setInteractiveGradedStatus({...interactiveGradedStatus, [ansKey]: true})}
+                                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold shadow"
+                                            >
+                                              تحقق من الإجابة ✓
+                                            </button>
+                                            {isGraded && (
+                                              <span className={`text-[11px] font-black ${isCorrect ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                                {isCorrect ? '✅ إجابة صحيحة بطل!' : `❌ إجابة خاطئة (الصحيحة: ${iq.correct})`}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
                                   </div>
                                 )}
                               </>
@@ -1507,10 +1571,66 @@ export function App() {
                 </div>
 
                 {isAdmin && (
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-3 mt-4">
-                    <h5 className="text-xs font-black text-slate-800">إضافة شرح أو تعليل أو ملاحظة تعليمية (مع صورة و VIP):</h5>
+                  <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-4 mt-4">
+                    <h5 className="text-xs font-black text-slate-800">إضافة شرح أو تعليل أو ملاحظة تعليمية (مع إمكانية إرفاق سؤال تفاعلي):</h5>
                     <input type="text" value={newNoteTitle} onChange={(e) => setNewNoteTitle(e.target.value)} placeholder="عنوان الشرح أو التعليل..." className="w-full px-4 py-2.5 rounded-xl border text-xs font-bold" />
                     <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="اكتب نص الشرح أو التعليل التفصيلي هنا..." className="w-full px-4 py-2.5 rounded-xl border text-xs font-bold h-24" />
+                    
+                    {/* إضافة سؤال تفاعلي يتبع هذا الشرح */}
+                    <div className="p-4 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-3">
+                      <h6 className="text-xs font-black text-indigo-900">➕ إرفاق سؤال تفاعلي سريع لهذا الشرح (اختياري):</h6>
+                      <div className="flex gap-2">
+                        <select value={interactiveType} onChange={(e) => setInteractiveType(e.target.value as any)} className="px-3 py-1.5 bg-white border rounded-lg text-xs font-bold">
+                          <option value="mcq">اختيار من متعدد</option>
+                          <option value="fill">ملء فراغ</option>
+                          <option value="true_false">صح وخطأ</option>
+                        </select>
+                        <input type="text" value={interactiveQText} onChange={(e) => setInteractiveQText(e.target.value)} placeholder="نص السؤال التفاعلي..." className="flex-1 px-3 py-1.5 bg-white border rounded-lg text-xs font-bold" />
+                      </div>
+
+                      {interactiveType === 'mcq' && (
+                        <div className="grid grid-cols-2 gap-2">
+                          {interactiveOptions.map((opt, oIdx) => (
+                            <input key={oIdx} type="text" value={opt} onChange={(e) => {
+                              const opts = [...interactiveOptions];
+                              opts[oIdx] = e.target.value;
+                              setInteractiveOptions(opts);
+                            }} placeholder={`الخيار ${oIdx+1}`} className="px-3 py-1 bg-white border rounded text-xs" />
+                          ))}
+                          <input type="text" value={interactiveCorrect} onChange={(e) => setInteractiveCorrect(e.target.value)} placeholder="الخيار الصحيح تماماً..." className="col-span-2 px-3 py-1 bg-emerald-50 border border-emerald-300 rounded text-xs font-bold text-emerald-900" />
+                        </div>
+                      )}
+
+                      {interactiveType === 'fill' && (
+                        <input type="text" value={interactiveFill} onChange={(e) => setInteractiveFill(e.target.value)} placeholder="الإجابة الصحيحة في الفراغ..." className="w-full px-3 py-1.5 bg-emerald-50 border border-emerald-300 rounded text-xs font-bold text-emerald-900" />
+                      )}
+
+                      {interactiveType === 'true_false' && (
+                        <div className="flex gap-4 text-xs font-bold items-center">
+                          <span>الإجابة الصحيحة:</span>
+                          <label><input type="radio" name="itf" checked={interactiveTf === 'صح'} onChange={() => setInteractiveTf('صح')} /> صح</label>
+                          <label><input type="radio" name="itf" checked={interactiveTf === 'خطأ'} onChange={() => setInteractiveTf('خطأ')} /> خطأ</label>
+                        </div>
+                      )}
+
+                      <button type="button" onClick={() => {
+                        if (!interactiveQText) return;
+                        const qObj = {
+                          type: interactiveType,
+                          q: interactiveQText,
+                          options: interactiveType === 'mcq' ? interactiveOptions : (interactiveType === 'true_false' ? ['صح', 'خطأ'] : []),
+                          correct: interactiveType === 'mcq' ? interactiveCorrect : (interactiveType === 'fill' ? interactiveFill : interactiveTf)
+                        };
+                        setInteractiveList([...interactiveList, qObj]);
+                        setInteractiveQText('');
+                        setInteractiveCorrect('');
+                        setInteractiveFill('');
+                        alert('تم إضافه السؤال التفاعلي مؤقتاً لقائمة الشرح أدناه!');
+                      }} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold">
+                        + إضافة السؤال التفاعلي للقائمة ({interactiveList.length} أسئلة)
+                      </button>
+                    </div>
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <input type="text" value={newNoteImage} onChange={(e) => setNewNoteImage(e.target.value)} placeholder="رابط صورة توضيحية (اختياري)..." className="px-4 py-2 rounded-xl border text-xs font-bold font-mono" />
                       <label className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border font-bold text-xs cursor-pointer justify-center">
@@ -1520,17 +1640,24 @@ export function App() {
                     </div>
                     <button onClick={async () => {
                       if (!newNoteTitle || !newNoteContent) return;
-                      const newNoteObj = { id: Date.now().toString(), title: newNoteTitle, content: newNoteContent, image: newNoteImage, isVip: newNoteVip };
+                      const newNoteObj = { 
+                        id: Date.now().toString(), 
+                        title: newNoteTitle, 
+                        content: newNoteContent, 
+                        image: newNoteImage, 
+                        isVip: newNoteVip,
+                        interactiveQuestions: interactiveList
+                      };
                       const updatedNotes = [...(currentSub.notes || []), newNoteObj];
                       await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
                       const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s);
                       setSubjects(updatedSubs);
                       localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                      setNewNoteTitle(''); setNewNoteContent(''); setNewNoteImage(''); setNewNoteVip(false);
-                      setSuccessMessage('تمت إضافة الشرح أو التعليل بنجاح للمادة!');
+                      setNewNoteTitle(''); setNewNoteContent(''); setNewNoteImage(''); setNewNoteVip(false); setInteractiveList([]);
+                      setSuccessMessage('تمت إضافة الشرح مع الأسئلة التفاعلية بنجاح للمادة!');
                       setTimeout(() => setSuccessMessage(null), 3000);
                     }} className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow">
-                      + نشر الشرح / التعليل في المادة
+                      + نشر الشرح / التعليل التفاعلي في المادة
                     </button>
                   </div>
                 )}
