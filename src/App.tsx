@@ -96,7 +96,7 @@ export function App() {
       return;
     }
 
-    const nowDateTime = new Date().toLocaleString('ar-IQ', {dateTypeValue: 'short', month: 'numeric', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+    const nowDateTime = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
     const newMsg = {
       sender: loggedStudent ? `${loggedStudent.name} (${loggedStudent.stage})` : (isAdmin ? 'مدير المنصة 🎓' : 'زائر كريم'),
       text: publicChatInput,
@@ -276,16 +276,11 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
-  // تسجيل آخر ظهور مع التاريخ والساعة بدقة
+  // تسجيل آخر ظهور دقيق مع التاريخ والساعة
   useEffect(() => {
     if (loggedStudent) {
       const updateInterval = setInterval(async () => {
-        const nowFormatted = new Date().toLocaleString('ar-IQ', {
-          month: 'numeric',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        });
+        const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
         try {
           await updateDoc(doc(db, 'students', loggedStudent.id), { lastSeen: nowFormatted });
         } catch(e) {}
@@ -374,7 +369,6 @@ export function App() {
     return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
   };
 
-  // نظام التصحيح الذكي والنسب المئوية للتعاريف والتعاليل
   const evaluateAnswerSmart = (userAns: string, correctAns: string, qType: string) => {
     if (!userAns) return { isCorrect: false, scoreRatio: 0 };
     const cleanUser = userAns.trim().toLowerCase();
@@ -400,13 +394,12 @@ export function App() {
 
     const ratio = matchedCount / correctWords.length;
     
-    // درجات جزئية عادلة بناءً على تقارب الفكرة
     if (ratio >= 0.7) {
       return { isCorrect: true, scoreRatio: 1 };
     } else if (ratio >= 0.4) {
-      return { isCorrect: false, scoreRatio: 0.75 }; // 75% درجة للإجابة القريبة
+      return { isCorrect: false, scoreRatio: 0.75 };
     } else if (ratio >= 0.2) {
-      return { isCorrect: false, scoreRatio: 0.5 }; // 50% درجة للإجابة المتوسطة
+      return { isCorrect: false, scoreRatio: 0.5 };
     } else if (cleanCorrect.includes(cleanUser) && cleanUser.length >= 3) {
       return { isCorrect: false, scoreRatio: 0.3 };
     }
@@ -484,7 +477,7 @@ export function App() {
     setQuizResult({ score: finalScore, total: 100, details });
 
     if (loggedStudent) {
-      const nowFormatted = new Date().toLocaleString('ar-IQ', {month: 'numeric', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+      const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
       const updatedStuds = studentsList.map(st => st.id === loggedStudent.id ? {
         ...st, 
         examScore: `${finalScore}/100`, 
@@ -561,7 +554,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
       
-      {/* نافذة تعديل الامتحان للأدمن (مرونة كاملة لإضافة وحذف التعديلات والأسئلة) */}
+      {/* نافذة تعديل الامتحان للأدمن */}
       {editingQuizItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative space-y-4 text-right">
@@ -624,7 +617,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة الدردشة العامة التفاعلية بين الطلاب المرتبطة بقاعدة البيانات */}
+      {/* نافذة الدردشة العامة التفاعلية بين الطلاب */}
       {showPublicChatModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl max-w-xl w-full h-[85vh] p-6 shadow-2xl relative flex flex-col text-right">
@@ -831,7 +824,7 @@ export function App() {
                   return;
                 }
 
-                const nowFormatted = new Date().toLocaleString('ar-IQ', {month: 'numeric', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+                const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
                 const newSt = {
                   name: newStudentName,
                   username: studentLoginUser,
@@ -898,7 +891,7 @@ export function App() {
                     alert('⚠️ عذراً، هذا اليوزر متصل حالياً عند شخص آخر (على جهاز آخر). لا يمكن فتح نفس الحساب في جهازين في نفس الوقت.');
                     return;
                   }
-                  const nowFormatted = new Date().toLocaleString('ar-IQ', {month: 'numeric', day: 'numeric', hour: '2-digit', minute:'2-digit'});
+                  const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
                   await updateDoc(doc(db, 'students', found.id), { status: 'متصل الآن', lastSeen: nowFormatted });
                   found.status = 'متصل الآن';
                   found.lastSeen = nowFormatted;
@@ -1697,7 +1690,7 @@ export function App() {
                 )}
               </div>
 
-              {/* د) الامتحانات (عرض كافة الامتحانات المنشورة مع زر التعديل المباشر للأدمن) */}
+              {/* د) الامتحانات (عرض جميع الامتحانات المنشورة للمادة) */}
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
                 <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
                   <CheckSquare className="w-5 h-5 text-indigo-600" /> الامتحانات والاختبارات التفاعلية المتاحة ({currentSub.quizzes?.length || 0})
