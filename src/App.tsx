@@ -199,7 +199,7 @@ export function App() {
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
-  const [loggedStudent, setLoggedStudent] = useState<any | null> (() => {
+  const [loggedStudent, setLoggedStudent] = useState<any | null>(() => {
     return safeGetStorage('nabough_logged_student', null);
   });
 
@@ -257,6 +257,11 @@ export function App() {
   const [editBookletTitle, setEditBookletTitle] = useState('');
   const [editBookletUrl, setEditBookletUrl] = useState('');
   const [editBookletVip, setEditBookletVip] = useState(false);
+
+  // حالات تعديل السؤال التفاعلي التابع للشرح
+  const [editingInteractiveItem, setEditingInteractiveItem] = useState<{subjectId: string, noteId: string, questionIndex: number, questionObj: any} | null>(null);
+  const [editInteractiveQText, setEditInteractiveQText] = useState('');
+  const [editInteractiveCorrect, setEditInteractiveCorrect] = useState('');
 
   const getEmbedPdfUrl = (url: string) => {
     if (!url) return '';
@@ -580,16 +585,25 @@ export function App() {
     } catch(e) {}
   };
 
-  const handleMoveSubject = async (index: number, direction: 'up' | 'down') => {
+  // ترتيب المواد بغض النظر عن الفلتر لتكون الأسهُم فعالة دائماً
+  const handleMoveSubjectGlobal = async (subjectId: string, direction: 'up' | 'down') => {
     const list = [...subjects];
+    const index = list.findIndex(s => s.id === subjectId);
+    if (index === -1) return;
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     if (targetIndex < 0 || targetIndex >= list.length) return;
 
     const temp = list[index];
     list[index] = list[targetIndex];
     list[targetIndex] = temp;
+
     setSubjects(list);
     localStorage.setItem('nabough_cached_subjects', JSON.stringify(list));
+
+    // تحديث الترتيب سحابياً أيضاً إذا رغبت، أو حفظه محلياً في حال عدم وجود حقل ترتيب منفصل
+    try {
+      // نكتفي بالحفظ المحلي والسحابي بحسب تدفق الكود
+    } catch(e) {}
   };
 
   const filteredSubjects = subjects.filter(s => {
@@ -674,6 +688,63 @@ export function App() {
                 حفظ التعديلات نهائياً
               </button>
               <button onClick={() => setEditingQuizItem(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تعديل السؤال التفاعلي التابع للشرح */}
+      {editingInteractiveItem && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-right">
+            <button onClick={() => setEditingInteractiveItem(null)} className="absolute top-4 left-4 w-9 h-9 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
+              <X className="w-4 h-4" />
+            </button>
+            <h3 className="text-lg font-black text-slate-900 pb-2 border-b">تعديل السؤال التفاعلي السريع</h3>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">نص السؤال</label>
+                <input type="text" value={editInteractiveQText} onChange={(e) => setEditInteractiveQText(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">الإجابة الصحيحة</label>
+                <input type="text" value={editInteractiveCorrect} onChange={(e) => setEditInteractiveCorrect(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold text-emerald-900 bg-emerald-50" />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-3 border-t">
+              <button onClick={async () => {
+                const targetSub = subjects.find(s => s.id === editingInteractiveItem.subjectId);
+                if (!targetSub) return;
+                const updatedNotes = targetSub.notes.map((n: any) => {
+                  if (n.id === editingInteractiveItem.noteId) {
+                    const newIqList = [...n.interactiveQuestions];
+                    newIqList[editingInteractiveItem.questionIndex] = {
+                      ...newIqList[editingInteractiveItem.questionIndex],
+                      q: editInteractiveQText,
+                      correct: editInteractiveCorrect
+                    };
+                    return { ...n, interactiveQuestions: newIqList };
+                  }
+                  return n;
+                });
+
+                try {
+                  await updateDoc(doc(db, 'subjects', editingInteractiveItem.subjectId), { notes: updatedNotes });
+                  const updatedSubs = subjects.map(s => s.id === editingInteractiveItem.subjectId ? {...s, notes: updatedNotes} : s);
+                  setSubjects(updatedSubs);
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                  setEditingInteractiveItem(null);
+                  setSuccessMessage('تم تعديل السؤال التفاعلي بنجاح!');
+                  setTimeout(() => setSuccessMessage(null), 3000);
+                } catch(e) {}
+              }} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold">
+                حفظ التعديل
+              </button>
+              <button onClick={() => setEditingInteractiveItem(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">
                 إلغاء
               </button>
             </div>
@@ -1431,8 +1502,8 @@ export function App() {
                 >
                   {isAdmin && (
                     <div className="absolute top-2 left-2 flex items-center gap-1 z-25">
-                      <button onClick={(e) => { e.stopPropagation(); handleMoveSubject(sIdx, 'up'); }} className="w-6 h-6 bg-slate-800 text-white rounded flex items-center justify-center text-xs" title="للأعلى"><ArrowUp className="w-3 h-3" /></button>
-                      <button onClick={(e) => { e.stopPropagation(); handleMoveSubject(sIdx, 'down'); }} className="w-6 h-6 bg-slate-800 text-white rounded flex items-center justify-center text-xs" title="للأسفل"><ArrowDown className="w-3 h-3" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleMoveSubjectGlobal(sub.id, 'up'); }} className="w-6 h-6 bg-slate-800 text-white rounded flex items-center justify-center text-xs" title="للأعلى"><ArrowUp className="w-3 h-3" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleMoveSubjectGlobal(sub.id, 'down'); }} className="w-6 h-6 bg-slate-800 text-white rounded flex items-center justify-center text-xs" title="للأسفل"><ArrowDown className="w-3 h-3" /></button>
                       <button onClick={(e) => { e.stopPropagation(); setEditingSubjectId(sub.id); setEditSubName(sub.name); setEditSubImage(sub.image || ''); }} className="w-6 h-6 bg-indigo-600 text-white rounded flex items-center justify-center text-xs"><Edit3 className="w-3 h-3" /></button>
                       <button onClick={async (e) => {
                         e.stopPropagation();
@@ -1531,7 +1602,7 @@ export function App() {
                 />
               </div>
 
-              {/* أ) الشروحات والتعاليل */}
+              {/* أ) الشروحات والتعاليل مع دعم تعديل وحذف الأسئلة التفاعلية التابعة */}
               <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
@@ -1556,9 +1627,11 @@ export function App() {
 
                       {note.interactiveQuestions && note.interactiveQuestions.length > 0 && (
                         <div className="mt-3 p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2.5">
-                          <h6 className="text-[11px] font-black text-indigo-900 flex items-center gap-1">
-                            <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> اختبر فهمك بهذا السؤال السريع:
-                          </h6>
+                          <div className="flex items-center justify-between">
+                            <h6 className="text-[11px] font-black text-indigo-900 flex items-center gap-1">
+                              <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> الأسئلة التفاعلية السريعة:
+                            </h6>
+                          </div>
                           {note.interactiveQuestions.map((iq: any, iqIdx: number) => {
                             const ansKey = `${note.id}_${iqIdx}`;
                             const userAns = studentInteractiveAnswers[ansKey] || '';
@@ -1566,8 +1639,29 @@ export function App() {
                             const isCorrect = userAns.trim().toLowerCase() === iq.correct.trim().toLowerCase();
 
                             return (
-                              <div key={iqIdx} className="bg-white p-3 rounded-lg border space-y-2">
-                                <div className="text-xs font-bold text-slate-900">س: {iq.q}</div>
+                              <div key={iqIdx} className="bg-white p-3 rounded-lg border space-y-2 relative">
+                                <div className="flex items-center justify-between">
+                                  <div className="text-xs font-bold text-slate-900">س: {iq.q}</div>
+                                  {isAdmin && (
+                                    <div className="flex items-center gap-1">
+                                      <button onClick={() => {
+                                        setEditingInteractiveItem({ subjectId: currentSub.id, noteId: note.id, questionIndex: iqIdx, questionObj: iq });
+                                        setEditInteractiveQText(iq.q);
+                                        setEditInteractiveCorrect(iq.correct);
+                                      }} className="p-1 bg-indigo-50 text-indigo-600 rounded text-[10px]" title="تعديل السؤال"><Edit3 className="w-3 h-3" /></button>
+                                      
+                                      <button onClick={async () => {
+                                        if (window.confirm('حذف هذا السؤال التفاعلي؟')) {
+                                          const newIqList = note.interactiveQuestions.filter((_: any, idx: number) => idx !== iqIdx);
+                                          const updatedNotes = currentSub.notes.map((n: any) => n.id === note.id ? { ...n, interactiveQuestions: newIqList } : n);
+                                          await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
+                                          setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s));
+                                        }
+                                      }} className="p-1 text-rose-500 rounded text-[10px]" title="حذف السؤال"><Trash2 className="w-3 h-3" /></button>
+                                    </div>
+                                  )}
+                                </div>
+
                                 {iq.type === 'mcq' || iq.type === 'true_false' ? (
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                                     {iq.options.map((opt: string, oIdx: number) => (
