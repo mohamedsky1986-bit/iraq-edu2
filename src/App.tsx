@@ -156,7 +156,6 @@ export function App() {
   const [adminUsername, setAdminUsername] = useState<string>('admin');
   const [adminPassword, setAdminPassword] = useState<string>('123456');
 
-  // جلب بيانات الأدمن من سحابة Firebase لتوحيدها على جميع الأجهزة
   useEffect(() => {
     async function fetchAdminSettings() {
       try {
@@ -167,7 +166,6 @@ export function App() {
           if (data.username) setAdminUsername(data.username);
           if (data.name) setAdminName(data.name);
         } else {
-          // إنشاء الإعدادات الافتراضية لأول مرة في سحابة Firebase
           await setDoc(doc(db, 'settings', 'admin_config'), {
             password: '123456',
             username: 'admin',
@@ -236,14 +234,12 @@ export function App() {
   const [selectedStage, setSelectedStage] = useState<string>('all'); 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   
-  // حقل البحث الذكي داخل المادة
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
 
-  // حالات تعديل الامتحان للأدمن
   const [editingQuizItem, setEditingQuizItem] = useState<{subjectId: string, quiz: any} | null>(null);
   const [editQuizTitle, setEditQuizTitle] = useState('');
   const [editQuizDuration, setEditQuizDuration] = useState(15);
@@ -274,15 +270,15 @@ export function App() {
   const [editNoteImage, setEditNoteImage] = useState('');
   const [editNoteVip, setEditNoteVip] = useState(false);
 
+  // حالات تعديل بيانات الطالب الكاملة للأدمن
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
-  const [editUser, setEditUser] = useState('');
-  const [editPass, setEditPass] = useState('');
-  const [editStage, setEditStage] = useState('');
-  const [editName, setEditName] = useState('');
+  const [editStudentName, setEditStudentName] = useState('');
+  const [editStudentUser, setEditStudentUser] = useState('');
+  const [editStudentPass, setEditStudentPass] = useState('');
+  const [editStudentStage, setEditStudentStage] = useState('');
 
   const [isMinisterialQuestion, setIsMinisterialQuestion] = useState<boolean>(false);
 
-  // حالات الشروحات والأسئلة التفاعلية التابعة لها
   const [newNoteTitle, setNewNoteTitle] = useState('');
   const [newNoteContent, setNewNoteContent] = useState('');
   const [newNoteImage, setNewNoteImage] = useState('');
@@ -298,7 +294,6 @@ export function App() {
   const [studentInteractiveAnswers, setStudentInteractiveAnswers] = useState<Record<number, string>>({});
   const [interactiveGradedStatus, setInteractiveGradedStatus] = useState<Record<number, boolean>>({});
 
-  // حالات إضافة فيديوهات وملازم وامتحانات جديدة
   const [newVideoTitle, setNewVideoTitle] = useState('');
   const [newVideoUrl, setNewVideoUrl] = useState('');
   const [newVideoVip, setNewVideoVip] = useState(false);
@@ -889,7 +884,7 @@ export function App() {
                   isVip: false,
                   status: 'متصل الآن',
                   lastSeen: nowFormatted,
-                  regDate: new Date().toISOString().split('T')[0],
+                  regDate: new Date().toLocaleDateString('ar-IQ', {year: 'numeric', month: '2-digit', day: '2-digit'}),
                   examScore: 'لم يتقدم'
                 };
 
@@ -1222,7 +1217,7 @@ export function App() {
         </div>
       )}
 
-      {/* المحتوى الرئيسي (هوامش موسعة 100% لتملأ شاشة الموبايل) */}
+      {/* المحتوى الرئيسي */}
       <main className="flex-1 w-full max-w-full mx-auto px-1 sm:px-3 py-3 space-y-5 overflow-x-hidden">
         
         {/* البانر العلوي */}
@@ -1798,20 +1793,20 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة */}
+        {/* 3. لوحة إدارة الطلبة مع خيارات التعديل الكاملة (الاسم، اليوزر، الباسورد، المرحلة) */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-xl border space-y-4 w-full">
             <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-              <Users className="w-5 h-5 text-indigo-600" /> إدارة الطلبة ودرجاتهم
+              <Users className="w-5 h-5 text-indigo-600" /> إدارة الطلبة ودرجاتهم وتعديل بياناتهم
             </h2>
             <div className="overflow-x-auto">
-              <table className="w-full text-right border-collapse min-w-[650px]">
+              <table className="w-full text-right border-collapse min-w-[750px]">
                 <thead>
                   <tr className="bg-slate-50 border-b text-slate-700 text-xs font-black">
                     <th className="p-3">الطالب والمرحلة</th>
                     <th className="p-3">آخر ظهور</th>
-                    <th className="p-3">الدرجة الحالية</th>
-                    <th className="p-3">اشتراك VIP</th>
+                    <th className="p-3">بيانات الدخول (تعديل الاسم، اليوزر، الباسورد)</th>
+                    <th className="p-3">الدرجة & VIP</th>
                     <th className="p-3 text-center">الإجراء</th>
                   </tr>
                 </thead>
@@ -1819,26 +1814,88 @@ export function App() {
                   {studentsList.map((st) => (
                     <tr key={st.id} className="hover:bg-slate-50">
                       <td className="p-3">
-                        <div className="font-black">{st.name}</div>
+                        <div className="font-black text-slate-900">{st.name}</div>
                         <span className="text-indigo-600 text-[10px]">{st.stage}</span>
                       </td>
+
                       <td className="p-3 font-mono text-emerald-600">{st.lastSeen || 'الآن'}</td>
-                      <td className="p-3 text-amber-600">{st.examScore}</td>
+
+                      {/* حقول التعديل الكاملة للطالب (الاسم، اليوزر، الباسورد، المرحلة) */}
                       <td className="p-3">
+                        {editingStudentId === st.id ? (
+                          <div className="flex flex-col gap-1.5 bg-slate-50 p-2.5 rounded-xl border border-indigo-200">
+                            <input type="text" value={editStudentName} onChange={(e) => setEditStudentName(e.target.value)} placeholder="الاسم..." className="px-2 py-1 rounded bg-white border text-xs font-bold" />
+                            <input type="text" value={editStudentUser} onChange={(e) => setEditStudentUser(e.target.value)} placeholder="اليوزر..." className="px-2 py-1 rounded bg-white border text-xs font-bold font-mono" />
+                            <input type="text" value={editStudentPass} onChange={(e) => setEditStudentPass(e.target.value)} placeholder="الباسورد..." className="px-2 py-1 rounded bg-white border text-xs font-bold font-mono" />
+                            <select value={editStudentStage} onChange={(e) => setEditStudentStage(e.target.value)} className="px-2 py-1 rounded bg-white border text-xs font-bold">
+                              {allStagesList.map(s => (
+                                <option key={s.id} value={s.name}>{s.name}</option>
+                              ))}
+                            </select>
+                            <div className="flex gap-2 pt-1">
+                              <button onClick={async () => {
+                                await updateDoc(doc(db, 'students', st.id), {
+                                  name: editStudentName,
+                                  username: editStudentUser,
+                                  pass: editStudentPass,
+                                  stage: editStudentStage
+                                });
+                                setStudentsList(studentsList.map(item => item.id === st.id ? {
+                                  ...item,
+                                  name: editStudentName,
+                                  username: editStudentUser,
+                                  pass: editStudentPass,
+                                  stage: editStudentStage
+                                } : item));
+                                setEditingStudentId(null);
+                                setSuccessMessage('تم تحديث بيانات الطالب بنجاح!');
+                                setTimeout(() => setSuccessMessage(null), 3000);
+                              }} className="px-3 py-1 bg-emerald-600 text-white rounded text-[11px] font-bold cursor-pointer">حفظ</button>
+                              <button onClick={() => setEditingStudentId(null)} className="px-3 py-1 bg-slate-200 rounded text-[11px]">إلغاء</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl border gap-2">
+                            <div>
+                              <div className="text-slate-900">👤 يوزر: <span className="font-mono text-indigo-700">{st.username}</span></div>
+                              <div className="text-slate-600">🔑 باسورد: <span className="font-mono">{st.pass}</span></div>
+                            </div>
+                            <button onClick={() => {
+                              setEditingStudentId(st.id);
+                              setEditStudentName(st.name);
+                              setEditStudentUser(st.username);
+                              setEditStudentPass(st.pass);
+                              setEditStudentStage(st.stage);
+                            }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs cursor-pointer hover:bg-indigo-100" title="تعديل بيانات الطالب">
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="p-3 space-y-1">
+                        <div className="text-amber-600 font-black">{st.examScore}</div>
                         <button onClick={async () => {
                           const newVip = !st.isVip;
                           await updateDoc(doc(db, 'students', st.id), { isVip: newVip });
                           setStudentsList(studentsList.map(item => item.id === st.id ? {...item, isVip: newVip} : item));
-                        }} className={`px-2.5 py-1 rounded text-[10px] font-black cursor-pointer ${st.isVip ? 'bg-amber-500 text-white' : 'bg-slate-200'}`}>
+                        }} className={`px-2 py-0.5 rounded text-[10px] font-black cursor-pointer ${st.isVip ? 'bg-amber-500 text-white' : 'bg-slate-200'}`}>
                           {st.isVip ? '⭐ VIP مفعّل' : 'عادي'}
                         </button>
                       </td>
-                      <td className="p-3 text-center">
+
+                      <td className="p-3 text-center space-y-1">
                         {st.examDetails && (
-                          <button onClick={() => setViewingStudentAnswers(st)} className="px-2.5 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer">
+                          <button onClick={() => setViewingStudentAnswers(st)} className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer block mx-auto">
                             🔍 عرض الأخطاء
                           </button>
                         )}
+                        <button onClick={async () => {
+                          if (window.confirm('حذف هذا الطالب نهائياً؟')) {
+                            await deleteDoc(doc(db, 'students', st.id));
+                            setStudentsList(studentsList.filter(item => item.id !== st.id));
+                          }
+                        }} className="text-rose-500 p-1 block mx-auto" title="حذف الطالب"><Trash2 className="w-4 h-4" /></button>
                       </td>
                     </tr>
                   ))}
@@ -1899,10 +1956,10 @@ export function App() {
           </div>
         )}
 
-        {/* 6. إعدادات كلمة المرور (محفوظة سحابياً في Firebase لتعمل على كل الأجهزة) */}
+        {/* 6. إعدادات كلمة المرور الموحدة سحابياً (تعمل على جميع الأجهزة والمتصفحات) */}
         {activeTab === 'settings' && isAdmin && (
           <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-xl border space-y-4 w-full">
-            <h2 className="text-xl font-black text-slate-900">تغيير كلمة مرور المدير (موحدة لكل الأجهزة)</h2>
+            <h2 className="text-xl font-black text-slate-900">تغيير كلمة مرور المدير (موحدة لكل الأجهزة والمتصفحات)</h2>
             <form onSubmit={async (e) => {
               e.preventDefault();
               try {
@@ -1911,8 +1968,8 @@ export function App() {
                   username: adminUsername,
                   name: adminName
                 });
-                setSuccessMessage('تم حفظ كلمة المرور سحابياً بنجاح وستعمل على جميع الأجهزة!');
-                setTimeout(() => setSuccessMessage(null), 3000);
+                setSuccessMessage('تم حفظ كلمة المرور سحابياً بنجاح، وستعمل في الموبايل والحاسبة فوراً!');
+                setTimeout(() => setSuccessMessage(null), 4000);
               } catch(err) {
                 alert('حدث خطأ أثناء الحفظ.');
               }
@@ -1921,7 +1978,7 @@ export function App() {
                 <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور الجديدة</label>
                 <input type="text" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold" placeholder="كلمة المرور الجديدة" />
               </div>
-              <button type="submit" className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ كلمة المرور سحابياً</button>
+              <button type="submit" className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ وتوحيد كلمة المرور سحابياً ☁️</button>
             </form>
           </div>
         )}
