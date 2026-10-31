@@ -5,7 +5,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, que
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
-  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send, MessageSquare, Globe
+  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send, MessageSquare, Globe, Search, RotateCcw
 } from 'lucide-react';
 
 const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
@@ -68,7 +68,7 @@ export function App() {
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
 
-  // نظام الدردشة العامة الفورية المرتبط بقاعدة البيانات
+  // نظام الدردشة العامة الفورية
   const [showPublicChatModal, setShowPublicChatModal] = useState<boolean>(false);
   const [publicChatInput, setPublicChatInput] = useState<string>('');
   const [publicChatMessages, setPublicChatMessages] = useState<any[]>([]);
@@ -89,13 +89,6 @@ export function App() {
     e.preventDefault();
     if (!publicChatInput.trim()) return;
     
-    const forbiddenWords = ['شتم', 'كلمة_سيئة'];
-    const hasForbidden = forbiddenWords.some(w => publicChatInput.includes(w));
-    if (hasForbidden) {
-      alert('⚠️ عذراً، هذه الكلمة محظورة وفقاً لسياسة وآداب النشر في منصة النابغة.');
-      return;
-    }
-
     const nowDateTime = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
     const newMsg = {
       sender: loggedStudent ? `${loggedStudent.name} (${loggedStudent.stage})` : (isAdmin ? 'مدير المنصة 🎓' : 'زائر كريم'),
@@ -109,12 +102,10 @@ export function App() {
       setPublicChatInput('');
     } catch (err) {
       console.error(err);
-      alert('حدث خطأ أثناء إرسال الرسالة، يرجى التحقق من الاتصال.');
     }
   };
 
   const [showInstallGuideModal, setShowInstallGuideModal] = useState<boolean>(false);
-
   const [deferredPrompt, setDeferredPrompt] = useState<any>(() => (window as any).deferredPrompt || null);
   const [showInstallBtn, setShowInstallBtn] = useState<boolean>(() => {
     if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
@@ -161,7 +152,6 @@ export function App() {
   };
 
   const [adminStageFilter, setAdminStageFilter] = useState<string>('all');
-
   const [adminName, setAdminName] = useState<string>(() => localStorage.getItem('nabough_admin_name') || 'مدير المنصة');
   const [adminUsername, setAdminUsername] = useState<string>('admin');
   const [adminPassword, setAdminPassword] = useState<string>(() => localStorage.getItem('nabough_admin_pass') || '123456');
@@ -221,6 +211,9 @@ export function App() {
   const [selectedStage, setSelectedStage] = useState<string>('all'); 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   
+  // حقل البحث الذكي داخل المادة
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
@@ -507,6 +500,34 @@ export function App() {
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
 
+  // ميزة إعادة امتحان الأخطاء (الامتحان الذكي)
+  const handleRetryIncorrectQuestions = () => {
+    if (!quizResult || !quizResult.details) return;
+    const incorrectOnly = quizResult.details.filter(d => !d.isCorrect).map(d => ({
+      q: d.q,
+      correct: d.correct,
+      type: 'fill',
+      isMinisterial: d.isMinisterial
+    }));
+
+    if (incorrectOnly.length === 0) {
+      alert('أنت بطل! ليس لديك أخطاء لإعادتها.');
+      return;
+    }
+
+    const retryQuizObj = {
+      title: `إعادة امتحان الأخطاء السابقة (${activeQuiz.title})`,
+      durationMinutes: 10,
+      questions: incorrectOnly
+    };
+
+    setQuizResult(null);
+    setQuizAnswers({});
+    setActiveQuiz(retryQuizObj);
+    setTimeLeft(600);
+    setTimerActive(true);
+  };
+
   const handleMoveItem = async (subjectId: string, listKey: 'notes' | 'videos' | 'booklets' | 'quizzes', index: number, direction: 'up' | 'down') => {
     const targetSub = subjects.find(s => s.id === subjectId);
     if (!targetSub) return;
@@ -562,12 +583,12 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-2 sm:pt-4">
+    <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-1 sm:pt-2">
       
       {/* نافذة تعديل الامتحان للأدمن */}
       {editingQuizItem && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative space-y-4 text-right">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative space-y-4 text-right">
             <button onClick={() => setEditingQuizItem(null)} className="absolute top-4 left-4 w-9 h-9 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
               <X className="w-4 h-4" />
             </button>
@@ -627,10 +648,10 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة الدردشة العامة التفاعلية بين الطلاب */}
+      {/* نافذة الدردشة العامة */}
       {showPublicChatModal && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full h-[85vh] p-6 shadow-2xl relative flex flex-col text-right">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full h-[85vh] p-4 sm:p-6 shadow-2xl relative flex flex-col text-right">
             <button onClick={() => setShowPublicChatModal(false)} className="absolute top-4 left-4 w-9 h-9 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
               <X className="w-4 h-4" />
             </button>
@@ -1021,8 +1042,8 @@ export function App() {
 
       {/* نافذة الامتحان */}
       {activeQuiz && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl relative space-y-6">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative space-y-6">
             <div className="flex items-center justify-between pb-4 border-b">
               <div>
                 <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-xl">امتحان تفاعلي ذكي</span>
@@ -1056,9 +1077,17 @@ export function App() {
                     </div>
                   ))}
                 </div>
-                <button onClick={() => { setActiveQuiz(null); setQuizResult(null); setQuizAnswers({}); setTimerActive(false); }} className="px-8 py-3 bg-indigo-600 text-white font-bold rounded-xl shadow-md">
-                  إغلاق ورقة الامتحان
-                </button>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  {quizResult.details.some(d => !d.isCorrect) && (
+                    <button onClick={handleRetryIncorrectQuestions} className="flex-1 py-3.5 bg-amber-500 hover:bg-amber-600 text-white font-black rounded-xl shadow-md flex items-center justify-center gap-2 text-xs cursor-pointer">
+                      <RotateCcw className="w-4 h-4" /> إعادة امتحان الأخطاء فقط (امتحان ذكي 🔄)
+                    </button>
+                  )}
+                  <button onClick={() => { setActiveQuiz(null); setQuizResult(null); setQuizAnswers({}); setTimerActive(false); }} className="flex-1 py-3.5 bg-slate-900 text-white font-bold rounded-xl text-xs">
+                    إغلاق ورقة الامتحان
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="space-y-6">
@@ -1097,8 +1126,8 @@ export function App() {
         </div>
       )}
 
-      {/* رأس الصفحة مع زر الدردشة العامة بالاعلى */}
-      <div className="w-full bg-slate-900 py-2.5 px-4 sm:px-6 shadow-md flex items-center justify-between flex-wrap gap-2">
+      {/* رأس الصفحة مع زر الدردشة العامة */}
+      <div className="w-full bg-slate-900 py-2.5 px-3 sm:px-6 shadow-md flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-black text-sm shadow">ن</div>
           <div>
@@ -1112,12 +1141,12 @@ export function App() {
             onClick={() => setShowPublicChatModal(true)}
             className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[11px] font-bold shadow transition-all flex items-center gap-1.5 cursor-pointer"
           >
-            <Globe className="w-3.5 h-3.5" /> الدردشة العامة للطلبة 🌐
+            <Globe className="w-3.5 h-3.5" /> الدردشة العامة 🌐
           </button>
 
           {showInstallBtn && (
-            <button onClick={handleInstallApp} className="px-2.5 py-1.5 bg-gradient-to-r from-amber-400 via-yellow-500 to-amber-500 hover:from-amber-500 hover:to-yellow-600 text-slate-950 rounded-xl text-[11px] font-black shadow-md flex items-center gap-1 border border-yellow-200 cursor-pointer">
-              <Smartphone className="w-3.5 h-3.5 text-slate-950" /> تثبيت التطبيق 📱
+            <button onClick={handleInstallApp} className="px-2 py-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 rounded-xl text-[11px] font-black shadow-md flex items-center gap-1 cursor-pointer">
+              <Smartphone className="w-3.5 h-3.5" /> تثبيت 📱
             </button>
           )}
 
@@ -1148,37 +1177,22 @@ export function App() {
       {/* شريط التبويبات (للأدمن فقط) */}
       {isAdmin && (
         <div className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-30 w-full">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between py-3 gap-3 overflow-x-auto scrollbar-none">
+          <div className="max-w-7xl mx-auto px-3 sm:px-6 flex items-center justify-between py-2.5 gap-2 overflow-x-auto scrollbar-none">
             <div className="flex items-center gap-2">
-              <button 
-                onClick={() => { setActiveTab('curriculum'); setSelectedSubjectId(null); }}
-                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'curriculum' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-              >
-                <BookOpen className="w-4 h-4" /> المنهج الدراسي والصفوف
+              <button onClick={() => { setActiveTab('curriculum'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'curriculum' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                <BookOpen className="w-3.5 h-3.5" /> المنهج الدراسي
               </button>
-              <button 
-                onClick={() => { setActiveTab('students'); setSelectedSubjectId(null); }}
-                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'students' ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
-              >
-                <Users className="w-4 h-4" /> إدارة الطلبة والـ VIP
+              <button onClick={() => { setActiveTab('students'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'students' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                <Users className="w-3.5 h-3.5" /> الطلبة ودرجاتهم
               </button>
-              <button 
-                onClick={() => { setActiveTab('adminPanel'); setSelectedSubjectId(null); }}
-                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'adminPanel' ? 'bg-emerald-600 text-white shadow-md' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}
-              >
-                <Settings className="w-4 h-4" /> إضافة المواد والصور
+              <button onClick={() => { setActiveTab('adminPanel'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'adminPanel' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
+                <PlusCircle className="w-3.5 h-3.5" /> إضافة المواد
               </button>
-              <button 
-                onClick={() => { setActiveTab('vipSettings'); setSelectedSubjectId(null); }}
-                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'vipSettings' ? 'bg-amber-600 text-white shadow-md' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}
-              >
-                <Crown className="w-4 h-4" /> إعدادات VIP
+              <button onClick={() => { setActiveTab('vipSettings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'vipSettings' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800'}`}>
+                <Crown className="w-3.5 h-3.5" /> إعدادات VIP
               </button>
-              <button 
-                onClick={() => { setActiveTab('settings'); setSelectedSubjectId(null); }}
-                className={`px-4 py-2 rounded-xl font-bold text-xs sm:text-sm transition-all flex items-center gap-2 whitespace-nowrap ${activeTab === 'settings' ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
-              >
-                <Key className="w-4 h-4" /> إعدادات الأدمن
+              <button onClick={() => { setActiveTab('settings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'settings' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}>
+                <Key className="w-3.5 h-3.5" /> كلمة المرور
               </button>
             </div>
           </div>
@@ -1186,40 +1200,36 @@ export function App() {
       )}
 
       {successMessage && (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-4 w-full">
-          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-2xl flex items-center gap-3 text-sm font-bold shadow-sm">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 mt-3 w-full">
+          <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-2 rounded-xl flex items-center gap-2 text-xs font-bold shadow-sm">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
             <span>{successMessage}</span>
           </div>
         </div>
       )}
 
-      {/* المحتوى الرئيسي */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 sm:space-y-8 overflow-x-hidden">
+      {/* المحتوى الرئيسي (هوامش موسعة لتملأ شاشة الموبايل بالكامل) */}
+      <main className="flex-1 w-full max-w-full mx-auto px-2 sm:px-4 py-4 space-y-6 overflow-x-hidden">
         
-        {/* البانر العلوي مع زر تغيير المرحلة المصغر وأيقونة الدردشة */}
-        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-3xl shadow-xl text-white p-6 sm:p-8 relative overflow-hidden mt-1">
-          <div className="relative z-10 max-w-3xl space-y-4">
-            <div className="inline-flex items-center gap-2 bg-indigo-800/60 border border-indigo-600/30 px-3 py-1 rounded-xl text-xs font-bold text-indigo-200 flex-wrap">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> منصة النابغة التعليمية - المنهج العراقي الرسمي
+        {/* البانر العلوي */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-2xl shadow-lg text-white p-4 sm:p-6 relative overflow-hidden">
+          <div className="relative z-10 space-y-3">
+            <div className="inline-flex items-center gap-1.5 bg-indigo-800/60 border border-indigo-600/30 px-2.5 py-0.5 rounded-lg text-[11px] font-bold text-indigo-200">
+              <ShieldCheck className="w-3 h-3 text-emerald-400" /> منصة النابغة التعليمية - المنهج العراقي الرسمي
             </div>
             
-            <h1 className="text-2xl sm:text-4xl font-black tracking-tight leading-snug">
-              {isAdmin ? 'لوحة تحكم المدير العام والإدارة 🎓' : loggedStudent ? `مرحباً بك يا ${loggedStudent?.name} في مرحلة ${loggedStudent?.stage} 📚` : 'تصفح المناهج الدراسية والامتحانات التفاعلية 🎓'}
+            <h1 className="text-xl sm:text-3xl font-black tracking-tight leading-snug">
+              {isAdmin ? 'لوحة تحكم المدير العام والإدارة 🎓' : loggedStudent ? `أهلاً بك يا ${loggedStudent?.name} (${loggedStudent?.stage}) 📚` : 'تصفح المناهج والامتحانات التفاعلية 🎓'}
             </h1>
 
-            {/* زر تعديل المرحلة الدراسية بشكل مصغر وأنيق */}
             {!isAdmin && loggedStudent && (
-              <div className="pt-1">
+              <div>
                 {!isChangingStage ? (
-                  <button 
-                    onClick={() => setIsChangingStage(true)}
-                    className="px-3 py-1.5 bg-indigo-800/70 hover:bg-indigo-700 text-indigo-200 rounded-xl text-xs font-bold border border-indigo-500/30 transition-all shadow-sm inline-flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <span>🔄 تغيير المرحلة الدراسية</span>
+                  <button onClick={() => setIsChangingStage(true)} className="px-3 py-1 bg-indigo-800/70 hover:bg-indigo-700 text-indigo-200 rounded-lg text-xs font-bold border border-indigo-500/30 cursor-pointer">
+                    🔄 تغيير المرحلة الدراسية
                   </button>
                 ) : (
-                  <div className="flex items-center gap-2 bg-indigo-950 border border-indigo-500/50 p-2.5 rounded-2xl max-w-xs animate-fadeIn">
+                  <div className="flex items-center gap-2 bg-indigo-950 border border-indigo-500/50 p-2 rounded-xl max-w-xs">
                     <select 
                       value={loggedStudent.stage}
                       onChange={async (e) => {
@@ -1232,22 +1242,17 @@ export function App() {
                           setStudentsList(studentsList.map(s => s.id === loggedStudent.id ? {...s, stage: newStage} : s));
                           setSelectedSubjectId(null);
                           setIsChangingStage(false);
-                          setSuccessMessage(`تم تحديث مرحلتك بنجاح إلى: ${newStage} وتم جلب مناهجك الجديدة!`);
-                          setTimeout(() => setSuccessMessage(null), 3500);
-                        } catch(err) { console.error(err); }
+                          setSuccessMessage(`تم تحديث مرحلتك إلى: ${newStage}`);
+                          setTimeout(() => setSuccessMessage(null), 3000);
+                        } catch(err) {}
                       }}
-                      className="w-full bg-white text-slate-900 text-xs font-black rounded-xl px-3 py-1.5 cursor-pointer shadow-sm"
+                      className="w-full bg-white text-slate-900 text-xs font-black rounded-lg px-2 py-1 cursor-pointer"
                     >
                       {allStagesList.map(st => (
                         <option key={st.id} value={st.name}>{st.name}</option>
                       ))}
                     </select>
-                    <button 
-                      onClick={() => setIsChangingStage(false)}
-                      className="px-2.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold"
-                    >
-                      ✕
-                    </button>
+                    <button onClick={() => setIsChangingStage(false)} className="px-2 py-1 bg-rose-600 text-white rounded-lg text-xs">✕</button>
                   </div>
                 )}
               </div>
@@ -1257,38 +1262,36 @@ export function App() {
 
         {/* 1. تبويب المنهج الدراسي */}
         {activeTab === 'curriculum' && !selectedSubjectId && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex items-center gap-3 w-full sm:w-auto">
-                <div className="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xl flex-shrink-0">📚</div>
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-lg flex-shrink-0">📚</div>
                 <div>
-                  <h3 className="font-black text-slate-900 text-base">
-                    {isAdmin ? 'اختر الصف الدراسي المطلوب' : loggedStudent ? `مرحلتك الدراسية الحصرية: ${loggedStudent?.stage}` : 'اختر الصف الدراسي لتصفح المناهج'}
+                  <h3 className="font-black text-slate-900 text-sm sm:text-base">
+                    {isAdmin ? 'اختر الصف الدراسي' : loggedStudent ? `مرحلتك الحصرية: ${loggedStudent?.stage}` : 'اختر الصف الدراسي'}
                   </h3>
-                  <p className="text-xs text-slate-500">
-                    {isAdmin ? 'يتضمن كافة المراحل والصفوف الدراسية التسع في العراق' : loggedStudent ? 'تظهر لك مواد صفك حصراً' : 'استخدم القائمة المنسدلة لاختيار أي صف وتصفح مواده، وعند محاولة فتح مادة سيُطلب منك تسجيل الدخول'}
-                  </p>
+                  <p className="text-[11px] text-slate-500">يتضمن كافة المراحل والصفوف في العراق</p>
                 </div>
               </div>
 
               {(!loggedStudent || isAdmin) && (
-                <div className="relative w-full sm:w-96">
+                <div className="relative w-full sm:w-80">
                   <select 
                     value={selectedStage}
                     onChange={(e) => setSelectedStage(e.target.value)}
-                    className="w-full bg-slate-50 border-2 border-indigo-200 text-slate-900 text-sm font-black rounded-xl px-4 py-3.5 appearance-none focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer shadow-sm"
+                    className="w-full bg-slate-50 border-2 border-indigo-200 text-slate-900 text-xs sm:text-sm font-black rounded-xl px-3 py-3 appearance-none cursor-pointer"
                   >
-                    <option value="all">🌟 عرض كافة المراحل والصفوف الدراسية</option>
+                    <option value="all">🌟 عرض كافة المراحل الدراسية</option>
                     {allStagesList.map(st => (
                       <option key={st.id} value={st.id}>{st.name}</option>
                     ))}
                   </select>
-                  <ChevronDown className="w-5 h-5 text-indigo-600 absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <ChevronDown className="w-4 h-4 text-indigo-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredSubjects.map((sub, sIdx) => (
                 <div 
                   key={sub.id}
@@ -1297,98 +1300,54 @@ export function App() {
                       setShowStudentAuthModal(true);
                     } else {
                       setSelectedSubjectId(sub.id);
+                      setSearchQuery('');
                     }
                   }}
-                  className="bg-white rounded-3xl overflow-hidden shadow-md hover:shadow-xl transition-all duration-300 border border-slate-200/80 group flex flex-col justify-between relative cursor-pointer"
+                  className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all border border-slate-200 group flex flex-col justify-between relative cursor-pointer"
                 >
                   {isAdmin && (
-                    <div className="absolute top-3 left-3 flex items-center gap-1 z-25">
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleMoveSubject(sIdx, 'up'); }}
-                        className="w-7 h-7 bg-slate-800 hover:bg-slate-900 text-white rounded-lg flex items-center justify-center shadow"
-                        title="تقديم للأعلى"
-                      >
-                        <ArrowUp className="w-3.5 h-3.5" />
-                      </button>
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); handleMoveSubject(sIdx, 'down'); }}
-                        className="w-7 h-7 bg-slate-800 hover:bg-slate-900 text-white rounded-lg flex items-center justify-center shadow"
-                        title="تأخير للأسفل"
-                      >
-                        <ArrowDown className="w-3.5 h-3.5" />
-                      </button>
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingSubjectId(sub.id);
-                          setEditSubName(sub.name);
-                          setEditSubImage(sub.image || '');
-                        }}
-                        className="w-7 h-7 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg flex items-center justify-center shadow"
-                        title="تعديل المادة"
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                      <button 
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`هل أنت متأكد من حذف مادة ${sub.name}?`)) {
-                            try {
-                              await deleteDoc(doc(db, 'subjects', sub.id));
-                              const updatedSubs = subjects.filter(s => s.id !== sub.id);
-                              setSubjects(updatedSubs);
-                              localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                              setSuccessMessage('تم حذف المادة بنجاح.');
-                              setTimeout(() => setSuccessMessage(null), 3000);
-                            } catch (err) { console.error(err); }
-                          }
-                        }}
-                        className="w-7 h-7 bg-rose-600 hover:bg-rose-700 text-white rounded-lg flex items-center justify-center shadow"
-                        title="حذف المادة"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                    <div className="absolute top-2 left-2 flex items-center gap-1 z-25">
+                      <button onClick={(e) => { e.stopPropagation(); handleMoveSubject(sIdx, 'up'); }} className="w-6 h-6 bg-slate-800 text-white rounded flex items-center justify-center text-xs" title="للأعلى"><ArrowUp className="w-3 h-3" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleMoveSubject(sIdx, 'down'); }} className="w-6 h-6 bg-slate-800 text-white rounded flex items-center justify-center text-xs" title="للأسفل"><ArrowDown className="w-3 h-3" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); setEditingSubjectId(sub.id); setEditSubName(sub.name); setEditSubImage(sub.image || ''); }} className="w-6 h-6 bg-indigo-600 text-white rounded flex items-center justify-center text-xs"><Edit3 className="w-3 h-3" /></button>
+                      <button onClick={async (e) => {
+                        e.stopPropagation();
+                        if (window.confirm(`حذف مادة ${sub.name}?`)) {
+                          await deleteDoc(doc(db, 'subjects', sub.id));
+                          setSubjects(subjects.filter(s => s.id !== sub.id));
+                        }
+                      }} className="w-6 h-6 bg-rose-600 text-white rounded flex items-center justify-center text-xs"><Trash2 className="w-3 h-3" /></button>
                     </div>
                   )}
 
                   {editingSubjectId === sub.id && (
-                    <div onClick={(e) => e.stopPropagation()} className="absolute inset-0 bg-white/95 backdrop-blur-md z-30 p-6 flex flex-col justify-center space-y-3 text-right">
-                      <h4 className="font-black text-sm text-slate-900">تعديل بيانات المادة</h4>
-                      <input type="text" value={editSubName} onChange={(e) => setEditSubName(e.target.value)} placeholder="اسم المادة..." className="px-3 py-2 border rounded-xl text-xs font-bold" />
-                      <input type="text" value={editSubImage} onChange={(e) => setEditSubImage(e.target.value)} placeholder="رابط الصورة..." className="px-3 py-2 border rounded-xl text-xs font-bold font-mono" />
-                      <div className="flex gap-2 pt-2">
+                    <div onClick={(e) => e.stopPropagation()} className="absolute inset-0 bg-white/95 backdrop-blur-md z-30 p-4 flex flex-col justify-center space-y-2 text-right">
+                      <input type="text" value={editSubName} onChange={(e) => setEditSubName(e.target.value)} className="px-2 py-1 border rounded text-xs font-bold" />
+                      <input type="text" value={editSubImage} onChange={(e) => setEditSubImage(e.target.value)} className="px-2 py-1 border rounded text-xs font-mono" />
+                      <div className="flex gap-2">
                         <button onClick={async () => {
                           await updateDoc(doc(db, 'subjects', sub.id), { name: editSubName, image: editSubImage });
-                          const updatedSubs = subjects.map(s => s.id === sub.id ? {...s, name: editSubName, image: editSubImage} : s);
-                          setSubjects(updatedSubs);
-                          localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                          setSubjects(subjects.map(s => s.id === sub.id ? {...s, name: editSubName, image: editSubImage} : s));
                           setEditingSubjectId(null);
-                          setSuccessMessage('تم تعديل المادة بنجاح!');
-                          setTimeout(() => setSuccessMessage(null), 3000);
-                        }} className="flex-1 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold">حفظ</button>
-                        <button onClick={() => setEditingSubjectId(null)} className="flex-1 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">إلغاء</button>
+                        }} className="flex-1 py-1 bg-emerald-600 text-white rounded text-xs">حفظ</button>
+                        <button onClick={() => setEditingSubjectId(null)} className="flex-1 py-1 bg-slate-200 rounded text-xs">إلغاء</button>
                       </div>
                     </div>
                   )}
 
-                  <div className="h-40 w-full relative overflow-hidden bg-slate-200">
+                  <div className="h-32 w-full relative overflow-hidden bg-slate-200">
                     <img src={sub.image} alt={sub.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent"></div>
-                    <div className="absolute bottom-3 right-3 left-3 flex items-center justify-between text-white">
-                      <span className="text-xs font-black bg-indigo-600/90 px-3 py-1 rounded-lg">{sub.stageName}</span>
-                      <span className="text-2xl">{sub.icon}</span>
+                    <div className="absolute bottom-2 right-2 left-2 flex items-center justify-between text-white">
+                      <span className="text-[11px] font-black bg-indigo-600/90 px-2 py-0.5 rounded">{sub.stageName}</span>
                     </div>
                   </div>
                   
-                  <div className="p-6">
-                    <h3 className="text-xl font-black text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors">
-                      {sub.name}
-                    </h3>
-                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs font-bold text-slate-600">
+                  <div className="p-4">
+                    <h3 className="text-base font-black text-slate-900">{sub.name}</h3>
+                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-500 mt-2">
                       <span>{sub.videos?.length || 0} فيديو</span>
-                      <span>•</span>
                       <span>{sub.booklets?.length || 0} ملزمة</span>
-                      <span>•</span>
                       <span>{sub.quizzes?.length || 0} امتحان</span>
                     </div>
                   </div>
@@ -1397,581 +1356,264 @@ export function App() {
             </div>
 
             {filteredSubjects.length === 0 && (
-              <div className="bg-white rounded-3xl p-12 text-center border border-slate-200 space-y-3">
-                <p className="text-slate-500 font-bold text-base">لا توجد مواد دراسية مضافة لهذه المرحلة ({loggedStudent?.stage}) حالياً.</p>
-                <p className="text-xs text-indigo-600 font-bold">💡 نصيحة: يمكنك الذهاب لوحة الأدمن ونشر مواد دراسية خاصة بهذا الصف لكي تظهر للطالب فوراً.</p>
+              <div className="bg-white rounded-2xl p-8 text-center border space-y-2">
+                <p className="text-slate-500 font-bold text-sm">لا توجد مواد مضافة لهذه المرحلة حالياً.</p>
               </div>
             )}
           </div>
         )}
 
-        {/* 2. إدارة المادة الدراسية المفصلة */}
+        {/* 2. إدارة وتصفح المادة الدراسية (مع شريط البحث الفوري الذكي) */}
         {selectedSubjectId && (() => {
           const currentSub = subjects.find(s => s.id === selectedSubjectId);
           if (!currentSub) return null;
+
+          // فلترة الشروحات والمحتوى بحسب البحث الفوري
+          const filteredNotes = (currentSub.notes || []).filter((n: any) => 
+            n.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+            n.content.toLowerCase().includes(searchQuery.toLowerCase())
+          );
+
+          const filteredVideos = (currentSub.videos || []).filter((v: any) => 
+            v.title.toLowerCase().includes(searchQuery.toLowerCase())
+          );
+
+          const filteredBooklets = (currentSub.booklets || []).filter((b: any) => 
+            b.title.toLowerCase().includes(searchQuery.toLowerCase())
+          );
+
           return (
-            <div className="bg-white rounded-3xl p-8 shadow-xl border border-indigo-100 space-y-8">
-              <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-3">
+            <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-xl border border-indigo-100 space-y-6">
+              <div className="flex items-center justify-between pb-3 border-b flex-wrap gap-3">
                 <div>
-                  <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-xl border border-indigo-200">عرض المادة الدراسية</span>
-                  <h3 className="text-2xl font-black text-slate-900 mt-2 flex items-center gap-3">
-                    <span className="text-3xl">{currentSub.icon}</span> {currentSub.name} ({currentSub.stageName})
+                  <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-200">عرض المادة</span>
+                  <h3 className="text-xl sm:text-2xl font-black text-slate-900 mt-1 flex items-center gap-2">
+                    <span>{currentSub.icon}</span> {currentSub.name} ({currentSub.stageName})
                   </h3>
                 </div>
-                <button onClick={() => setSelectedSubjectId(null)} className="text-xs font-bold bg-slate-100 text-slate-700 px-4 py-2.5 rounded-xl">
+                <button onClick={() => setSelectedSubjectId(null)} className="text-xs font-bold bg-slate-100 text-slate-700 px-3 py-2 rounded-xl">
                   ← العودة للمناهج
                 </button>
               </div>
 
-              {/* أ) الشروحات والتعاليل مع دعم إضافة صورة واضحة للشرح والأسئلة التفاعلية التابعة له */}
-              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
-                <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
-                  <NoteIcon className="w-5 h-5 text-amber-600" /> الشروحات والتعاليل والملاحظات التعليمية ({currentSub.notes?.length || 0})
+              {/* شريط البحث الفوري الذكي داخل المادة */}
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+                <input 
+                  type="text" 
+                  value={searchQuery} 
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="بحث سريع (اكتب أول حرف أو كلمة مثل: الفصل الأول، تعريف...)" 
+                  className="w-full bg-slate-50 border-2 border-indigo-100 rounded-2xl pr-10 pl-4 py-3 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:border-indigo-500 shadow-sm"
+                />
+              </div>
+
+              {/* أ) الشروحات والتعاليل والأسئلة التفاعلية */}
+              <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
+                <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                  <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل ({filteredNotes.length})
                 </h4>
                 <div className="space-y-4">
-                  {currentSub.notes?.map((note: any, nIdx: number) => (
-                    <div key={note.id} className="p-5 bg-white rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between shadow-sm gap-4 relative">
-                      
-                      {editingNoteId === note.id ? (
-                        <div className="w-full space-y-3 bg-slate-50 p-4 rounded-xl border">
-                          <h5 className="font-black text-xs text-indigo-900">تعديل الشرح أو التعليل</h5>
-                          <input type="text" value={editNoteTitle} onChange={(e) => setEditNoteTitle(e.target.value)} placeholder="العنوان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-white" />
-                          <textarea value={editNoteContent} onChange={(e) => setEditNoteContent(e.target.value)} placeholder="النص..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold bg-white h-20" />
-                          <input type="text" value={editNoteImage} onChange={(e) => setEditNoteImage(e.target.value)} placeholder="رابط الصورة للشرح..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold font-mono bg-white" />
-                          <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
-                            <input type="checkbox" checked={editNoteVip} onChange={(e) => setEditNoteVip(e.target.checked)} className="w-4 h-4 text-amber-600" />
-                            <span>شرح خاص بـ VIP؟</span>
-                          </label>
-                          <div className="flex gap-2 pt-2">
-                            <button onClick={async () => {
-                              const updatedNotes = currentSub.notes.map((n: any) => n.id === note.id ? { ...n, title: editNoteTitle, content: editNoteContent, image: editNoteImage, isVip: editNoteVip } : n);
-                              await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
-                              const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s);
-                              setSubjects(updatedSubs);
-                              localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                              setEditingNoteId(null);
-                              setSuccessMessage('تم تعديل الشرح أو التعليل بنجاح!');
-                              setTimeout(() => setSuccessMessage(null), 3000);
-                            }} className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold">حفظ التعديل</button>
-                            <button onClick={() => setEditingNoteId(null)} className="px-4 py-2 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">إلغاء</button>
-                          </div>
+                  {filteredNotes.map((note: any, nIdx: number) => (
+                    <div key={note.id} className="p-4 bg-white rounded-2xl border shadow-sm space-y-3 relative">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <h5 className="font-black text-slate-900 text-xs sm:text-sm">💡 {note.title}</h5>
+                          {note.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
                         </div>
-                      ) : (
-                        <>
-                          <div className="space-y-3 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h5 className="font-black text-slate-900 text-sm">💡 {note.title}</h5>
-                              {note.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
-                            </div>
-                            {note.isVip && !isVipActive && isAdmin === false ? (
-                              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between flex-wrap gap-2">
-                                <span className="text-xs font-bold text-amber-800 flex items-center gap-1"><Lock className="w-3.5 h-3.5" /> هذا الشرح خاص بمشتركي الـ VIP</span>
-                                <button onClick={() => setVipModalItem(note)} className="px-3 py-1.5 bg-amber-500 text-white font-bold rounded-lg text-xs">شاهد تفاصيل الاشتراك</button>
+                      </div>
+
+                      <p className="text-xs text-slate-700 leading-relaxed">{note.content}</p>
+
+                      {/* الصورة التوضيحية الخاصة بالشرح (مثل خارطة العراق والتوضيح) */}
+                      {note.image && (
+                        <div className="mt-2 h-48 w-full max-w-sm rounded-xl overflow-hidden border shadow-sm">
+                          <img src={note.image} alt={note.title} className="w-full h-full object-cover" />
+                        </div>
+                      )}
+
+                      {/* الأسئلة التفاعلية التابعة للشرح */}
+                      {note.interactiveQuestions && note.interactiveQuestions.length > 0 && (
+                        <div className="mt-3 p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2.5">
+                          <h6 className="text-[11px] font-black text-indigo-900 flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> اختبر فهمك بهذا السؤال السريع:
+                          </h6>
+                          {note.interactiveQuestions.map((iq: any, iqIdx: number) => {
+                            const ansKey = `${note.id}_${iqIdx}`;
+                            const userAns = studentInteractiveAnswers[ansKey] || '';
+                            const isGraded = interactiveGradedStatus[ansKey];
+                            const isCorrect = userAns.trim().toLowerCase() === iq.correct.trim().toLowerCase();
+
+                            return (
+                              <div key={iqIdx} className="bg-white p-3 rounded-lg border space-y-2">
+                                <div className="text-xs font-bold text-slate-900">س: {iq.q}</div>
+                                {iq.type === 'mcq' || iq.type === 'true_false' ? (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                    {iq.options.map((opt: string, oIdx: number) => (
+                                      <label key={oIdx} className={`flex items-center gap-2 p-2 rounded border cursor-pointer text-xs font-bold transition-all ${userAns === opt ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50'}`}>
+                                        <input type="radio" name={`iq_${ansKey}`} checked={userAns === opt} onChange={() => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: opt})} className="hidden" />
+                                        <span>{opt}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <input 
+                                    type="text" 
+                                    value={userAns} 
+                                    onChange={(e) => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: e.target.value})} 
+                                    placeholder="اكتب إجابتك هنا..." 
+                                    className="w-full px-3 py-1.5 bg-slate-50 border rounded text-xs font-bold" 
+                                  />
+                                )}
+
+                                <div className="flex items-center justify-between pt-1">
+                                  <button onClick={() => setInteractiveGradedStatus({...interactiveGradedStatus, [ansKey]: true})} className="px-3 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold shadow cursor-pointer">
+                                    تحقق ✓
+                                  </button>
+                                  {isGraded && (
+                                    <span className={`text-[10px] font-black ${isCorrect ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                      {isCorrect ? '✅ صحيحة بطل!' : `❌ خطأ (الصحيحة: ${iq.correct})`}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
-                            ) : (
-                              <>
-                                <p className="text-xs text-slate-600 mt-1 leading-relaxed">{note.content}</p>
-                                {note.image && (
-                                  <div className="mt-3 h-48 w-full max-w-md rounded-xl overflow-hidden border shadow-sm">
-                                    <img src={note.image} alt={note.title} className="w-full h-full object-cover" />
-                                  </div>
-                                )}
-
-                                {/* عرض الأسئلة التفاعلية السريعة المرفقة مع هذا الشرح */}
-                                {note.interactiveQuestions && note.interactiveQuestions.length > 0 && (
-                                  <div className="mt-4 p-4 bg-indigo-50/70 border border-indigo-200 rounded-2xl space-y-3">
-                                    <h6 className="text-xs font-black text-indigo-900 flex items-center gap-1.5">
-                                      <Sparkles className="w-4 h-4 text-indigo-600" /> سؤال تفاعلي سريع لاختبار فهمك لهذا الشرح:
-                                    </h6>
-                                    {note.interactiveQuestions.map((iq: any, iqIdx: number) => {
-                                      const ansKey = `${note.id}_${iqIdx}`;
-                                      const userAns = studentInteractiveAnswers[ansKey] || '';
-                                      const isGraded = interactiveGradedStatus[ansKey];
-                                      const isCorrect = userAns.trim().toLowerCase() === iq.correct.trim().toLowerCase();
-
-                                      return (
-                                        <div key={iqIdx} className="bg-white p-3.5 rounded-xl border space-y-2">
-                                          <div className="text-xs font-bold text-slate-900">س: {iq.q}</div>
-                                          {iq.type === 'mcq' || iq.type === 'true_false' ? (
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                              {iq.options.map((opt: string, oIdx: number) => (
-                                                <label key={oIdx} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer text-xs font-bold transition-all ${userAns === opt ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 hover:bg-slate-100'}`}>
-                                                  <input type="radio" name={`iq_${ansKey}`} checked={userAns === opt} onChange={() => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: opt})} className="hidden" />
-                                                  <span>{opt}</span>
-                                                </label>
-                                              ))}
-                                            </div>
-                                          ) : (
-                                            <input 
-                                              type="text" 
-                                              value={userAns} 
-                                              onChange={(e) => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: e.target.value})} 
-                                              placeholder="اضغط واكتب إجابتك في الفراغ هنا..." 
-                                              className="w-full px-3 py-2 bg-slate-50 border rounded-lg text-xs font-bold" 
-                                            />
-                                          )}
-
-                                          <div className="flex items-center justify-between pt-1">
-                                            <button 
-                                              onClick={() => setInteractiveGradedStatus({...interactiveGradedStatus, [ansKey]: true})}
-                                              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold shadow cursor-pointer"
-                                            >
-                                              تحقق من الإجابة ✓
-                                            </button>
-                                            {isGraded && (
-                                              <span className={`text-[11px] font-black ${isCorrect ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                                {isCorrect ? '✅ إجابة صحيحة بطل!' : `❌ إجابة خاطئة (الصحيحة: ${iq.correct})`}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </>
-                            )}
-                          </div>
-
-                          {isAdmin && (
-                            <div className="flex items-center gap-1.5 self-start">
-                              <button onClick={() => handleMoveItem(currentSub.id, 'notes', nIdx, 'up')} className="p-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg" title="تقديم للأعلى">
-                                <ArrowUp className="w-3.5 h-3.5" />
-                              </button>
-                              <button onClick={() => handleMoveItem(currentSub.id, 'notes', nIdx, 'down')} className="p-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg" title="تأخير للأسفل">
-                                <ArrowDown className="w-3.5 h-3.5" />
-                              </button>
-                              <button onClick={() => {
-                                setEditingNoteId(note.id);
-                                setEditNoteTitle(note.title);
-                                setEditNoteContent(note.content);
-                                setEditNoteImage(note.image || '');
-                                setEditNoteVip(note.isVip || false);
-                              }} className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg" title="تعديل الشرح">
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                              <button onClick={async () => {
-                                const updatedNotes = currentSub.notes.filter((n: any) => n.id !== note.id);
-                                await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
-                                const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s);
-                                setSubjects(updatedSubs);
-                                localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                                setSuccessMessage('تم حذف الشرح بنجاح.');
-                                setTimeout(() => setSuccessMessage(null), 3000);
-                              }} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg" title="حذف الشرح">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          )}
-                        </>
+                            );
+                          })}
+                        </div>
                       )}
                     </div>
                   ))}
                 </div>
 
+                {/* لوحة إضافة شرح جديد (للأدمن) */}
                 {isAdmin && (
-                  <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-4 mt-4">
-                    <h5 className="text-xs font-black text-slate-800">إضافة شرح أو تعليل أو ملاحظة تعليمية (مع إمكانية إرفاق صورة الشرح وسؤال تفاعلي):</h5>
-                    <input type="text" value={newNoteTitle} onChange={(e) => setNewNoteTitle(e.target.value)} placeholder="عنوان الشرح أو التعليل..." className="w-full px-4 py-2.5 rounded-xl border text-xs font-bold" />
-                    <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="اكتب نص الشرح أو التعليل التفصيلي هنا..." className="w-full px-4 py-2.5 rounded-xl border text-xs font-bold h-24" />
+                  <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
+                    <h5 className="text-xs font-black text-slate-800">➕ إضافة شرح أو تعليل جديد (مع صورة توضيحية للشرح):</h5>
+                    <input type="text" value={newNoteTitle} onChange={(e) => setNewNoteTitle(e.target.value)} placeholder="العنوان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
+                    <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="النص التفصيلي..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold h-20" />
+                    <input type="text" value={newNoteImage} onChange={(e) => setNewNoteImage(e.target.value)} placeholder="رابط صورة توضيحية للشرح (اختياري)..." className="w-full px-3 py-2 border rounded-xl text-xs font-mono text-xs" />
                     
-                    {/* إضافة صورة توضيحية خاصة بالشرح (مثل خارطة العراق والتوضيح) */}
-                    <input type="text" value={newNoteImage} onChange={(e) => setNewNoteImage(e.target.value)} placeholder="رابط صورة توضيحية للشرح (اختياري)..." className="w-full px-4 py-2 rounded-xl border text-xs font-bold font-mono" />
-
-                    {/* إرفاق سؤال تفاعلي يتبع هذا الشرح */}
-                    <div className="p-4 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-3">
-                      <h6 className="text-xs font-black text-indigo-900">➕ إرفاق سؤال تفاعلي سريع لهذا الشرح (اختياري):</h6>
-                      <div className="flex gap-2">
-                        <select value={interactiveType} onChange={(e) => setInteractiveType(e.target.value as any)} className="px-3 py-1.5 bg-white border rounded-lg text-xs font-bold">
-                          <option value="mcq">اختيار من متعدد</option>
-                          <option value="fill">ملء فراغ</option>
-                          <option value="true_false">صح وخطأ</option>
-                        </select>
-                        <input type="text" value={interactiveQText} onChange={(e) => setInteractiveQText(e.target.value)} placeholder="نص السؤال التفاعلي..." className="flex-1 px-3 py-1.5 bg-white border rounded-lg text-xs font-bold" />
-                      </div>
-
-                      {interactiveType === 'mcq' && (
-                        <div className="grid grid-cols-2 gap-2">
-                          {interactiveOptions.map((opt, oIdx) => (
-                            <input key={oIdx} type="text" value={opt} onChange={(e) => {
-                              const opts = [...interactiveOptions];
-                              opts[oIdx] = e.target.value;
-                              setInteractiveOptions(opts);
-                            }} placeholder={`الخيار ${oIdx+1}`} className="px-3 py-1 bg-white border rounded text-xs" />
-                          ))}
-                          <input type="text" value={interactiveCorrect} onChange={(e) => setInteractiveCorrect(e.target.value)} placeholder="الخيار الصحيح تماماً..." className="col-span-2 px-3 py-1 bg-emerald-50 border border-emerald-300 rounded text-xs font-bold text-emerald-900" />
-                        </div>
-                      )}
-
-                      {interactiveType === 'fill' && (
-                        <input type="text" value={interactiveFill} onChange={(e) => setInteractiveFill(e.target.value)} placeholder="الإجابة الصحيحة في الفراغ..." className="w-full px-3 py-1.5 bg-emerald-50 border border-emerald-300 rounded text-xs font-bold text-emerald-900" />
-                      )}
-
-                      {interactiveType === 'true_false' && (
-                        <div className="flex gap-4 text-xs font-bold items-center">
-                          <span>الإجابة الصحيحة:</span>
-                          <label className="cursor-pointer"><input type="radio" name="itf" checked={interactiveTf === 'صح'} onChange={() => setInteractiveTf('صح')} /> صح</label>
-                          <label className="cursor-pointer"><input type="radio" name="itf" checked={interactiveTf === 'خطأ'} onChange={() => setInteractiveTf('خطأ')} /> خطأ</label>
-                        </div>
-                      )}
-
-                      <button type="button" onClick={() => {
-                        if (!interactiveQText) {
-                          alert('يرجى كتابة نص السؤال التفاعلي أولاً.');
-                          return;
-                        }
-                        const qObj = {
-                          type: interactiveType,
-                          q: interactiveQText,
-                          options: interactiveType === 'mcq' ? interactiveOptions : (interactiveType === 'true_false' ? ['صح', 'خطأ'] : []),
-                          correct: interactiveType === 'mcq' ? interactiveCorrect : (interactiveType === 'fill' ? interactiveFill : interactiveTf)
-                        };
-                        setInteractiveList([...interactiveList, qObj]);
-                        setInteractiveQText('');
-                        setInteractiveCorrect('');
-                        setInteractiveFill('');
-                        alert('✅ تمت إضافة السؤال التفاعلي بنجاح إلى قائمة هذا الشرح!');
-                      }} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold cursor-pointer shadow">
-                        + إضافة السؤال التفاعلي للقائمة ({interactiveList.length} أسئلة مضافة)
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-2">
-                      <label className="flex items-center gap-2 px-4 py-2 bg-slate-50 rounded-xl border font-bold text-xs cursor-pointer">
-                        <input type="checkbox" checked={newNoteVip} onChange={(e) => setNewNoteVip(e.target.checked)} className="w-4 h-4 text-amber-600 rounded" />
-                        <span>شرح خاص بـ VIP؟</span>
-                      </label>
-                    </div>
-
                     <button onClick={async () => {
-                      if (!newNoteTitle || !newNoteContent) {
-                        alert('يرجى كتابة عنوان الشرح والنص التفصيلي على الأقل.');
-                        return;
-                      }
-                      const newNoteObj = { 
-                        id: Date.now().toString(), 
-                        title: newNoteTitle, 
-                        content: newNoteContent, 
-                        image: newNoteImage, 
-                        isVip: newNoteVip,
-                        interactiveQuestions: interactiveList
-                      };
+                      if (!newNoteTitle || !newNoteContent) return;
+                      const newNoteObj = { id: Date.now().toString(), title: newNoteTitle, content: newNoteContent, image: newNoteImage, isVip: newNoteVip, interactiveQuestions: [] };
                       const updatedNotes = [...(currentSub.notes || []), newNoteObj];
                       await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
-                      const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s);
-                      setSubjects(updatedSubs);
-                      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                      setNewNoteTitle(''); setNewNoteContent(''); setNewNoteImage(''); setNewNoteVip(false); setInteractiveList([]);
-                      setSuccessMessage('تمت إضافة الشرح مع الأسئلة والصورة بنجاح للمادة!');
+                      setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s));
+                      setNewNoteTitle(''); setNewNoteContent(''); setNewNoteImage('');
+                      setSuccessMessage('تم نشر الشرح بنجاح!');
                       setTimeout(() => setSuccessMessage(null), 3000);
-                    }} className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow cursor-pointer">
-                      + نشر الشرح / التعليل التفاعلي نهائياً في المادة
+                    }} className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold shadow cursor-pointer">
+                      نشر الشرح في المادة
                     </button>
                   </div>
                 )}
               </div>
 
               {/* ب) الفيديوهات الشارحة */}
-              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
-                <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
-                  <Video className="w-5 h-5 text-indigo-600" /> الدروس المرئية والمحاضرات ({currentSub.videos?.length || 0})
+              <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
+                <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                  <Video className="w-4 h-4 text-indigo-600" /> الدروس المرئية والمحاضرات ({filteredVideos.length})
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {currentSub.videos?.map((vid: any) => (
-                    <div key={vid.id} className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center justify-between shadow-sm flex-wrap gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold flex-shrink-0">▶</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {filteredVideos.map((vid: any) => (
+                    <div key={vid.id} className="p-3.5 bg-white rounded-xl border flex items-center justify-between shadow-sm flex-wrap gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">▶</div>
                         <div>
-                          <span className="font-bold text-slate-800 text-sm block">{vid.title}</span>
-                          <span className="text-xs text-slate-500">المدة: {vid.duration} {vid.isVip ? '• ⭐ VIP' : ''}</span>
+                          <span className="font-bold text-slate-800 text-xs block">{vid.title}</span>
+                          <span className="text-[10px] text-slate-500">{vid.duration} {vid.isVip ? '• ⭐ VIP' : ''}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {vid.isVip && !isVipActive && isAdmin === false ? (
-                          <button onClick={() => setVipModalItem(vid)} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow">
-                            <Lock className="w-3.5 h-3.5" /> قفل VIP
-                          </button>
-                        ) : (
-                          <button onClick={() => setActiveVideoUrl(vid.url)} className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-md">
-                            <Play className="w-3.5 h-3.5" /> تشغيل
-                          </button>
-                        )}
-                        {isAdmin && (
-                          <button onClick={async () => {
-                            const updatedVids = currentSub.videos.filter((v: any) => v.id !== vid.id);
-                            await updateDoc(doc(db, 'subjects', currentSub.id), { videos: updatedVids });
-                            const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s);
-                            setSubjects(updatedSubs);
-                            localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                            setSuccessMessage('تم حذف الفيديو بنجاح.');
-                            setTimeout(() => setSuccessMessage(null), 3000);
-                          }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
+                      <button onClick={() => setActiveVideoUrl(vid.url)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow">
+                        تشغيل
+                      </button>
                     </div>
                   ))}
                 </div>
 
                 {isAdmin && (
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3 mt-4">
-                    <h5 className="text-xs font-black text-slate-800">إضافة درس مرئي جديد (رابط يوتيوب و VIP):</h5>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <input type="text" value={newVideoTitle} onChange={(e) => setNewVideoTitle(e.target.value)} placeholder="عنوان الدرس..." className="px-4 py-2 rounded-xl border text-xs font-bold" />
-                      <input type="text" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} placeholder="رابط يوتيوب..." className="px-4 py-2 rounded-xl border text-xs font-bold font-mono" />
-                      <div className="flex items-center gap-2">
-                        <label className="flex items-center gap-1 text-xs font-bold cursor-pointer">
-                          <input type="checkbox" checked={newVideoVip} onChange={(e) => setNewVideoVip(e.target.checked)} className="w-4 h-4" />
-                          <span>VIP</span>
-                        </label>
-                        <button onClick={async () => {
-                          if (!newVideoTitle || !newVideoUrl) return;
-                          const formattedUrl = formatYouTubeUrl(newVideoUrl);
-                          const newVidObj = { id: Date.now().toString(), title: newVideoTitle, url: formattedUrl, duration: '45 دقيقة', isVip: newVideoVip };
-                          const updatedVids = [...(currentSub.videos || []), newVidObj];
-                          await updateDoc(doc(db, 'subjects', currentSub.id), { videos: updatedVids });
-                          const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s);
-                          setSubjects(updatedSubs);
-                          localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                          setNewVideoTitle(''); setNewVideoUrl(''); setNewVideoVip(false);
-                          setSuccessMessage('تمت إضافة الفيديو بنجاح!');
-                          setTimeout(() => setSuccessMessage(null), 3000);
-                        }} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl text-xs font-bold shadow-md">
-                          + نشر الفيديو
-                        </button>
-                      </div>
-                    </div>
+                  <div className="bg-white p-3 rounded-xl border space-y-2 mt-2">
+                    <input type="text" value={newVideoTitle} onChange={(e) => setNewVideoTitle(e.target.value)} placeholder="عنوان الفيديو..." className="w-full px-3 py-1.5 border rounded-lg text-xs font-bold" />
+                    <input type="text" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} placeholder="رابط يوتيوب..." className="w-full px-3 py-1.5 border rounded-lg text-xs font-mono" />
+                    <button onClick={async () => {
+                      if (!newVideoTitle || !newVideoUrl) return;
+                      const formattedUrl = formatYouTubeUrl(newVideoUrl);
+                      const newVidObj = { id: Date.now().toString(), title: newVideoTitle, url: formattedUrl, duration: '45 دقيقة', isVip: newVideoVip };
+                      const updatedVids = [...(currentSub.videos || []), newVidObj];
+                      await updateDoc(doc(db, 'subjects', currentSub.id), { videos: updatedVids });
+                      setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s));
+                      setNewVideoTitle(''); setNewVideoUrl('');
+                      setSuccessMessage('تم نشر الفيديو بنجاح!');
+                      setTimeout(() => setSuccessMessage(null), 3000);
+                    }} className="w-full py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold">+ نشر الفيديو</button>
                   </div>
                 )}
               </div>
 
               {/* ج) ملازم PDF */}
-              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
-                <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-emerald-600" /> ملازم وقارئ الـ PDF ({currentSub.booklets?.length || 0})
+              <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
+                <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-emerald-600" /> ملازم الـ PDF ({filteredBooklets.length})
                 </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {currentSub.booklets?.map((book: any) => (
-                    <div key={book.id} className="p-4 bg-white rounded-2xl border border-slate-200 flex items-center justify-between shadow-sm flex-wrap gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold flex-shrink-0">📄</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {filteredBooklets.map((book: any) => (
+                    <div key={book.id} className="p-3.5 bg-white rounded-xl border flex items-center justify-between shadow-sm flex-wrap gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs flex-shrink-0">📄</div>
                         <div>
-                          <span className="font-bold text-slate-800 text-sm block">{book.title}</span>
-                          <span className="text-xs text-slate-500">الحجم: {book.size} {book.isVip ? '• ⭐ VIP' : ''}</span>
+                          <span className="font-bold text-slate-800 text-xs block">{book.title}</span>
+                          <span className="text-[10px] text-slate-500">{book.size} {book.isVip ? '• ⭐ VIP' : ''}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        {book.isVip && !isVipActive && isAdmin === false ? (
-                          <button onClick={() => setVipModalItem(book)} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow">
-                            <Lock className="w-3.5 h-3.5" /> قفل VIP
-                          </button>
-                        ) : (
-                          <div className="flex items-center gap-1.5">
-                            <button onClick={() => setActivePdfUrl(book.url)} className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-md">
-                              <Eye className="w-3.5 h-3.5" /> قراءة
-                            </button>
-                            <a href={book.url} target="_blank" rel="noreferrer" className="px-2.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl text-xs font-bold flex items-center gap-1" title="فتح أو تحميل خارجي">
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </a>
-                          </div>
-                        )}
-                        {isAdmin && (
-                          <button onClick={async () => {
-                            const updatedBooks = currentSub.booklets.filter((b: any) => b.id !== book.id);
-                            await updateDoc(doc(db, 'subjects', currentSub.id), { booklets: updatedBooks });
-                            const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, booklets: updatedBooks} : s);
-                            setSubjects(updatedSubs);
-                            localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                            setSuccessMessage('تم حذف الملزمة بنجاح.');
-                            setTimeout(() => setSuccessMessage(null), 3000);
-                          }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
+                      <button onClick={() => setActivePdfUrl(book.url)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow">
+                        قراءة 👁️
+                      </button>
                     </div>
                   ))}
                 </div>
-
-                {isAdmin && (
-                  <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3 mt-4">
-                    <h5 className="text-xs font-black text-slate-800">إضافة ملزمة PDF للقراءة (مع VIP):</h5>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <input type="text" value={newBookletTitle} onChange={(e) => setNewBookletTitle(e.target.value)} placeholder="عنوان الملزمة..." className="px-4 py-2 rounded-xl border text-xs font-bold" />
-                      <input type="text" value={newBookletUrl} onChange={(e) => setNewBookletUrl(e.target.value)} placeholder="رابط ملف الـ PDF..." className="px-4 py-2 rounded-xl border text-xs font-bold font-mono" />
-                      <div className="flex items-center gap-2">
-                        <label className="flex items-center gap-1 text-xs font-bold cursor-pointer">
-                          <input type="checkbox" checked={newBookletVip} onChange={(e) => setNewBookletVip(e.target.checked)} className="w-4 h-4" />
-                          <span>VIP</span>
-                        </label>
-                        <button onClick={async () => {
-                          if (!newBookletTitle || !newBookletUrl) return;
-                          const newBookObj = { id: Date.now().toString(), title: newBookletTitle, url: newBookletUrl, size: '15 MB', isVip: newBookletVip };
-                          const updatedBooks = [...(currentSub.booklets || []), newBookObj];
-                          await updateDoc(doc(db, 'subjects', currentSub.id), { booklets: updatedBooks });
-                          const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, booklets: updatedBooks} : s);
-                          setSubjects(updatedSubs);
-                          localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                          setNewBookletTitle(''); setNewBookletUrl(''); setNewBookletVip(false);
-                          setSuccessMessage('تمت إضافة الملزمة بنجاح!');
-                          setTimeout(() => setSuccessMessage(null), 3000);
-                        }} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-xs font-bold shadow-md">
-                          + نشر الملزمة
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
 
-              {/* د) الامتحانات (عرض جميع الامتحانات المنشورة للمادة) */}
-              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-6">
-                <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
-                  <CheckSquare className="w-5 h-5 text-indigo-600" /> الامتحانات والاختبارات التفاعلية المتاحة ({currentSub.quizzes?.length || 0})
+              {/* د) الامتحانات (عرض كافة الامتحانات المنشورة بوضوح تام) */}
+              <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
+                <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                  <CheckSquare className="w-4 h-4 text-indigo-600" /> الامتحانات والاختبارات التفاعلية المتاحة ({currentSub.quizzes?.length || 0})
                 </h4>
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {currentSub.quizzes?.map((quiz: any) => (
-                    <div key={quiz.id} className="p-4 bg-white rounded-xl border border-slate-200 flex items-center justify-between shadow-sm flex-wrap gap-3">
-                      <span className="font-bold text-slate-800 text-sm flex items-center gap-2 flex-wrap">
-                        📝 {quiz.title} ({quiz.durationMinutes || 15} دقيقة) - عدد الأسئلة: {quiz.questions?.length || 0} {quiz.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
+                    <div key={quiz.id} className="p-3.5 bg-white rounded-xl border flex items-center justify-between shadow-sm flex-wrap gap-2">
+                      <span className="font-bold text-slate-800 text-xs sm:text-sm">
+                        📝 {quiz.title} ({quiz.durationMinutes || 15} دقيقة) - الأسئلة: {quiz.questions?.length || 0}
                       </span>
                       <div className="flex items-center gap-2">
-                        {quiz.isVip && !isVipActive && isAdmin === false ? (
-                          <button onClick={() => setVipModalItem(quiz)} className="px-3 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow">
-                            <Lock className="w-3.5 h-3.5" /> قفل VIP
-                          </button>
-                        ) : (
-                          <button onClick={() => { setActiveQuiz(quiz); setTimeLeft((quiz.durationMinutes || 15) * 60); setTimerActive(true); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-xl text-xs font-bold shadow-md">
-                            بدء الامتحان 🚀
-                          </button>
-                        )}
+                        <button onClick={() => { setActiveQuiz(quiz); setTimeLeft((quiz.durationMinutes || 15) * 60); setTimerActive(true); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow">
+                          بدء الامتحان 🚀
+                        </button>
                         {isAdmin && (
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => {
-                              setEditingQuizItem({ subjectId: currentSub.id, quiz });
-                              setEditQuizTitle(quiz.title);
-                              setEditQuizDuration(quiz.durationMinutes || 15);
-                              setEditQuizQuestions(quiz.questions || []);
-                            }} className="p-2 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg" title="تعديل الامتحان">
-                              <Edit3 className="w-4 h-4" />
-                            </button>
-                            <button onClick={async () => {
-                              const updatedQuizzes = currentSub.quizzes.filter((q: any) => q.id !== quiz.id);
-                              await updateDoc(doc(db, 'subjects', currentSub.id), { quizzes: updatedQuizzes });
-                              const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, quizzes: updatedQuizzes} : s);
-                              setSubjects(updatedSubs);
-                              localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                              setSuccessMessage('تم حذف الامتحان.');
-                              setTimeout(() => setSuccessMessage(null), 3000);
-                            }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg" title="حذف الامتحان">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                          <button onClick={() => {
+                            setEditingQuizItem({ subjectId: currentSub.id, quiz });
+                            setEditQuizTitle(quiz.title);
+                            setEditQuizDuration(quiz.durationMinutes || 15);
+                            setEditQuizQuestions(quiz.questions || []);
+                          }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs" title="تعديل"><Edit3 className="w-3.5 h-3.5" /></button>
                         )}
                       </div>
                     </div>
                   ))}
                   {(!currentSub.quizzes || currentSub.quizzes.length === 0) && (
-                    <p className="text-xs text-slate-500 text-center py-4 font-bold">لا توجد امتحانات منشورة لهذه المادة حتى الآن.</p>
+                    <p className="text-xs text-slate-500 text-center py-3 font-bold">لا توجد امتحانات منشورة حتى الآن.</p>
                   )}
                 </div>
 
                 {isAdmin && (
-                  <div className="bg-white p-6 rounded-2xl border border-indigo-200 space-y-4">
-                    <h5 className="font-black text-slate-900 text-sm">🛠️ صياغة وإضافة امتحان تفاعلي جديد للمادة (مع خيار وزاري مهم 🔥):</h5>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="sm:col-span-2">
-                        <label className="block text-xs font-bold text-slate-700 mb-1">عنوان الامتحان الرئيسي</label>
-                        <input type="text" value={quizTitle} onChange={(e) => setQuizTitle(e.target.value)} placeholder="مثال: امتحان الفصل الأول الشامل..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">وقت الامتحان (بالدقائق)</label>
-                        <input type="number" value={quizDurationMinutes} onChange={(e) => setQuizDurationMinutes(Number(e.target.value))} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" min={1} max={180} />
-                      </div>
-                    </div>
-
-                    {currentSub.notes && currentSub.notes.length > 0 && (
-                      <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl space-y-2">
-                        <label className="block text-xs font-black text-indigo-900">💡 استيراد سريع من الشروحات والتعاليل المضافة للمادة:</label>
-                        <select 
-                          onChange={(e) => {
-                            const noteId = e.target.value;
-                            if (!noteId) return;
-                            const foundNote = currentSub.notes.find((n: any) => n.id === noteId);
-                            if (foundNote) {
-                              setQuestionText(foundNote.title);
-                              setFillCorrect(foundNote.content);
-                              setQuestionType('fill');
-                            }
-                          }}
-                          className="w-full px-3 py-2 bg-white border rounded-lg text-xs font-bold text-slate-800"
-                        >
-                          <option value="">-- اضغط لاختيار تعليل أو شرح لإضافته كسؤال --</option>
-                          {currentSub.notes.map((n: any) => (
-                            <option key={n.id} value={n.id}>{n.title}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    <div className="p-4 bg-slate-50 rounded-xl border space-y-3">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
-                        <span className="text-xs font-black text-slate-800">إضافة سؤال جديد ({currentQuestionsList.length} أسئلة مضافة)</span>
-                        <select value={questionType} onChange={(e) => setQuestionType(e.target.value as any)} className="px-3 py-1 bg-white border rounded-lg text-xs font-bold">
-                          <option value="mcq">اختيار من متعدد (MCQ)</option>
-                          <option value="fill">ملء فراغات (تصحيح ذكي مرن)</option>
-                          <option value="true_false">صح وخطأ</option>
-                        </select>
-                      </div>
-
-                      <input type="text" value={questionText} onChange={(e) => setQuestionText(e.target.value)} placeholder="نص السؤال..." className="w-full px-3 py-2 bg-white rounded-lg border text-xs font-bold" />
-
-                      {/* خيار وزاري مهم 🔥 */}
-                      <label className="flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs font-black text-amber-900 cursor-pointer">
-                        <input type="checkbox" checked={isMinisterialQuestion} onChange={(e) => setIsMinisterialQuestion(e.target.checked)} className="w-4 h-4 text-amber-600 rounded" />
-                        <span>🔥 تعليم هذا السؤال كـ (وزاري مهم)</span>
-                      </label>
-
-                      {questionType === 'mcq' && (
-                        <div className="space-y-2">
-                          <div className="grid grid-cols-2 gap-2">
-                            {mcqOptions.map((opt, oIdx) => (
-                              <input key={oIdx} type="text" value={opt} onChange={(e) => {
-                                const newOpts = [...mcqOptions];
-                                newOpts[oIdx] = e.target.value;
-                                setMcqOptions(newOpts);
-                              }} placeholder={`الخيار ${oIdx+1}`} className="px-3 py-1.5 bg-white rounded-lg border text-xs" />
-                            ))}
-                          </div>
-                          <input type="text" value={mcqCorrect} onChange={(e) => setMcqCorrect(e.target.value)} placeholder="اكتب الخيار الصحيح تماماً..." className="w-full px-3 py-1.5 bg-emerald-50 border border-emerald-300 rounded-lg text-xs font-bold text-emerald-900" />
-                        </div>
-                      )}
-
-                      {questionType === 'fill' && (
-                        <input type="text" value={fillCorrect} onChange={(e) => setFillCorrect(e.target.value)} placeholder="الإجابة النموذجية أو المفاتيح الصحيحة..." className="w-full px-3 py-2 bg-emerald-50 border border-emerald-300 rounded-lg text-xs font-bold text-emerald-900" />
-                      )}
-
-                      {questionType === 'true_false' && (
-                        <div className="flex items-center gap-4 py-1 flex-wrap">
-                          <span className="text-xs font-bold text-slate-700">الإجابة الصحيحة:</span>
-                          <label className="flex items-center gap-1 text-xs font-bold cursor-pointer">
-                            <input type="radio" name="tf" checked={tfCorrect === 'صح'} onChange={() => setTfCorrect('صح')} /> صح
-                          </label>
-                          <label className="flex items-center gap-1 text-xs font-bold cursor-pointer">
-                            <input type="radio" name="tf" checked={tfCorrect === 'خطأ'} onChange={() => setTfCorrect('خطأ')} /> خطأ
-                          </label>
-                        </div>
-                      )}
-
-                      <button onClick={handleAddQuestionToQuiz} className="w-full py-2 bg-slate-900 text-white rounded-xl text-xs font-bold shadow">
-                        + إضافة هذا السؤال لورقة الامتحان
+                  <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
+                    <h5 className="text-xs font-black text-slate-800">🛠️ إضافة امتحان تفاعلي جديد للمادة:</h5>
+                    <input type="text" value={quizTitle} onChange={(e) => setQuizTitle(e.target.value)} placeholder="عنوان الامتحان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
+                    <div className="flex gap-2">
+                      <input type="number" value={quizDurationMinutes} onChange={(e) => setQuizDurationMinutes(Number(e.target.value))} className="w-24 px-3 py-1.5 border rounded-lg text-xs font-bold" placeholder="الدقائق" />
+                      <button onClick={() => handleSaveQuizToSubject(currentSub.id)} className="flex-1 bg-indigo-600 text-white py-2 rounded-xl text-xs font-bold shadow">
+                        حفظ ونشر الامتحان
                       </button>
                     </div>
-
-                    <button onClick={() => handleSaveQuizToSubject(currentSub.id)} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-xs shadow-md">
-                      نشر الامتحان التفاعلي نهائياً للمادة
-                    </button>
                   </div>
                 )}
               </div>
@@ -1980,139 +1622,47 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة مع خيارات التعديل الشاملة */}
+        {/* 3. لوحة إدارة الطلبة */}
         {activeTab === 'students' && isAdmin && (
-          <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-4">
-              <div>
-                <h2 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-                  <Users className="w-6 h-6 text-indigo-600" /> لوحة إدارة الطلبة وحسابات الـ VIP
-                </h2>
-                <p className="text-sm text-slate-600 mt-1">تعديل بيانات الطالب بالكامل، ترقية المرحلة، وتفعيل الـ VIP.</p>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-slate-700">تصفية بالمرحلة:</span>
-                <select 
-                  value={adminStageFilter} 
-                  onChange={(e) => setAdminStageFilter(e.target.value)}
-                  className="px-4 py-2 bg-slate-50 border-2 border-indigo-200 rounded-xl text-xs font-black text-slate-900 cursor-pointer"
-                >
-                  <option value="all">🌟 عرض كافة المراحل ({studentsList.length} طالب)</option>
-                  {allStagesList.map(st => (
-                    <option key={st.id} value={st.name}>{st.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
+          <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-xl border space-y-4">
+            <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+              <Users className="w-5 h-5 text-indigo-600" /> إدارة الطلبة ودرجاتهم
+            </h2>
             <div className="overflow-x-auto">
-              <table className="w-full text-right border-collapse min-w-[700px]">
+              <table className="w-full text-right border-collapse min-w-[650px]">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-700 text-xs font-black">
-                    <th className="p-4">الطالب والمرحلة</th>
-                    <th className="p-4">تاريخ التسجيل & آخر ظهور</th>
-                    <th className="p-4">بيانات الدخول (تعديل اليوزر والباسورد والاسم)</th>
-                    <th className="p-4">الحالة والدرجة ونقاط الضعف</th>
-                    <th className="p-4">اشتراك VIP</th>
-                    <th className="p-4 text-center">التحكم</th>
+                  <tr className="bg-slate-50 border-b text-slate-700 text-xs font-black">
+                    <th className="p-3">الطالب والمرحلة</th>
+                    <th className="p-3">آخر ظهور</th>
+                    <th className="p-3">الدرجة الحالية</th>
+                    <th className="p-3">اشتراك VIP</th>
+                    <th className="p-3 text-center">الإجراء</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-xs font-bold text-slate-800">
-                  {studentsList
-                    .filter(st => adminStageFilter === 'all' || st.stage === adminStageFilter)
-                    .map((st) => (
-                    <tr key={st.id} className="hover:bg-slate-50/80 transition-all">
-                      <td className="p-4">
-                        <div className="font-black text-slate-900">{st.name}</div>
-                        <div className="flex items-center gap-2 mt-1">
-                          <span className="text-indigo-600 text-[11px] bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">{st.stage}</span>
-                        </div>
+                <tbody className="divide-y text-xs font-bold text-slate-800">
+                  {studentsList.map((st) => (
+                    <tr key={st.id} className="hover:bg-slate-50">
+                      <td className="p-3">
+                        <div className="font-black">{st.name}</div>
+                        <span className="text-indigo-600 text-[10px]">{st.stage}</span>
                       </td>
-
-                      <td className="p-4 text-slate-600">
-                        <div>📅 تسجيل: <span className="font-mono text-slate-900">{st.regDate || 'غير متوفر'}</span></div>
-                        <div className="mt-1">🕒 آخر ظهور: <span className="font-mono text-emerald-600">{st.lastSeen || 'الآن'}</span></div>
-                      </td>
-
-                      <td className="p-4">
-                        {editingStudentId === st.id ? (
-                          <div className="flex flex-col gap-1.5 bg-slate-50 p-3 rounded-xl border border-indigo-200">
-                            <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="الاسم الثلاثي..." className="px-2 py-1 rounded bg-white border text-xs font-bold" />
-                            <input type="text" value={editUser} onChange={(e) => setEditUser(e.target.value)} placeholder="اليوزر الجديد" className="px-2 py-1 rounded bg-white border text-xs font-bold" />
-                            <input type="text" value={editPass} onChange={(e) => setEditPass(e.target.value)} placeholder="الباسورد الجديد" className="px-2 py-1 rounded bg-white border text-xs font-bold" />
-                            <select value={editStage} onChange={(e) => setEditStage(e.target.value)} className="px-2 py-1 rounded bg-white border text-xs font-bold">
-                              {allStagesList.map(s => (
-                                <option key={s.id} value={s.name}>{s.name}</option>
-                              ))}
-                            </select>
-                            <div className="flex gap-2 pt-1">
-                              <button onClick={async () => {
-                                await updateDoc(doc(db, 'students', st.id), { name: editName, username: editUser, pass: editPass, stage: editStage });
-                                const updatedStuds = studentsList.map(item => item.id === st.id ? {...item, name: editName, username: editUser, pass: editPass, stage: editStage} : item);
-                                setStudentsList(updatedStuds);
-                                localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
-                                setEditingStudentId(null);
-                                setSuccessMessage('تم تحديث بيانات الطالب وترقيته بنجاح!');
-                                setTimeout(() => setSuccessMessage(null), 3000);
-                              }} className="px-3 py-1 bg-emerald-600 text-white rounded text-xs font-bold">حفظ</button>
-                              <button onClick={() => setEditingStudentId(null)} className="px-3 py-1 bg-slate-200 rounded text-xs">إلغاء</button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl border gap-2">
-                            <div>
-                              <div className="text-slate-900">👤 اليوزر: <span className="font-mono text-indigo-700">{st.username}</span></div>
-                              <div className="text-slate-600">🔑 الباسورد: <span className="font-mono text-slate-900">{st.pass}</span></div>
-                            </div>
-                            <button onClick={() => { 
-                              setEditingStudentId(st.id); 
-                              setEditName(st.name);
-                              setEditUser(st.username); 
-                              setEditPass(st.pass);
-                              setEditStage(st.stage);
-                            }} className="p-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-lg flex-shrink-0" title="تعديل بيانات الطالب">
-                              <Edit3 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
-                      </td>
-
-                      <td className="p-4">
-                        <span className="px-2.5 py-1 rounded-full text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200">{st.status}</span>
-                        <div className="text-[11px] text-amber-600 font-black mt-1">الدرجة: {st.examScore}</div>
-                        {st.examDetails && (
-                          <button onClick={() => setViewingStudentAnswers(st)} className="mt-2 px-2.5 py-1 bg-indigo-600 text-white rounded-lg text-[10px] font-bold shadow hover:bg-indigo-700 block">
-                            🔍 عرض الإجابات ونقاط الضعف
-                          </button>
-                        )}
-                      </td>
-
-                      <td className="p-4">
+                      <td className="p-3 font-mono text-emerald-600">{st.lastSeen || 'الآن'}</td>
+                      <td className="p-3 text-amber-600">{st.examScore}</td>
+                      <td className="p-3">
                         <button onClick={async () => {
                           const newVip = !st.isVip;
                           await updateDoc(doc(db, 'students', st.id), { isVip: newVip });
-                          const updatedStuds = studentsList.map(item => item.id === st.id ? {...item, isVip: newVip} : item);
-                          setStudentsList(updatedStuds);
-                          localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
-                          setSuccessMessage('تم تحديث اشتراك الـ VIP.');
-                          setTimeout(() => setSuccessMessage(null), 3000);
-                        }} className={`px-3 py-1.5 rounded-xl text-[11px] font-black whitespace-nowrap ${st.isVip ? 'bg-amber-500 text-white' : 'bg-slate-200 text-slate-700'}`}>
-                          {st.isVip ? '⭐ VIP مفعّل' : 'حساب مجاني'}
+                          setStudentsList(studentsList.map(item => item.id === st.id ? {...item, isVip: newVip} : item));
+                        }} className={`px-2.5 py-1 rounded text-[10px] font-black ${st.isVip ? 'bg-amber-500 text-white' : 'bg-slate-200'}`}>
+                          {st.isVip ? '⭐ VIP مفعّل' : 'عادي'}
                         </button>
                       </td>
-
-                      <td className="p-4 text-center">
-                        <button onClick={async () => {
-                          await deleteDoc(doc(db, 'students', st.id));
-                          const updatedStuds = studentsList.filter(item => item.id !== st.id);
-                          setStudentsList(updatedStuds);
-                          localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
-                          setSuccessMessage('تم حذف الطالب.');
-                          setTimeout(() => setSuccessMessage(null), 3000);
-                        }} className="text-rose-500 hover:bg-rose-50 p-2 rounded-lg">
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <td className="p-3 text-center">
+                        {st.examDetails && (
+                          <button onClick={() => setViewingStudentAnswers(st)} className="px-2.5 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold">
+                            🔍 عرض الأخطاء
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -2122,19 +1672,10 @@ export function App() {
           </div>
         )}
 
-        {/* 4. إضافة المواد (أدمن فقط) */}
+        {/* 4. إضافة المواد */}
         {activeTab === 'adminPanel' && isAdmin && (
-          <div className="bg-white rounded-3xl p-8 shadow-xl border border-emerald-200 space-y-6">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">➕</div>
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900">لوحة إضافة المواد والصور المخصصة</h2>
-                  <p className="text-xs text-slate-500">أضف أي مادة لأي صف مع صورة جذابة</p>
-                </div>
-              </div>
-            </div>
-
+          <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-xl border border-emerald-200 space-y-4">
+            <h2 className="text-xl font-black text-slate-900">إضافة مادة دراسية جديدة</h2>
             <form onSubmit={async (e) => {
               e.preventDefault();
               if (!newSubName) return;
@@ -2148,133 +1689,63 @@ export function App() {
                 image: newSubImage || 'https://images.unsplash.com/photo-1503676260728-1c00da094a0b?auto=format&fit=crop&w=500&q=80',
                 videos: [], booklets: [], notes: [], quizzes: []
               };
-              try {
-                const docRef = await addDoc(collection(db, 'subjects'), newObj);
-                const updatedSubs = [{ id: docRef.id, ...newObj }, ...subjects];
-                setSubjects(updatedSubs);
-                localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                setNewSubName(''); setNewSubImage('');
-                setSuccessMessage('تمت إضافة المادة وحفظها في قاعدة البيانات بنجاح!');
-                setTimeout(() => setSuccessMessage(null), 3000);
-              } catch (err) {
-                console.error(err);
-              }
-            }} className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">اسم المادة</label>
-                  <input type="text" required value={newSubName} onChange={(e) => setNewSubName(e.target.value)} placeholder="مثال: الحاسوب والتكنولوجيا" className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">الصف الدراسي</label>
-                  <select value={newSubStage} onChange={(e) => setNewSubStage(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white">
-                    {allStagesList.map(st => (
-                      <option key={st.id} value={st.name}>{st.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">رابط صورة المادة (URL)</label>
-                  <input type="text" value={newSubImage} onChange={(e) => setNewSubImage(e.target.value)} placeholder="رابط صورة..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
-                </div>
-              </div>
-              <div className="flex justify-end pt-2">
-                <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-8 rounded-xl text-xs shadow-md">
-                  إضافة ونشر المادة
-                </button>
-              </div>
+              const docRef = await addDoc(collection(db, 'subjects'), newObj);
+              setSubjects([{ id: docRef.id, ...newObj }, ...subjects]);
+              setNewSubName(''); setNewSubImage('');
+              setSuccessMessage('تمت إضافة المادة بنجاح!');
+              setTimeout(() => setSuccessMessage(null), 3000);
+            }} className="space-y-3">
+              <input type="text" required value={newSubName} onChange={(e) => setNewSubName(e.target.value)} placeholder="اسم المادة (مثال: الرياضيات)..." className="w-full px-3 py-2.5 border rounded-xl text-xs font-bold" />
+              <select value={newSubStage} onChange={(e) => setNewSubStage(e.target.value)} className="w-full px-3 py-2.5 border rounded-xl text-xs font-bold">
+                {allStagesList.map(st => (
+                  <option key={st.id} value={st.name}>{st.name}</option>
+                ))}
+              </select>
+              <input type="text" value={newSubImage} onChange={(e) => setNewSubImage(e.target.value)} placeholder="رابط صورة الغلاف (اختياري)..." className="w-full px-3 py-2.5 border rounded-xl text-xs font-mono" />
+              <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl text-xs shadow">نشر المادة في المنصة</button>
             </form>
           </div>
         )}
 
         {/* 5. إعدادات VIP */}
         {activeTab === 'vipSettings' && isAdmin && (
-          <div className="bg-white rounded-3xl p-8 shadow-xl border border-amber-200 space-y-6">
-            <h2 className="text-2xl font-black text-slate-900">إعدادات أسعار وطرق دفع اشتراكات الـ VIP</h2>
+          <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-xl border space-y-4">
+            <h2 className="text-xl font-black text-slate-900">إعدادات أسعار وطرق دفع VIP</h2>
             <form onSubmit={(e) => {
               e.preventDefault();
-              setSuccessMessage('تم تحديث إعدادات الدفع ومعرف التليجرام بنجاح!');
+              setSuccessMessage('تم حفظ إعدادات VIP بنجاح!');
               setTimeout(() => setSuccessMessage(null), 3000);
-            }} className="bg-slate-50 p-6 rounded-2xl border space-y-4 max-w-xl">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">سعر الاشتراك</label>
-                <input type="text" value={vipSettings.price} onChange={(e) => setVipSettings({...vipSettings, price: e.target.value})} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">رقم الماستر كارد / المصرف</label>
-                <input type="text" value={vipSettings.mastercard} onChange={(e) => setVipSettings({...vipSettings, mastercard: e.target.value})} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">رقم تحويل الرصيد</label>
-                <input type="text" value={vipSettings.transferPhone} onChange={(e) => setVipSettings({...vipSettings, transferPhone: e.target.value})} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">معرف التليجرام لاستلام الإيصالات والتواصل (مثلاً: YourUsername)</label>
-                <input type="text" value={vipSettings.telegram} onChange={(e) => setVipSettings({...vipSettings, telegram: e.target.value})} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
-              </div>
-              <button type="submit" className="w-full py-3 bg-amber-600 text-white font-bold rounded-xl text-xs shadow-md">
-                حفظ إعدادات الـ VIP ومعرف التليجرام
-              </button>
+            }} className="space-y-3 max-w-lg">
+              <input type="text" value={vipSettings.price} onChange={(e) => setVipSettings({...vipSettings, price: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" placeholder="السعر" />
+              <input type="text" value={vipSettings.mastercard} onChange={(e) => setVipSettings({...vipSettings, mastercard: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono" placeholder="الماستر كارد" />
+              <button type="submit" className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold">حفظ التغييرات</button>
             </form>
           </div>
         )}
 
-        {/* 6. إعدادات الأدمن */}
+        {/* 6. إعدادات كلمة المرور */}
         {activeTab === 'settings' && isAdmin && (
-          <div className="bg-white rounded-3xl p-8 shadow-xl border border-slate-200 space-y-6">
-            <h2 className="text-2xl font-black text-slate-900">إعدادات حساب المدير العام والصلاحيات</h2>
+          <div className="bg-white rounded-3xl p-4 sm:p-6 shadow-xl border space-y-4">
+            <h2 className="text-xl font-black text-slate-900">تغيير كلمة مرور المدير</h2>
             <form onSubmit={(e) => {
               e.preventDefault();
               localStorage.setItem('nabough_admin_pass', adminPassword);
-              localStorage.setItem('nabough_admin_user', adminUsername);
-              localStorage.setItem('nabough_admin_name', adminName);
-              setSuccessMessage('تم تحديث كلمة المرور وحفظها بشكل دائم في الجهاز!');
+              setSuccessMessage('تم حفظ كلمة المرور الجديدة!');
               setTimeout(() => setSuccessMessage(null), 3000);
-            }} className="bg-slate-50 p-6 rounded-2xl border space-y-4 max-w-xl">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">اسم المدير الظاهر</label>
-                <input type="text" value={adminName} onChange={(e) => setAdminName(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">اسم المستخدم (Username)</label>
-                <input type="text" value={adminUsername} onChange={(e) => setAdminUsername(e.target.value)} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور الجديدة الخاصة بك (Password)</label>
-                <input type="text" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} placeholder="أدخل كلمة مرور قوية جديدة..." className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white font-mono" />
-                <p className="text-[11px] text-slate-500 mt-1">هذه الكلمة ستبقى محفوظة بشكل دائم في متصفحك، وهي المطلوبة عند الضغط على رمز القفل 🔒 بالأسفل.</p>
-              </div>
-              <button type="submit" className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl text-xs shadow-md">
-                حفظ كلمة المرور الجديدة والأمان
-              </button>
+            }} className="space-y-3 max-w-lg">
+              <input type="text" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-mono" placeholder="كلمة المرور الجديدة" />
+              <button type="submit" className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold">حفظ كلمة المرور</button>
             </form>
           </div>
         )}
 
       </main>
 
-      {/* الفوتر مع رمز القفل السري للأدمن */}
-      <footer className="border-t border-slate-200 bg-white py-6 mt-auto w-full">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-          <div className="flex items-center gap-2">
-            <GraduationCap className="w-5 h-5 text-emerald-600" />
-            <span className="font-bold text-slate-800">منصة النابغة التعليمية</span>
-            <span>•</span>
-            <span>المنهج العراقي الرسمي</span>
-          </div>
-          
-          <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-emerald-600" /> بغداد - العراق</span>
-            
-            {/* زر القفل السري لدخول الأدمن */}
-            <button 
-              onClick={() => setShowAdminLoginModal(true)} 
-              className="w-7 h-7 bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-400 rounded-full flex items-center justify-center transition-all shadow-sm"
-              title="دخول المدير العام (الأدمن)"
-            >
-              🔒
-            </button>
-          </div>
+      {/* الفوتر */}
+      <footer className="border-t border-slate-200 bg-white py-4 mt-auto w-full px-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between text-xs text-slate-500">
+          <span>منصة النابغة التعليمية</span>
+          <button onClick={() => setShowAdminLoginModal(true)} className="w-6 h-6 bg-slate-100 hover:bg-indigo-600 hover:text-white text-slate-400 rounded-full flex items-center justify-center transition-all text-xs" title="دخول الأدمن">🔒</button>
         </div>
       </footer>
     </div>
