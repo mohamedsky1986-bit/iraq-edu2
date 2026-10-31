@@ -153,7 +153,7 @@ export function App() {
 
   const [adminStageFilter, setAdminStageFilter] = useState<string>('all');
   const [adminName, setAdminName] = useState<string>(() => localStorage.getItem('nabough_admin_name') || 'مدير المنصة');
-  const [adminUsername, setAdminUsername] = useState<string>('admin');
+  const [adminUsername, setAdminUsername] = useState<string>(() => localStorage.getItem('nabough_admin_user') || 'admin');
   const [adminPassword, setAdminPassword] = useState<string>(() => localStorage.getItem('nabough_admin_pass') || '123456');
   
   const [vipSettings, setVipSettings] = useState(() => {
@@ -345,7 +345,7 @@ export function App() {
     }
     loadDataFromFirebase();
 
-    const safetyTimer = setTimeout => {
+    const safetyTimer = setTimeout(() => {
       setIsLoading(false);
     }, 1000);
     return () => clearTimeout(safetyTimer);
@@ -1352,7 +1352,7 @@ export function App() {
           </div>
         )}
 
-        {/* 2. إدارة وتصفح المادة الدراسية المفصلة (هوامش كاملة بدون تضييق) */}
+        {/* 2. إدارة وتصفح المادة الدراسية المفصلة */}
         {selectedSubjectId && (() => {
           const currentSub = subjects.find(s => s.id === selectedSubjectId);
           if (!currentSub) return null;
@@ -1396,7 +1396,7 @@ export function App() {
                 />
               </div>
 
-              {/* أ) الشروحات والتعاليل والأسئلة التفاعلية التابعة */}
+              {/* أ) الشروحات والتعاليل */}
               <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
@@ -1413,14 +1413,12 @@ export function App() {
 
                       <p className="text-xs text-slate-700 leading-relaxed">{note.content}</p>
 
-                      {/* صورة توضيحية للشرح */}
                       {note.image && (
                         <div className="mt-2 h-48 w-full rounded-xl overflow-hidden border shadow-sm">
                           <img src={note.image} alt={note.title} className="w-full h-full object-cover" />
                         </div>
                       )}
 
-                      {/* الأسئلة التفاعلية */}
                       {note.interactiveQuestions && note.interactiveQuestions.length > 0 && (
                         <div className="mt-3 p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2.5">
                           <h6 className="text-[11px] font-black text-indigo-900 flex items-center gap-1">
@@ -1481,7 +1479,6 @@ export function App() {
                     <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="النص التفصيلي..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold h-20" />
                     <input type="text" value={newNoteImage} onChange={(e) => setNewNoteImage(e.target.value)} placeholder="رابط صورة توضيحية للشرح (اختياري)..." className="w-full px-3 py-2 border rounded-xl text-xs font-mono" />
                     
-                    {/* إضافة سؤال تفاعلي يتبع الشرح */}
                     <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-2">
                       <h6 className="text-xs font-black text-indigo-900">إرفاق سؤال تفاعلي سريع:</h6>
                       <div className="flex gap-2">
@@ -1497,9 +1494,7 @@ export function App() {
                         <div className="grid grid-cols-2 gap-2">
                           {interactiveOptions.map((opt, oIdx) => (
                             <input key={oIdx} type="text" value={opt} onChange={(e) => {
-                              const opts = [...interactiveOptions];
-                              opts[oIdx] = e.target.value;
-                              setInteractiveOptions(opts);
+                              const opts = [...interactiveOptions]; opts[oIdx] = e.target.value; setInteractiveOptions(opts);
                             }} placeholder={`الخيار ${oIdx+1}`} className="px-2 py-1 bg-white border rounded text-xs" />
                           ))}
                           <input type="text" value={interactiveCorrect} onChange={(e) => setInteractiveCorrect(e.target.value)} placeholder="الخيار الصحيح..." className="col-span-2 px-2 py-1 bg-emerald-50 border rounded text-xs font-bold text-emerald-900" />
@@ -1681,7 +1676,7 @@ export function App() {
                 )}
               </div>
 
-              {/* د) الامتحانات (عرض كافة الامتحانات المنشورة بوضوح تام) */}
+              {/* د) الامتحانات */}
               <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <CheckSquare className="w-4 h-4 text-indigo-600" /> الامتحانات المتاحة ({currentSub.quizzes?.length || 0})
