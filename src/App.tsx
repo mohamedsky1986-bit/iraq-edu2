@@ -199,7 +199,7 @@ export function App() {
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
-  const [loggedStudent, setLoggedStudent] = useState<any | null>(() => {
+  const [loggedStudent, setLoggedStudent] = useState<any | null> (() => {
     return safeGetStorage('nabough_logged_student', null);
   });
 
@@ -240,10 +240,23 @@ export function App() {
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
 
+  // حالات تعديل الامتحان للأدمن
   const [editingQuizItem, setEditingQuizItem] = useState<{subjectId: string, quiz: any} | null>(null);
   const [editQuizTitle, setEditQuizTitle] = useState('');
   const [editQuizDuration, setEditQuizDuration] = useState(15);
   const [editQuizQuestions, setEditQuizQuestions] = useState<any[]>([]);
+
+  // حالات تعديل الفيديو للأدمن
+  const [editingVideoItem, setEditingVideoItem] = useState<{subjectId: string, video: any} | null>(null);
+  const [editVideoTitle, setEditVideoTitle] = useState('');
+  const [editVideoUrl, setEditVideoUrl] = useState('');
+  const [editVideoVip, setEditVideoVip] = useState(false);
+
+  // حالات تعديل الملزمة PDF للأدمن
+  const [editingBookletItem, setEditingBookletItem] = useState<{subjectId: string, booklet: any} | null>(null);
+  const [editBookletTitle, setEditBookletTitle] = useState('');
+  const [editBookletUrl, setEditBookletUrl] = useState('');
+  const [editBookletVip, setEditBookletVip] = useState(false);
 
   const getEmbedPdfUrl = (url: string) => {
     if (!url) return '';
@@ -668,6 +681,107 @@ export function App() {
         </div>
       )}
 
+      {/* نافذة تعديل الفيديو للأدمن */}
+      {editingVideoItem && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-right">
+            <button onClick={() => setEditingVideoItem(null)} className="absolute top-4 left-4 w-9 h-9 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
+              <X className="w-4 h-4" />
+            </button>
+            <h3 className="text-lg font-black text-slate-900 pb-2 border-b">تعديل الدرس المرئي (الفيديو)</h3>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">عنوان الفيديو</label>
+                <input type="text" value={editVideoTitle} onChange={(e) => setEditVideoTitle(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">رابط يوتيوب</label>
+                <input type="text" value={editVideoUrl} onChange={(e) => setEditVideoUrl(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold" />
+              </div>
+              <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
+                <input type="checkbox" checked={editVideoVip} onChange={(e) => setEditVideoVip(e.target.checked)} className="w-4 h-4 text-amber-600" />
+                <span>فيديو خاص بـ VIP؟</span>
+              </label>
+            </div>
+
+            <div className="flex gap-2 pt-3 border-t">
+              <button onClick={async () => {
+                const targetSub = subjects.find(s => s.id === editingVideoItem.subjectId);
+                if (!targetSub) return;
+                const formattedUrl = formatYouTubeUrl(editVideoUrl);
+                const updatedVideos = targetSub.videos.map((v: any) => v.id === editingVideoItem.video.id ? { ...v, title: editVideoTitle, url: formattedUrl, isVip: editVideoVip } : v);
+                
+                try {
+                  await updateDoc(doc(db, 'subjects', editingVideoItem.subjectId), { videos: updatedVideos });
+                  const updatedSubs = subjects.map(s => s.id === editingVideoItem.subjectId ? {...s, videos: updatedVideos} : s);
+                  setSubjects(updatedSubs);
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                  setEditingVideoItem(null);
+                  setSuccessMessage('تم تعديل الفيديو بنجاح!');
+                  setTimeout(() => setSuccessMessage(null), 3000);
+                } catch(e) {}
+              }} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold">
+                حفظ التعديل
+              </button>
+              <button onClick={() => setEditingVideoItem(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تعديل الملزمة PDF للأدمن */}
+      {editingBookletItem && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-right">
+            <button onClick={() => setEditingBookletItem(null)} className="absolute top-4 left-4 w-9 h-9 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
+              <X className="w-4 h-4" />
+            </button>
+            <h3 className="text-lg font-black text-slate-900 pb-2 border-b">تعديل الملزمة (PDF)</h3>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">عنوان الملزمة</label>
+                <input type="text" value={editBookletTitle} onChange={(e) => setEditBookletTitle(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">رابط ملف PDF</label>
+                <input type="text" value={editBookletUrl} onChange={(e) => setEditBookletUrl(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold" />
+              </div>
+              <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
+                <input type="checkbox" checked={editBookletVip} onChange={(e) => setEditBookletVip(e.target.checked)} className="w-4 h-4 text-amber-600" />
+                <span>ملزمة خاصة بـ VIP؟</span>
+              </label>
+            </div>
+
+            <div className="flex gap-2 pt-3 border-t">
+              <button onClick={async () => {
+                const targetSub = subjects.find(s => s.id === editingBookletItem.subjectId);
+                if (!targetSub) return;
+                const updatedBooklets = targetSub.booklets.map((b: any) => b.id === editingBookletItem.booklet.id ? { ...b, title: editBookletTitle, url: editBookletUrl, isVip: editBookletVip } : b);
+                
+                try {
+                  await updateDoc(doc(db, 'subjects', editingBookletItem.subjectId), { booklets: updatedBooklets });
+                  const updatedSubs = subjects.map(s => s.id === editingBookletItem.subjectId ? {...s, booklets: updatedBooklets} : s);
+                  setSubjects(updatedSubs);
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                  setEditingBookletItem(null);
+                  setSuccessMessage('تم تعديل الملزمة بنجاح!');
+                  setTimeout(() => setSuccessMessage(null), 3000);
+                } catch(e) {}
+              }} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold">
+                حفظ التعديل
+              </button>
+              <button onClick={() => setEditingBookletItem(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* نافذة الدردشة العامة */}
       {showPublicChatModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
@@ -876,6 +990,7 @@ export function App() {
                 }
 
                 const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
+                const regDateFormatted = new Date().toLocaleDateString('ar-IQ', {year: 'numeric', month: '2-digit', day: '2-digit'});
                 const newSt = {
                   name: newStudentName,
                   username: studentLoginUser,
@@ -884,7 +999,7 @@ export function App() {
                   isVip: false,
                   status: 'متصل الآن',
                   lastSeen: nowFormatted,
-                  regDate: new Date().toLocaleDateString('ar-IQ', {year: 'numeric', month: '2-digit', day: '2-digit'}),
+                  regDate: regDateFormatted,
                   examScore: 'لم يتقدم'
                 };
 
@@ -1491,7 +1606,6 @@ export function App() {
                   ))}
                 </div>
 
-                {/* لوحة إضافة شرح جديد (للأدمن) */}
                 {isAdmin && (
                   <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
                     <h5 className="text-xs font-black text-slate-800">➕ إضافة شرح أو تعليل جديد (مع صورة توضيحية وسؤال تفاعلي):</h5>
@@ -1579,7 +1693,7 @@ export function App() {
                 )}
               </div>
 
-              {/* ب) الفيديوهات الشارحة (مع دعم خيار VIP) */}
+              {/* ب) الفيديوهات الشارحة (مع زر التعديل والـ VIP) */}
               <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <Video className="w-4 h-4 text-indigo-600" /> الدروس المرئية ({filteredVideos.length})
@@ -1601,11 +1715,19 @@ export function App() {
                           <button onClick={() => setActiveVideoUrl(vid.url)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow">تشغيل</button>
                         )}
                         {isAdmin && (
-                          <button onClick={async () => {
-                            const updatedVids = currentSub.videos.filter((v: any) => v.id !== vid.id);
-                            await updateDoc(doc(db, 'subjects', currentSub.id), { videos: updatedVids });
-                            setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s));
-                          }} className="text-rose-500 p-1"><Trash2 className="w-4 h-4" /></button>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => {
+                              setEditingVideoItem({ subjectId: currentSub.id, video: vid });
+                              setEditVideoTitle(vid.title);
+                              setEditVideoUrl(vid.url);
+                              setEditVideoVip(vid.isVip || false);
+                            }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs" title="تعديل الفيديو"><Edit3 className="w-3.5 h-3.5" /></button>
+                            <button onClick={async () => {
+                              const updatedVids = currentSub.videos.filter((v: any) => v.id !== vid.id);
+                              await updateDoc(doc(db, 'subjects', currentSub.id), { videos: updatedVids });
+                              setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s));
+                            }} className="text-rose-500 p-1"><Trash2 className="w-4 h-4" /></button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1638,7 +1760,7 @@ export function App() {
                 )}
               </div>
 
-              {/* ج) ملازم PDF (مع دعم خيار VIP) */}
+              {/* ج) ملازم PDF (مع زر التعديل والـ VIP) */}
               <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <FileText className="w-4 h-4 text-emerald-600" /> ملازم الـ PDF ({filteredBooklets.length})
@@ -1660,11 +1782,19 @@ export function App() {
                           <button onClick={() => setActivePdfUrl(book.url)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow">قراءة 👁️</button>
                         )}
                         {isAdmin && (
-                          <button onClick={async () => {
-                            const updatedBooks = currentSub.booklets.filter((b: any) => b.id !== book.id);
-                            await updateDoc(doc(db, 'subjects', currentSub.id), { booklets: updatedBooks });
-                            setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, booklets: updatedBooks} : s));
-                          }} className="text-rose-500 p-1"><Trash2 className="w-4 h-4" /></button>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => {
+                              setEditingBookletItem({ subjectId: currentSub.id, booklet: book });
+                              setEditBookletTitle(book.title);
+                              setEditBookletUrl(book.url);
+                              setEditBookletVip(book.isVip || false);
+                            }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs" title="تعديل الملزمة"><Edit3 className="w-3.5 h-3.5" /></button>
+                            <button onClick={async () => {
+                              const updatedBooks = currentSub.booklets.filter((b: any) => b.id !== book.id);
+                              await updateDoc(doc(db, 'subjects', currentSub.id), { booklets: updatedBooks });
+                              setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, booklets: updatedBooks} : s));
+                            }} className="text-rose-500 p-1"><Trash2 className="w-4 h-4" /></button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1793,7 +1923,7 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة مع خيارات التعديل الكاملة (الاسم، اليوزر، الباسورد، المرحلة) */}
+        {/* 3. لوحة إدارة الطلبة مع تاريخ التسجيل والتعديل الشامل */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-xl border space-y-4 w-full">
             <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
@@ -1804,7 +1934,7 @@ export function App() {
                 <thead>
                   <tr className="bg-slate-50 border-b text-slate-700 text-xs font-black">
                     <th className="p-3">الطالب والمرحلة</th>
-                    <th className="p-3">آخر ظهور</th>
+                    <th className="p-3">تاريخ التسجيل & آخر ظهور</th>
                     <th className="p-3">بيانات الدخول (تعديل الاسم، اليوزر، الباسورد)</th>
                     <th className="p-3">الدرجة & VIP</th>
                     <th className="p-3 text-center">الإجراء</th>
@@ -1818,7 +1948,10 @@ export function App() {
                         <span className="text-indigo-600 text-[10px]">{st.stage}</span>
                       </td>
 
-                      <td className="p-3 font-mono text-emerald-600">{st.lastSeen || 'الآن'}</td>
+                      <td className="p-3 text-slate-600 space-y-1">
+                        <div>📅 <span className="font-mono">{st.regDate || 'غير متوفر'}</span></div>
+                        <div className="text-emerald-600 font-mono text-[11px]">🕒 {st.lastSeen || 'الآن'}</div>
+                      </td>
 
                       {/* حقول التعديل الكاملة للطالب (الاسم، اليوزر، الباسورد، المرحلة) */}
                       <td className="p-3">
@@ -1956,7 +2089,7 @@ export function App() {
           </div>
         )}
 
-        {/* 6. إعدادات كلمة المرور الموحدة سحابياً (تعمل على جميع الأجهزة والمتصفحات) */}
+        {/* 6. إعدادات كلمة المرور الموحدة سحابياً */}
         {activeTab === 'settings' && isAdmin && (
           <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-xl border space-y-4 w-full">
             <h2 className="text-xl font-black text-slate-900">تغيير كلمة مرور المدير (موحدة لكل الأجهزة والمتصفحات)</h2>
