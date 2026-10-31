@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { db } from './firebase';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc } from 'firebase/firestore';
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
@@ -152,9 +152,34 @@ export function App() {
   };
 
   const [adminStageFilter, setAdminStageFilter] = useState<string>('all');
-  const [adminName, setAdminName] = useState<string>(() => localStorage.getItem('nabough_admin_name') || 'مدير المنصة');
-  const [adminUsername, setAdminUsername] = useState<string>(() => localStorage.getItem('nabough_admin_user') || 'admin');
-  const [adminPassword, setAdminPassword] = useState<string>(() => localStorage.getItem('nabough_admin_pass') || '123456');
+  const [adminName, setAdminName] = useState<string>('مدير المنصة');
+  const [adminUsername, setAdminUsername] = useState<string>('admin');
+  const [adminPassword, setAdminPassword] = useState<string>('123456');
+
+  // جلب بيانات الأدمن من سحابة Firebase لتوحيدها على جميع الأجهزة
+  useEffect(() => {
+    async function fetchAdminSettings() {
+      try {
+        const docSnap = await getDoc(doc(db, 'settings', 'admin_config'));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.password) setAdminPassword(data.password);
+          if (data.username) setAdminUsername(data.username);
+          if (data.name) setAdminName(data.name);
+        } else {
+          // إنشاء الإعدادات الافتراضية لأول مرة في سحابة Firebase
+          await setDoc(doc(db, 'settings', 'admin_config'), {
+            password: '123456',
+            username: 'admin',
+            name: 'مدير المنصة'
+          });
+        }
+      } catch (e) {
+        console.error("Error loading admin settings:", e);
+      }
+    }
+    fetchAdminSettings();
+  }, []);
   
   const [vipSettings, setVipSettings] = useState(() => {
     return safeGetStorage('nabough_vip_settings', {
@@ -746,7 +771,7 @@ export function App() {
               <h3 className="text-lg font-black text-slate-900">تسجيل دخول المدير العام</h3>
               <p className="text-xs text-slate-500">أدخل كلمة المرور الخاصة بلوحة الإدارة</p>
             </div>
-            <form onSubmit={(e) => {
+            <form onSubmit={async (e) => {
               e.preventDefault();
               if (adminPinInput === adminPassword) {
                 setIsAdmin(true);
@@ -1874,18 +1899,29 @@ export function App() {
           </div>
         )}
 
-        {/* 6. إعدادات كلمة المرور */}
+        {/* 6. إعدادات كلمة المرور (محفوظة سحابياً في Firebase لتعمل على كل الأجهزة) */}
         {activeTab === 'settings' && isAdmin && (
           <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-xl border space-y-4 w-full">
-            <h2 className="text-xl font-black text-slate-900">تغيير كلمة مرور المدير</h2>
-            <form onSubmit={(e) => {
+            <h2 className="text-xl font-black text-slate-900">تغيير كلمة مرور المدير (موحدة لكل الأجهزة)</h2>
+            <form onSubmit={async (e) => {
               e.preventDefault();
-              localStorage.setItem('nabough_admin_pass', adminPassword);
-              setSuccessMessage('تم حفظ كلمة المرور الجديدة!');
-              setTimeout(() => setSuccessMessage(null), 3000);
+              try {
+                await setDoc(doc(db, 'settings', 'admin_config'), {
+                  password: adminPassword,
+                  username: adminUsername,
+                  name: adminName
+                });
+                setSuccessMessage('تم حفظ كلمة المرور سحابياً بنجاح وستعمل على جميع الأجهزة!');
+                setTimeout(() => setSuccessMessage(null), 3000);
+              } catch(err) {
+                alert('حدث خطأ أثناء الحفظ.');
+              }
             }} className="space-y-3 max-w-lg">
-              <input type="text" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-mono" placeholder="كلمة المرور الجديدة" />
-              <button type="submit" className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ كلمة المرور</button>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور الجديدة</label>
+                <input type="text" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold" placeholder="كلمة المرور الجديدة" />
+              </div>
+              <button type="submit" className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ كلمة المرور سحابياً</button>
             </form>
           </div>
         )}
