@@ -5,7 +5,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, que
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
-  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send, MessageSquare, Globe, Search, RotateCcw
+  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send, MessageSquare, Globe, Search, RotateCcw, Unlock as UnlockIcon
 } from 'lucide-react';
 
 const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
@@ -240,25 +240,21 @@ export function App() {
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
 
-  // حالات تعديل الامتحان للأدمن
   const [editingQuizItem, setEditingQuizItem] = useState<{subjectId: string, quiz: any} | null>(null);
   const [editQuizTitle, setEditQuizTitle] = useState('');
   const [editQuizDuration, setEditQuizDuration] = useState(15);
   const [editQuizQuestions, setEditQuizQuestions] = useState<any[]>([]);
 
-  // حالات تعديل الفيديو للأدمن
   const [editingVideoItem, setEditingVideoItem] = useState<{subjectId: string, video: any} | null>(null);
   const [editVideoTitle, setEditVideoTitle] = useState('');
   const [editVideoUrl, setEditVideoUrl] = useState('');
   const [editVideoVip, setEditVideoVip] = useState(false);
 
-  // حالات تعديل الملزمة PDF للأدمن
   const [editingBookletItem, setEditingBookletItem] = useState<{subjectId: string, booklet: any} | null>(null);
   const [editBookletTitle, setEditBookletTitle] = useState('');
   const [editBookletUrl, setEditBookletUrl] = useState('');
   const [editBookletVip, setEditBookletVip] = useState(false);
 
-  // حالات تعديل السؤال التفاعلي التابع للشرح
   const [editingInteractiveItem, setEditingInteractiveItem] = useState<{subjectId: string, noteId: string, questionIndex: number, questionObj: any} | null>(null);
   const [editInteractiveQText, setEditInteractiveQText] = useState('');
   const [editInteractiveCorrect, setEditInteractiveCorrect] = useState('');
@@ -288,7 +284,6 @@ export function App() {
   const [editNoteImage, setEditNoteImage] = useState('');
   const [editNoteVip, setEditNoteVip] = useState(false);
 
-  // حالات تعديل بيانات الطالب الكاملة للأدمن
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editStudentName, setEditStudentName] = useState('');
   const [editStudentUser, setEditStudentUser] = useState('');
@@ -585,7 +580,6 @@ export function App() {
     } catch(e) {}
   };
 
-  // ترتيب المواد بغض النظر عن الفلتر لتكون الأسهُم فعالة دائماً
   const handleMoveSubjectGlobal = async (subjectId: string, direction: 'up' | 'down') => {
     const list = [...subjects];
     const index = list.findIndex(s => s.id === subjectId);
@@ -599,11 +593,6 @@ export function App() {
 
     setSubjects(list);
     localStorage.setItem('nabough_cached_subjects', JSON.stringify(list));
-
-    // تحديث الترتيب سحابياً أيضاً إذا رغبت، أو حفظه محلياً في حال عدم وجود حقل ترتيب منفصل
-    try {
-      // نكتفي بالحفظ المحلي والسحابي بحسب تدفق الكود
-    } catch(e) {}
   };
 
   const filteredSubjects = subjects.filter(s => {
@@ -1502,16 +1491,16 @@ export function App() {
                 >
                   {isAdmin && (
                     <div className="absolute top-2 left-2 flex items-center gap-1 z-25">
-                      <button onClick={(e) => { e.stopPropagation(); handleMoveSubjectGlobal(sub.id, 'up'); }} className="w-6 h-6 bg-slate-800 text-white rounded flex items-center justify-center text-xs" title="للأعلى"><ArrowUp className="w-3 h-3" /></button>
-                      <button onClick={(e) => { e.stopPropagation(); handleMoveSubjectGlobal(sub.id, 'down'); }} className="w-6 h-6 bg-slate-800 text-white rounded flex items-center justify-center text-xs" title="للأسفل"><ArrowDown className="w-3 h-3" /></button>
-                      <button onClick={(e) => { e.stopPropagation(); setEditingSubjectId(sub.id); setEditSubName(sub.name); setEditSubImage(sub.image || ''); }} className="w-6 h-6 bg-indigo-600 text-white rounded flex items-center justify-center text-xs"><Edit3 className="w-3 h-3" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleMoveSubjectGlobal(sub.id, 'up'); }} className="w-6 h-6 bg-slate-800 text-white rounded flex items-center justify-center text-xs cursor-pointer" title="للأعلى"><ArrowUp className="w-3 h-3" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); handleMoveSubjectGlobal(sub.id, 'down'); }} className="w-6 h-6 bg-slate-800 text-white rounded flex items-center justify-center text-xs cursor-pointer" title="للأسفل"><ArrowDown className="w-3 h-3" /></button>
+                      <button onClick={(e) => { e.stopPropagation(); setEditingSubjectId(sub.id); setEditSubName(sub.name); setEditSubImage(sub.image || ''); }} className="w-6 h-6 bg-indigo-600 text-white rounded flex items-center justify-center text-xs cursor-pointer"><Edit3 className="w-3 h-3" /></button>
                       <button onClick={async (e) => {
                         e.stopPropagation();
                         if (window.confirm(`حذف مادة ${sub.name}?`)) {
                           await deleteDoc(doc(db, 'subjects', sub.id));
                           setSubjects(subjects.filter(s => s.id !== sub.id));
                         }
-                      }} className="w-6 h-6 bg-rose-600 text-white rounded flex items-center justify-center text-xs"><Trash2 className="w-3 h-3" /></button>
+                      }} className="w-6 h-6 bg-rose-600 text-white rounded flex items-center justify-center text-xs cursor-pointer"><Trash2 className="w-3 h-3" /></button>
                     </div>
                   )}
 
@@ -1524,8 +1513,8 @@ export function App() {
                           await updateDoc(doc(db, 'subjects', sub.id), { name: editSubName, image: editSubImage });
                           setSubjects(subjects.map(s => s.id === sub.id ? {...s, name: editSubName, image: editSubImage} : s));
                           setEditingSubjectId(null);
-                        }} className="flex-1 py-1 bg-emerald-600 text-white rounded text-xs">حفظ</button>
-                        <button onClick={() => setEditingSubjectId(null)} className="flex-1 py-1 bg-slate-200 rounded text-xs">إلغاء</button>
+                        }} className="flex-1 py-1 bg-emerald-600 text-white rounded text-xs cursor-pointer">حفظ</button>
+                        <button onClick={() => setEditingSubjectId(null)} className="flex-1 py-1 bg-slate-200 rounded text-xs cursor-pointer">إلغاء</button>
                       </div>
                     </div>
                   )}
@@ -1602,7 +1591,7 @@ export function App() {
                 />
               </div>
 
-              {/* أ) الشروحات والتعاليل مع دعم تعديل وحذف الأسئلة التفاعلية التابعة */}
+              {/* أ) الشروحات والتعاليل */}
               <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
@@ -1648,7 +1637,7 @@ export function App() {
                                         setEditingInteractiveItem({ subjectId: currentSub.id, noteId: note.id, questionIndex: iqIdx, questionObj: iq });
                                         setEditInteractiveQText(iq.q);
                                         setEditInteractiveCorrect(iq.correct);
-                                      }} className="p-1 bg-indigo-50 text-indigo-600 rounded text-[10px]" title="تعديل السؤال"><Edit3 className="w-3 h-3" /></button>
+                                      }} className="p-1 bg-indigo-50 text-indigo-600 rounded text-[10px] cursor-pointer" title="تعديل السؤال"><Edit3 className="w-3 h-3" /></button>
                                       
                                       <button onClick={async () => {
                                         if (window.confirm('حذف هذا السؤال التفاعلي؟')) {
@@ -1657,7 +1646,7 @@ export function App() {
                                           await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
                                           setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s));
                                         }
-                                      }} className="p-1 text-rose-500 rounded text-[10px]" title="حذف السؤال"><Trash2 className="w-3 h-3" /></button>
+                                      }} className="p-1 text-rose-500 rounded text-[10px] cursor-pointer" title="حذف السؤال"><Trash2 className="w-3 h-3" /></button>
                                     </div>
                                   )}
                                 </div>
@@ -1736,8 +1725,8 @@ export function App() {
                       {interactiveType === 'true_false' && (
                         <div className="flex gap-4 text-xs font-bold items-center">
                           <span>الإجابة الصحيحة:</span>
-                          <label><input type="radio" name="itf" checked={interactiveTf === 'صح'} onChange={() => setInteractiveTf('صح')} /> صح</label>
-                          <label><input type="radio" name="itf" checked={interactiveTf === 'خطأ'} onChange={() => setInteractiveTf('خطأ')} /> خطأ</label>
+                          <label className="cursor-pointer"><input type="radio" name="itf" checked={interactiveTf === 'صح'} onChange={() => setInteractiveTf('صح')} /> صح</label>
+                          <label className="cursor-pointer"><input type="radio" name="itf" checked={interactiveTf === 'خطأ'} onChange={() => setInteractiveTf('خطأ')} /> خطأ</label>
                         </div>
                       )}
 
@@ -1804,9 +1793,9 @@ export function App() {
                       </div>
                       <div className="flex items-center gap-2">
                         {vid.isVip && !isVipActive && isAdmin === false ? (
-                          <button onClick={() => setVipModalItem(vid)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold">قفل VIP 🔒</button>
+                          <button onClick={() => setVipModalItem(vid)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
                         ) : (
-                          <button onClick={() => setActiveVideoUrl(vid.url)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow">تشغيل</button>
+                          <button onClick={() => setActiveVideoUrl(vid.url)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">تشغيل</button>
                         )}
                         {isAdmin && (
                           <div className="flex items-center gap-1">
@@ -1815,12 +1804,12 @@ export function App() {
                               setEditVideoTitle(vid.title);
                               setEditVideoUrl(vid.url);
                               setEditVideoVip(vid.isVip || false);
-                            }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs" title="تعديل الفيديو"><Edit3 className="w-3.5 h-3.5" /></button>
+                            }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs cursor-pointer" title="تعديل الفيديو"><Edit3 className="w-3.5 h-3.5" /></button>
                             <button onClick={async () => {
                               const updatedVids = currentSub.videos.filter((v: any) => v.id !== vid.id);
                               await updateDoc(doc(db, 'subjects', currentSub.id), { videos: updatedVids });
                               setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s));
-                            }} className="text-rose-500 p-1"><Trash2 className="w-4 h-4" /></button>
+                            }} className="text-rose-500 p-1 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         )}
                       </div>
@@ -1871,9 +1860,9 @@ export function App() {
                       </div>
                       <div className="flex items-center gap-2">
                         {book.isVip && !isVipActive && isAdmin === false ? (
-                          <button onClick={() => setVipModalItem(book)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold">قفل VIP 🔒</button>
+                          <button onClick={() => setVipModalItem(book)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
                         ) : (
-                          <button onClick={() => setActivePdfUrl(book.url)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow">قراءة 👁️</button>
+                          <button onClick={() => setActivePdfUrl(book.url)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">قراءة 👁️</button>
                         )}
                         {isAdmin && (
                           <div className="flex items-center gap-1">
@@ -1882,12 +1871,12 @@ export function App() {
                               setEditBookletTitle(book.title);
                               setEditBookletUrl(book.url);
                               setEditBookletVip(book.isVip || false);
-                            }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs" title="تعديل الملزمة"><Edit3 className="w-3.5 h-3.5" /></button>
+                            }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs cursor-pointer" title="تعديل الملزمة"><Edit3 className="w-3.5 h-3.5" /></button>
                             <button onClick={async () => {
                               const updatedBooks = currentSub.booklets.filter((b: any) => b.id !== book.id);
                               await updateDoc(doc(db, 'subjects', currentSub.id), { booklets: updatedBooks });
                               setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, booklets: updatedBooks} : s));
-                            }} className="text-rose-500 p-1"><Trash2 className="w-4 h-4" /></button>
+                            }} className="text-rose-500 p-1 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         )}
                       </div>
@@ -1933,9 +1922,9 @@ export function App() {
                       </span>
                       <div className="flex items-center gap-2">
                         {quiz.isVip && !isVipActive && isAdmin === false ? (
-                          <button onClick={() => setVipModalItem(quiz)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold">قفل VIP 🔒</button>
+                          <button onClick={() => setVipModalItem(quiz)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
                         ) : (
-                          <button onClick={() => { setActiveQuiz(quiz); setTimeLeft((quiz.durationMinutes || 15) * 60); setTimerActive(true); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow">
+                          <button onClick={() => { setActiveQuiz(quiz); setTimeLeft((quiz.durationMinutes || 15) * 60); setTimerActive(true); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">
                             بدء الامتحان 🚀
                           </button>
                         )}
@@ -1946,12 +1935,12 @@ export function App() {
                               setEditQuizTitle(quiz.title);
                               setEditQuizDuration(quiz.durationMinutes || 15);
                               setEditQuizQuestions(quiz.questions || []);
-                            }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs" title="تعديل"><Edit3 className="w-3.5 h-3.5" /></button>
+                            }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs cursor-pointer" title="تعديل"><Edit3 className="w-3.5 h-3.5" /></button>
                             <button onClick={async () => {
                               const updatedQuizzes = currentSub.quizzes.filter((q: any) => q.id !== quiz.id);
                               await updateDoc(doc(db, 'subjects', currentSub.id), { quizzes: updatedQuizzes });
                               setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, quizzes: updatedQuizzes} : s));
-                            }} className="text-rose-500 p-1"><Trash2 className="w-4 h-4" /></button>
+                            }} className="text-rose-500 p-1 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
                           </div>
                         )}
                       </div>
@@ -1999,8 +1988,8 @@ export function App() {
                       )}
                       {questionType === 'true_false' && (
                         <div className="flex gap-4 text-xs font-bold">
-                          <label><input type="radio" name="stf" checked={tfCorrect === 'صح'} onChange={() => setTfCorrect('صح')} /> صح</label>
-                          <label><input type="radio" name="stf" checked={tfCorrect === 'خطأ'} onChange={() => setTfCorrect('خطأ')} /> خطأ</label>
+                          <label className="cursor-pointer"><input type="radio" name="stf" checked={tfCorrect === 'صح'} onChange={() => setTfCorrect('صح')} /> صح</label>
+                          <label className="cursor-pointer"><input type="radio" name="stf" checked={tfCorrect === 'خطأ'} onChange={() => setTfCorrect('خطأ')} /> خطأ</label>
                         </div>
                       )}
                       <button type="button" onClick={handleAddQuestionToQuiz} className="w-full py-1.5 bg-slate-900 text-white rounded text-xs font-bold cursor-pointer">+ إضافة السؤال للامتحان</button>
@@ -2078,7 +2067,7 @@ export function App() {
                                 setSuccessMessage('تم تحديث بيانات الطالب بنجاح!');
                                 setTimeout(() => setSuccessMessage(null), 3000);
                               }} className="px-3 py-1 bg-emerald-600 text-white rounded text-[11px] font-bold cursor-pointer">حفظ</button>
-                              <button onClick={() => setEditingStudentId(null)} className="px-3 py-1 bg-slate-200 rounded text-[11px]">إلغاء</button>
+                              <button onClick={() => setEditingStudentId(null)} className="px-3 py-1 bg-slate-200 rounded text-[11px] cursor-pointer">إلغاء</button>
                             </div>
                           </div>
                         ) : (
@@ -2122,7 +2111,7 @@ export function App() {
                             await deleteDoc(doc(db, 'students', st.id));
                             setStudentsList(studentsList.filter(item => item.id !== st.id));
                           }
-                        }} className="text-rose-500 p-1 block mx-auto" title="حذف الطالب"><Trash2 className="w-4 h-4" /></button>
+                        }} className="text-rose-500 p-1 block mx-auto cursor-pointer" title="حذف الطالب"><Trash2 className="w-4 h-4" /></button>
                       </td>
                     </tr>
                   ))}
