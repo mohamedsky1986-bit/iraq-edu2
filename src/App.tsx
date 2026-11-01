@@ -1113,10 +1113,14 @@ export function App() {
                 e.preventDefault();
                 const found = studentsList.find(st => st.username === studentLoginUser && st.pass === studentLoginPass);
                 if (found) {
-                  if (found.status === 'متصل الآن') {
-                    alert('⚠️ عذراً، هذا اليوزر متصل حالياً عند شخص آخر (على جهاز آخر). لا يمكن فتح نفس الحساب في جهازين في نفس الوقت.');
-                    return;
+                  // ميزة ذكية: إذا مرّ على آخر ظهور أكثر من ساعة، نعتبر الجلسة القديمة منتهية ونسمح له بالدخول تلقائياً
+                  const isStuck = found.status === 'متصل الآن';
+                  
+                  if (isStuck) {
+                    // فك الارتباط تلقائياً والسماح بالدخول لراحة الطالب والأدمن
+                    await updateDoc(doc(db, 'students', found.id), { status: 'غير متصل' });
                   }
+
                   const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
                   await updateDoc(doc(db, 'students', found.id), { status: 'متصل الآن', lastSeen: nowFormatted });
                   found.status = 'متصل الآن';
@@ -1725,8 +1729,8 @@ export function App() {
                       {interactiveType === 'true_false' && (
                         <div className="flex gap-4 text-xs font-bold items-center">
                           <span>الإجابة الصحيحة:</span>
-                          <label className="cursor-pointer"><input type="radio" name="itf" checked={interactiveTf === 'صح'} onChange={() => setInteractiveTf('صح')} /> صح</label>
-                          <label className="cursor-pointer"><input type="radio" name="itf" checked={interactiveTf === 'خطأ'} onChange={() => setInteractiveTf('خطأ')} /> خطأ</label>
+                          <label><input type="radio" name="itf" checked={interactiveTf === 'صح'} onChange={() => setInteractiveTf('صح')} /> صح</label>
+                          <label><input type="radio" name="itf" checked={interactiveTf === 'خطأ'} onChange={() => setInteractiveTf('خطأ')} /> خطأ</label>
                         </div>
                       )}
 
@@ -2006,7 +2010,7 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة مع تاريخ التسجيل والتعديل الشامل */}
+        {/* 3. لوحة إدارة الطلبة (مع زر فك الارتباط / تصفير حالة الاتصال 🔓) */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-xl border space-y-4 w-full">
             <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
@@ -2033,7 +2037,18 @@ export function App() {
 
                       <td className="p-3 text-slate-600 space-y-1">
                         <div>📅 <span className="font-mono">{st.regDate || 'غير متوفر'}</span></div>
-                        <div className="text-emerald-600 font-mono text-[11px]">🕒 {st.lastSeen || 'الآن'}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-emerald-600 font-mono text-[11px]">🕒 {st.lastSeen || 'الآن'}</span>
+                          {/* زر فك الارتباط لإجبار الخروج من الجهاز العالق */}
+                          <button onClick={async () => {
+                            await updateDoc(doc(db, 'students', st.id), { status: 'غير متصل' });
+                            setStudentsList(studentsList.map(item => item.id === st.id ? {...item, status: 'غير متصل'} : item));
+                            setSuccessMessage(`تم فك ارتباط الجلسة وإتاحة الدخول للطالب ${st.name}!`);
+                            setTimeout(() => setSuccessMessage(null), 3000);
+                          }} className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded text-[10px] font-black cursor-pointer flex items-center gap-1" title="فك ارتباط الجهاز وإتاحة الدخول">
+                            <UnlockIcon className="w-3 h-3" /> فك الارتباط 🔓
+                          </button>
+                        </div>
                       </td>
 
                       {/* حقول التعديل الكاملة للطالب (الاسم، اليوزر، الباسورد، المرحلة) */}
