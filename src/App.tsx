@@ -74,15 +74,17 @@ export function App() {
   const [publicChatMessages, setPublicChatMessages] = useState<any[]>([]);
 
   useEffect(() => {
-    const q = query(collection(db, 'public_chat'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      msgs.sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
-      setPublicChatMessages(msgs);
-    }, (error) => {
-      console.error("Chat sync error:", error);
-    });
-    return () => unsubscribe();
+    try {
+      const q = query(collection(db, 'public_chat'));
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        msgs.sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+        setPublicChatMessages(msgs);
+      }, (error) => {
+        console.error("Chat sync offline/error:", error);
+      });
+      return () => unsubscribe();
+    } catch (e) {}
   }, []);
 
   const handleSendPublicMessage = async (e: React.FormEvent) => {
@@ -101,7 +103,7 @@ export function App() {
       await addDoc(collection(db, 'public_chat'), newMsg);
       setPublicChatInput('');
     } catch (err) {
-      console.error(err);
+      alert('⚠️ لا يوجد اتصال بالإنترنت، يرجى المحاولة لاحقاً.');
     }
   };
 
@@ -173,7 +175,7 @@ export function App() {
           });
         }
       } catch (e) {
-        console.error("Error loading admin settings:", e);
+        // في حال عدم وجود انترنت، يستخدم القيم المخزنة محلياً لتفتح المنصة فوراً
       }
     }
     fetchAdminSettings();
@@ -215,24 +217,27 @@ export function App() {
     return safeGetStorage('nabough_cached_students', []);
   });
 
-  // مراقبة فورية لبيانات الطلاب لضمان طرد الطالب تلقائياً إذا ضغط الأدمن على "فك الارتباط"
+  // مزامنة فورية للطلبة مع ضمان عدم التعليق في التحميل بدون إنترنت
   useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'students'), (snapshot) => {
-      const loadedStuds = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      setStudentsList(loadedStuds);
-      localStorage.setItem('nabough_cached_students', JSON.stringify(loadedStuds));
-
-      // إذا كان الطالب مسجلاً دخوله حالياً، وتغيرت حالته إلى "غير متصل" من قبل الأدمن (فك الارتباط)، يتم تسريحه فوراً
-      if (loggedStudent) {
-        const freshCurrent = loadedStuds.find((st: any) => st.id === loggedStudent.id);
-        if (freshCurrent && freshCurrent.status === 'غير متصل') {
-          alert('⚠️ تم إنهاء جلستك وإلغاء ارتباط هذا الجهاز من قبل إدارة المنصة.');
-          localStorage.removeItem('nabough_logged_student');
-          setLoggedStudent(null);
+    try {
+      const unsubscribe = onSnapshot(collection(db, 'students'), (snapshot) => {
+        const loadedStuds = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (loadedStuds.length > 0) {
+          setStudentsList(loadedStuds);
+          localStorage.setItem('nabough_cached_students', JSON.stringify(loadedStuds));
         }
-      }
-    });
-    return () => unsubscribe();
+
+        if (loggedStudent) {
+          const freshCurrent = loadedStuds.find((st: any) => st.id === loggedStudent.id);
+          if (freshCurrent && freshCurrent.status === 'غير متصل') {
+            alert('⚠️ تم إنهاء جلستك وإلغاء ارتباط هذا الجهاز من قبل إدارة المنصة.');
+            localStorage.removeItem('nabough_logged_student');
+            setLoggedStudent(null);
+          }
+        }
+      }, (error) => {});
+      return () => unsubscribe();
+    } catch(e) {}
   }, [loggedStudent]);
 
   const [subjects, setSubjects] = useState<any[]>(() => {
@@ -386,6 +391,42 @@ export function App() {
     }
   }, [loggedStudent]);
 
+  // ضمان عدم التعليق في شاشة التحميل (عبر جلب الكاش المحلي بوجود النت أو عدمه)
+  useEffect(() => {
+    async function loadWithOfflineFallback() {
+      try {
+        const subsSnap = await getDocs(collection(db, 'subjects'));
+        if (!subsSnap.empty) {
+          const loadedSubs = subsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setSubjects(loadedSubs);
+          localStorage.setItem('nabough_cached_subjects', JSON.stringify(loadedSubs));
+        }
+
+        const studsSnap = await getDocs(collection(db, 'students'));
+        if (!studsSnap.empty) {
+          const loadedStuds = studsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setStudentsList(loadedStuds);
+          localStorage.setItem('nabough_cached_students', JSON.stringify(loadedStuds));
+        }
+      } catch (e) {
+        // وضع الأوفلاين: الاعتماد على التخزين المحلي لتعمل المنصة بسلاسة
+        const cachedSubs = safeGetStorage('nabough_cached_subjects', []);
+        const cachedStuds = safeGetStorage('nabough_cached_students', []);
+        if (cachedSubs.length > 0) setSubjects(cachedSubs);
+        if (cachedStuds.length > 0) setStudentsList(cachedStuds);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadWithOfflineFallback();
+
+    // مؤمن زمني إضافي (أقصى وقت شاشة التحميل هو ثانية واحدة فقط لضمان عدم التعليق نهائياً)
+    const safetyTimer = setTimeout(() => {
+      setIsLoading(false);
+    }, 1000);
+    return () => clearTimeout(safetyTimer);
+  }, []);
+
   useEffect(() => {
     let interval: any;
     if (timerActive && timeLeft > 0 && !quizResult) {
@@ -486,7 +527,7 @@ export function App() {
       setSuccessMessage('تم نشر الامتحان بنجاح في قاعدة البيانات!');
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (e) {
-      console.error(e);
+      alert('⚠️ لا يوجد انترنت لحفظ التعديلات سحابياً.');
     }
   };
 
@@ -1120,7 +1161,7 @@ export function App() {
                 e.preventDefault();
                 const found = studentsList.find(st => st.username === studentLoginUser && st.pass === studentLoginPass);
                 if (found) {
-                  // حماية الجلسة: التحقق هل الحساب متصل بالفعل في جهاز آخر؟
+                  // حماية الجلسة الفورية لمنع الفتح المتعدد في نفس الوقت
                   if (found.status === 'متصل الآن') {
                     alert(`⚠️ عذراً، هذا الحساب متصل حالياً من جهاز آخر (${found.deviceType || 'موبايل'}). لا يمكن فتح نفس الحساب في جهازين في نفس الوقت.`);
                     return;
