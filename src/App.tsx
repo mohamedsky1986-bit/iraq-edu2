@@ -80,9 +80,7 @@ export function App() {
         const msgs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
         msgs.sort((a: any, b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
         setPublicChatMessages(msgs);
-      }, (error) => {
-        console.error("Chat sync offline/error:", error);
-      });
+      }, (error) => {});
       return () => unsubscribe();
     } catch (e) {}
   }, []);
@@ -103,7 +101,7 @@ export function App() {
       await addDoc(collection(db, 'public_chat'), newMsg);
       setPublicChatInput('');
     } catch (err) {
-      alert('⚠️ لا يوجد اتصال بالإنترنت، يرجى المحاولة لاحقاً.');
+      alert('⚠️ تعذر الإرسال لعدم توفر اتصال بالإنترنت.');
     }
   };
 
@@ -167,15 +165,9 @@ export function App() {
           if (data.password) setAdminPassword(data.password);
           if (data.username) setAdminUsername(data.username);
           if (data.name) setAdminName(data.name);
-        } else {
-          await setDoc(doc(db, 'settings', 'admin_config'), {
-            password: '123456',
-            username: 'admin',
-            name: 'مدير المنصة'
-          });
         }
       } catch (e) {
-        // في حال عدم وجود انترنت، يستخدم القيم المخزنة محلياً لتفتح المنصة فوراً
+        // في حال عدم توفر انترنت، الاعتماد على القيمة الافتراضية
       }
     }
     fetchAdminSettings();
@@ -217,28 +209,39 @@ export function App() {
     return safeGetStorage('nabough_cached_students', []);
   });
 
-  // مزامنة فورية للطلبة مع ضمان عدم التعليق في التحميل بدون إنترنت
+  // جلب البيانات مع دعم العمل بدون إنترنت (تخزين محلي مؤمن)
   useEffect(() => {
-    try {
-      const unsubscribe = onSnapshot(collection(db, 'students'), (snapshot) => {
-        const loadedStuds = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        if (loadedStuds.length > 0) {
+    async function loadDataOfflineFirst() {
+      try {
+        const subsSnap = await getDocs(collection(db, 'subjects'));
+        if (!subsSnap.empty) {
+          const loadedSubs = subsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setSubjects(loadedSubs);
+          localStorage.setItem('nabough_cached_subjects', JSON.stringify(loadedSubs));
+        }
+
+        const studsSnap = await getDocs(collection(db, 'students'));
+        if (!studsSnap.empty) {
+          const loadedStuds = studsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
           setStudentsList(loadedStuds);
           localStorage.setItem('nabough_cached_students', JSON.stringify(loadedStuds));
         }
+      } catch (e) {
+        const cachedSubs = safeGetStorage('nabough_cached_subjects', []);
+        const cachedStuds = safeGetStorage('nabough_cached_students', []);
+        if (cachedSubs.length > 0) setSubjects(cachedSubs);
+        if (cachedStuds.length > 0) setStudentsList(cachedStuds);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+    loadDataOfflineFirst();
 
-        if (loggedStudent) {
-          const freshCurrent = loadedStuds.find((st: any) => st.id === loggedStudent.id);
-          if (freshCurrent && freshCurrent.status === 'غير متصل') {
-            alert('⚠️ تم إنهاء جلستك وإلغاء ارتباط هذا الجهاز من قبل إدارة المنصة.');
-            localStorage.removeItem('nabough_logged_student');
-            setLoggedStudent(null);
-          }
-        }
-      }, (error) => {});
-      return () => unsubscribe();
-    } catch(e) {}
-  }, [loggedStudent]);
+    const safetyTimer = setTimeout(() => {
+      setIsLoading(false);
+    }, 800);
+    return () => clearTimeout(safetyTimer);
+  }, []);
 
   const [subjects, setSubjects] = useState<any[]>(() => {
     return safeGetStorage('nabough_cached_subjects', []);
@@ -376,58 +379,6 @@ export function App() {
   };
 
   useEffect(() => {
-    if (loggedStudent) {
-      const updateInterval = setInterval(async () => {
-        const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
-        const device = getDeviceType();
-        try {
-          await updateDoc(doc(db, 'students', loggedStudent.id), { 
-            lastSeen: nowFormatted,
-            deviceType: device 
-          });
-        } catch(e) {}
-      }, 30000);
-      return () => clearInterval(updateInterval);
-    }
-  }, [loggedStudent]);
-
-  // ضمان عدم التعليق في شاشة التحميل (عبر جلب الكاش المحلي بوجود النت أو عدمه)
-  useEffect(() => {
-    async function loadWithOfflineFallback() {
-      try {
-        const subsSnap = await getDocs(collection(db, 'subjects'));
-        if (!subsSnap.empty) {
-          const loadedSubs = subsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setSubjects(loadedSubs);
-          localStorage.setItem('nabough_cached_subjects', JSON.stringify(loadedSubs));
-        }
-
-        const studsSnap = await getDocs(collection(db, 'students'));
-        if (!studsSnap.empty) {
-          const loadedStuds = studsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setStudentsList(loadedStuds);
-          localStorage.setItem('nabough_cached_students', JSON.stringify(loadedStuds));
-        }
-      } catch (e) {
-        // وضع الأوفلاين: الاعتماد على التخزين المحلي لتعمل المنصة بسلاسة
-        const cachedSubs = safeGetStorage('nabough_cached_subjects', []);
-        const cachedStuds = safeGetStorage('nabough_cached_students', []);
-        if (cachedSubs.length > 0) setSubjects(cachedSubs);
-        if (cachedStuds.length > 0) setStudentsList(cachedStuds);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    loadWithOfflineFallback();
-
-    // مؤمن زمني إضافي (أقصى وقت شاشة التحميل هو ثانية واحدة فقط لضمان عدم التعليق نهائياً)
-    const safetyTimer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
-    return () => clearTimeout(safetyTimer);
-  }, []);
-
-  useEffect(() => {
     let interval: any;
     if (timerActive && timeLeft > 0 && !quizResult) {
       interval = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
@@ -527,7 +478,7 @@ export function App() {
       setSuccessMessage('تم نشر الامتحان بنجاح في قاعدة البيانات!');
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (e) {
-      alert('⚠️ لا يوجد انترنت لحفظ التعديلات سحابياً.');
+      alert('⚠️ لا يوجد انترنت.');
     }
   };
 
@@ -1161,20 +1112,18 @@ export function App() {
                 e.preventDefault();
                 const found = studentsList.find(st => st.username === studentLoginUser && st.pass === studentLoginPass);
                 if (found) {
-                  // حماية الجلسة الفورية لمنع الفتح المتعدد في نفس الوقت
-                  if (found.status === 'متصل الآن') {
-                    alert(`⚠️ عذراً، هذا الحساب متصل حالياً من جهاز آخر (${found.deviceType || 'موبايل'}). لا يمكن فتح نفس الحساب في جهازين في نفس الوقت.`);
-                    return;
-                  }
-
+                  // فتح تام وسلس بدون قيود مزعجة على الأجهزة
                   const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
                   const device = getDeviceType();
 
-                  await updateDoc(doc(db, 'students', found.id), { 
-                    status: 'متصل الآن', 
-                    lastSeen: nowFormatted,
-                    deviceType: device
-                  });
+                  try {
+                    await updateDoc(doc(db, 'students', found.id), { 
+                      status: 'متصل الآن', 
+                      lastSeen: nowFormatted,
+                      deviceType: device
+                    });
+                  } catch(err) {}
+
                   found.status = 'متصل الآن';
                   found.lastSeen = nowFormatted;
                   found.deviceType = device;
@@ -2063,18 +2012,18 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة مع تاريخ التسجيل وزر فك الارتباط 🔓 وكشف نوع الجهاز */}
+        {/* 3. لوحة إدارة الطلبة مع تاريخ التسجيل وزر فك الارتباط 🔓 وتعديل البيانات */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-xl border space-y-4 w-full">
             <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-              <Users className="w-5 h-5 text-indigo-600" /> إدارة الطلبة ودرجاتهم وتعديل بياناتهم وكشف الأجهزة
+              <Users className="w-5 h-5 text-indigo-600" /> إدارة الطلبة ودرجاتهم وتعديل بياناتهم
             </h2>
             <div className="overflow-x-auto">
               <table className="w-full text-right border-collapse min-w-[750px]">
                 <thead>
                   <tr className="bg-slate-50 border-b text-slate-700 text-xs font-black">
                     <th className="p-3">الطالب والمرحلة</th>
-                    <th className="p-3">تاريخ التسجيل & آخر ظهور (والجهاز)</th>
+                    <th className="p-3">تاريخ التسجيل & آخر ظهور</th>
                     <th className="p-3">بيانات الدخول (تعديل الاسم، اليوزر، الباسورد)</th>
                     <th className="p-3">الدرجة & VIP</th>
                     <th className="p-3 text-center">الإجراء</th>
@@ -2091,11 +2040,11 @@ export function App() {
                       <td className="p-3 text-slate-600 space-y-1">
                         <div>📅 <span className="font-mono">{st.regDate || '2026-10-31'}</span></div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-emerald-600 font-mono text-[11px]">🕒 {st.lastSeen || 'الآن'} ({st.deviceType || '📱 موبايل'})</span>
+                          <span className="text-emerald-600 font-mono text-[11px]">🕒 {st.lastSeen || 'الآن'}</span>
                           <button onClick={async () => {
                             await updateDoc(doc(db, 'students', st.id), { status: 'غير متصل' });
                             setStudentsList(studentsList.map(item => item.id === st.id ? {...item, status: 'غير متصل'} : item));
-                            setSuccessMessage(`تم فك الارتباط بنجاح للطالب ${st.name}!`);
+                            setSuccessMessage(`تم فك ارتباط الجلسة بنجاح للطالب ${st.name}!`);
                             setTimeout(() => setSuccessMessage(null), 3000);
                           }} className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded text-[10px] font-black cursor-pointer flex items-center gap-1" title="فك ارتباط الجهاز وإتاحة الدخول">
                             <UnlockIcon className="w-3 h-3" /> فك الارتباط 🔓
