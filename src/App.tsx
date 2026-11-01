@@ -5,7 +5,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, que
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
-  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send, MessageSquare, Globe, Search, RotateCcw, Unlock as UnlockIcon
+  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send, MessageSquare, Globe, Search, RotateCcw, Unlock as UnlockIcon, Laptop
 } from 'lucide-react';
 
 const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
@@ -342,12 +342,25 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
+  // دالة معرفة نوع الجهاز (موبايل أم حاسبة) لتسجيله في لوحة الأدمن
+  const getDeviceType = () => {
+    const ua = navigator.userAgent;
+    if (/android|iphone|ipad|ipod/i.test(ua)) {
+      return '📱 موبايل';
+    }
+    return '💻 حاسبة / لابتوب';
+  };
+
   useEffect(() => {
     if (loggedStudent) {
       const updateInterval = setInterval(async () => {
         const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
+        const device = getDeviceType();
         try {
-          await updateDoc(doc(db, 'students', loggedStudent.id), { lastSeen: nowFormatted });
+          await updateDoc(doc(db, 'students', loggedStudent.id), { 
+            lastSeen: nowFormatted,
+            deviceType: device 
+          });
         } catch(e) {}
       }, 30000);
       return () => clearInterval(updateInterval);
@@ -515,11 +528,13 @@ export function App() {
 
     if (loggedStudent) {
       const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
+      const device = getDeviceType();
       const updatedStuds = studentsList.map(st => st.id === loggedStudent.id ? {
         ...st, 
         examScore: `${finalScore}/100`, 
         examDetails: details,
-        lastSeen: nowFormatted
+        lastSeen: nowFormatted,
+        deviceType: device
       } : st);
       setStudentsList(updatedStuds);
       localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
@@ -527,7 +542,8 @@ export function App() {
         await updateDoc(doc(db, 'students', loggedStudent.id), {
           examScore: `${finalScore}/100`,
           examDetails: details,
-          lastSeen: nowFormatted
+          lastSeen: nowFormatted,
+          deviceType: device
         });
       } catch(e) {}
     }
@@ -1051,6 +1067,7 @@ export function App() {
 
                 const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
                 const regDateFormatted = new Date().toLocaleDateString('ar-IQ', {year: 'numeric', month: '2-digit', day: '2-digit'});
+                const device = getDeviceType();
                 const newSt = {
                   name: newStudentName,
                   username: studentLoginUser,
@@ -1060,6 +1077,7 @@ export function App() {
                   status: 'متصل الآن',
                   lastSeen: nowFormatted,
                   regDate: regDateFormatted,
+                  deviceType: device,
                   examScore: 'لم يتقدم'
                 };
 
@@ -1113,18 +1131,18 @@ export function App() {
                 e.preventDefault();
                 const found = studentsList.find(st => st.username === studentLoginUser && st.pass === studentLoginPass);
                 if (found) {
-                  // ميزة ذكية: إذا مرّ على آخر ظهور أكثر من ساعة، نعتبر الجلسة القديمة منتهية ونسمح له بالدخول تلقائياً
-                  const isStuck = found.status === 'متصل الآن';
-                  
-                  if (isStuck) {
-                    // فك الارتباط تلقائياً والسماح بالدخول لراحة الطالب والأدمن
-                    await updateDoc(doc(db, 'students', found.id), { status: 'غير متصل' });
-                  }
-
+                  // تحديث تلقائي للجلسة إذا كان معلقاً، أو السماح بالدخول من نفس المتصفح
                   const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
-                  await updateDoc(doc(db, 'students', found.id), { status: 'متصل الآن', lastSeen: nowFormatted });
+                  const device = getDeviceType();
+
+                  await updateDoc(doc(db, 'students', found.id), { 
+                    status: 'متصل الآن', 
+                    lastSeen: nowFormatted,
+                    deviceType: device
+                  });
                   found.status = 'متصل الآن';
                   found.lastSeen = nowFormatted;
+                  found.deviceType = device;
                   setLoggedStudent(found);
                   setShowStudentAuthModal(false);
                   setSuccessMessage(`أهلاً بك يا ${found.name}!`);
@@ -2010,7 +2028,7 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة (مع زر فك الارتباط / تصفير حالة الاتصال 🔓) */}
+        {/* 3. لوحة إدارة الطلبة مع تاريخ التسجيل وزر فك الارتباط 🔓 */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-xl border space-y-4 w-full">
             <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
@@ -2036,22 +2054,20 @@ export function App() {
                       </td>
 
                       <td className="p-3 text-slate-600 space-y-1">
-                        <div>📅 <span className="font-mono">{st.regDate || 'غير متوفر'}</span></div>
+                        <div>📅 <span className="font-mono">{st.regDate || '2026-10-31'}</span></div>
                         <div className="flex items-center gap-2">
                           <span className="text-emerald-600 font-mono text-[11px]">🕒 {st.lastSeen || 'الآن'}</span>
-                          {/* زر فك الارتباط لإجبار الخروج من الجهاز العالق */}
                           <button onClick={async () => {
                             await updateDoc(doc(db, 'students', st.id), { status: 'غير متصل' });
                             setStudentsList(studentsList.map(item => item.id === st.id ? {...item, status: 'غير متصل'} : item));
-                            setSuccessMessage(`تم فك ارتباط الجلسة وإتاحة الدخول للطالب ${st.name}!`);
+                            setSuccessMessage(`تم فك الارتباط بنجاح للطالب ${st.name}!`);
                             setTimeout(() => setSuccessMessage(null), 3000);
-                          }} className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded text-[10px] font-black cursor-pointer flex items-center gap-1" title="فك ارتباط الجهاز وإتاحة الدخول">
+                          }} className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded text-[10px] font-black cursor-pointer flex items-center gap-1" title="فك ارتباط الجلسة وإتاحة الدخول">
                             <UnlockIcon className="w-3 h-3" /> فك الارتباط 🔓
                           </button>
                         </div>
                       </td>
 
-                      {/* حقول التعديل الكاملة للطالب (الاسم، اليوزر، الباسورد، المرحلة) */}
                       <td className="p-3">
                         {editingStudentId === st.id ? (
                           <div className="flex flex-col gap-1.5 bg-slate-50 p-2.5 rounded-xl border border-indigo-200">
