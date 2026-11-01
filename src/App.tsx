@@ -215,6 +215,26 @@ export function App() {
     return safeGetStorage('nabough_cached_students', []);
   });
 
+  // مراقبة فورية لبيانات الطلاب لضمان طرد الطالب تلقائياً إذا ضغط الأدمن على "فك الارتباط"
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'students'), (snapshot) => {
+      const loadedStuds = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setStudentsList(loadedStuds);
+      localStorage.setItem('nabough_cached_students', JSON.stringify(loadedStuds));
+
+      // إذا كان الطالب مسجلاً دخوله حالياً، وتغيرت حالته إلى "غير متصل" من قبل الأدمن (فك الارتباط)، يتم تسريحه فوراً
+      if (loggedStudent) {
+        const freshCurrent = loadedStuds.find((st: any) => st.id === loggedStudent.id);
+        if (freshCurrent && freshCurrent.status === 'غير متصل') {
+          alert('⚠️ تم إنهاء جلستك وإلغاء ارتباط هذا الجهاز من قبل إدارة المنصة.');
+          localStorage.removeItem('nabough_logged_student');
+          setLoggedStudent(null);
+        }
+      }
+    });
+    return () => unsubscribe();
+  }, [loggedStudent]);
+
   const [subjects, setSubjects] = useState<any[]>(() => {
     return safeGetStorage('nabough_cached_subjects', []);
   });
@@ -342,7 +362,6 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
-  // دالة تحديد نوع الجهاز الحقيقي
   const getDeviceType = () => {
     const ua = navigator.userAgent;
     if (/android|iphone|ipad|ipod/i.test(ua)) {
@@ -366,36 +385,6 @@ export function App() {
       return () => clearInterval(updateInterval);
     }
   }, [loggedStudent]);
-
-  useEffect(() => {
-    async function loadDataFromFirebase() {
-      try {
-        const subsSnap = await getDocs(collection(db, 'subjects'));
-        if (!subsSnap.empty) {
-          const loadedSubs = subsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setSubjects(loadedSubs);
-          localStorage.setItem('nabough_cached_subjects', JSON.stringify(loadedSubs));
-        }
-
-        const studsSnap = await getDocs(collection(db, 'students'));
-        if (!studsSnap.empty) {
-          const loadedStuds = studsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setStudentsList(loadedStuds);
-          localStorage.setItem('nabough_cached_students', JSON.stringify(loadedStuds));
-        }
-      } catch (e) {
-        console.error('Offline mode / Firebase load error:', e);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-    loadDataFromFirebase();
-
-    const safetyTimer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1000);
-    return () => clearTimeout(safetyTimer);
-  }, []);
 
   useEffect(() => {
     let interval: any;
@@ -1131,7 +1120,12 @@ export function App() {
                 e.preventDefault();
                 const found = studentsList.find(st => st.username === studentLoginUser && st.pass === studentLoginPass);
                 if (found) {
-                  // نظام ذكي: إذا حاول الدخول من جهاز جديد أو نفس الجهاز وكان معلقاً، نقوم بتحديث حالته فوراً ليتمكن من الدخول بسلاسة
+                  // حماية الجلسة: التحقق هل الحساب متصل بالفعل في جهاز آخر؟
+                  if (found.status === 'متصل الآن') {
+                    alert(`⚠️ عذراً، هذا الحساب متصل حالياً من جهاز آخر (${found.deviceType || 'موبايل'}). لا يمكن فتح نفس الحساب في جهازين في نفس الوقت.`);
+                    return;
+                  }
+
                   const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
                   const device = getDeviceType();
 
@@ -1145,7 +1139,7 @@ export function App() {
                   found.deviceType = device;
                   setLoggedStudent(found);
                   setShowStudentAuthModal(false);
-                  setSuccessMessage(`أهلاً بك يا ${found.name}! (${device})`);
+                  setSuccessMessage(`أهلاً بك يا ${found.name}!`);
                 } else {
                   alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
                 }
