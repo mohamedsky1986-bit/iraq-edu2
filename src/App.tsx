@@ -342,13 +342,13 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
-  // دالة معرفة نوع الجهاز (موبايل أم حاسبة) لتسجيله في لوحة الأدمن
+  // دالة تحديد نوع الجهاز الحقيقي
   const getDeviceType = () => {
     const ua = navigator.userAgent;
     if (/android|iphone|ipad|ipod/i.test(ua)) {
       return '📱 موبايل';
     }
-    return '💻 حاسبة / لابتوب';
+    return '💻 حاسبة';
   };
 
   useEffect(() => {
@@ -1131,7 +1131,7 @@ export function App() {
                 e.preventDefault();
                 const found = studentsList.find(st => st.username === studentLoginUser && st.pass === studentLoginPass);
                 if (found) {
-                  // تحديث تلقائي للجلسة إذا كان معلقاً، أو السماح بالدخول من نفس المتصفح
+                  // نظام ذكي: إذا حاول الدخول من جهاز جديد أو نفس الجهاز وكان معلقاً، نقوم بتحديث حالته فوراً ليتمكن من الدخول بسلاسة
                   const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
                   const device = getDeviceType();
 
@@ -1145,7 +1145,7 @@ export function App() {
                   found.deviceType = device;
                   setLoggedStudent(found);
                   setShowStudentAuthModal(false);
-                  setSuccessMessage(`أهلاً بك يا ${found.name}!`);
+                  setSuccessMessage(`أهلاً بك يا ${found.name}! (${device})`);
                 } else {
                   alert('اسم المستخدم أو كلمة المرور غير صحيحة.');
                 }
@@ -2028,18 +2028,18 @@ export function App() {
           );
         })()}
 
-        {/* 3. لوحة إدارة الطلبة مع تاريخ التسجيل وزر فك الارتباط 🔓 */}
+        {/* 3. لوحة إدارة الطلبة مع تاريخ التسجيل وزر فك الارتباط 🔓 وكشف نوع الجهاز */}
         {activeTab === 'students' && isAdmin && (
           <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-xl border space-y-4 w-full">
             <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
-              <Users className="w-5 h-5 text-indigo-600" /> إدارة الطلبة ودرجاتهم وتعديل بياناتهم
+              <Users className="w-5 h-5 text-indigo-600" /> إدارة الطلبة ودرجاتهم وتعديل بياناتهم وكشف الأجهزة
             </h2>
             <div className="overflow-x-auto">
               <table className="w-full text-right border-collapse min-w-[750px]">
                 <thead>
                   <tr className="bg-slate-50 border-b text-slate-700 text-xs font-black">
                     <th className="p-3">الطالب والمرحلة</th>
-                    <th className="p-3">تاريخ التسجيل & آخر ظهور</th>
+                    <th className="p-3">تاريخ التسجيل & آخر ظهور (والجهاز)</th>
                     <th className="p-3">بيانات الدخول (تعديل الاسم، اليوزر، الباسورد)</th>
                     <th className="p-3">الدرجة & VIP</th>
                     <th className="p-3 text-center">الإجراء</th>
@@ -2055,14 +2055,14 @@ export function App() {
 
                       <td className="p-3 text-slate-600 space-y-1">
                         <div>📅 <span className="font-mono">{st.regDate || '2026-10-31'}</span></div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-emerald-600 font-mono text-[11px]">🕒 {st.lastSeen || 'الآن'}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-emerald-600 font-mono text-[11px]">🕒 {st.lastSeen || 'الآن'} ({st.deviceType || '📱 موبايل'})</span>
                           <button onClick={async () => {
                             await updateDoc(doc(db, 'students', st.id), { status: 'غير متصل' });
                             setStudentsList(studentsList.map(item => item.id === st.id ? {...item, status: 'غير متصل'} : item));
                             setSuccessMessage(`تم فك الارتباط بنجاح للطالب ${st.name}!`);
                             setTimeout(() => setSuccessMessage(null), 3000);
-                          }} className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded text-[10px] font-black cursor-pointer flex items-center gap-1" title="فك ارتباط الجلسة وإتاحة الدخول">
+                          }} className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded text-[10px] font-black cursor-pointer flex items-center gap-1" title="فك ارتباط الجهاز وإتاحة الدخول">
                             <UnlockIcon className="w-3 h-3" /> فك الارتباط 🔓
                           </button>
                         </div>
