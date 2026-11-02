@@ -166,9 +166,7 @@ export function App() {
           if (data.username) setAdminUsername(data.username);
           if (data.name) setAdminName(data.name);
         }
-      } catch (e) {
-        // في حال عدم توفر انترنت، الاعتماد على القيمة الافتراضية
-      }
+      } catch (e) {}
     }
     fetchAdminSettings();
   }, []);
@@ -209,7 +207,7 @@ export function App() {
     return safeGetStorage('nabough_cached_students', []);
   });
 
-  // جلب البيانات مع دعم العمل بدون إنترنت (تخزين محلي مؤمن)
+  // جلب البيانات مع دعم العمل بدون إنترنت
   useEffect(() => {
     async function loadDataOfflineFirst() {
       try {
@@ -370,6 +368,21 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
+  // دالة التصحيح المرن والذكي للغة العربية (تتجاهل الحركات، الهمزات، والتاء المربوطة)
+  const normalizeArabic = (str: string) => {
+    if (!str) return '';
+    return str
+      .trim()
+      .toLowerCase()
+      .replace(/[\u064b-\u0652]/g, '')
+      .replace(/[أإآ]/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/ى/g, 'ي')
+      .replace(/[^\u0600-\u06FF\s0-9a-zA-Z]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
   const getDeviceType = () => {
     const ua = navigator.userAgent;
     if (/android|iphone|ipad|ipod/i.test(ua)) {
@@ -402,8 +415,8 @@ export function App() {
 
   const evaluateAnswerSmart = (userAns: string, correctAns: string, qType: string) => {
     if (!userAns) return { isCorrect: false, scoreRatio: 0 };
-    const cleanUser = userAns.trim().toLowerCase();
-    const cleanCorrect = correctAns.trim().toLowerCase();
+    const cleanUser = normalizeArabic(userAns);
+    const cleanCorrect = normalizeArabic(correctAns);
 
     if (qType === 'mcq' || qType === 'true_false') {
       return { isCorrect: cleanUser === cleanCorrect, scoreRatio: cleanUser === cleanCorrect ? 1 : 0 };
@@ -413,7 +426,7 @@ export function App() {
       return { isCorrect: true, scoreRatio: 1 };
     }
 
-    const correctWords = cleanCorrect.split(/[\s,،.؛\-]+/).filter(w => w.length > 2);
+    const correctWords = cleanCorrect.split(' ').filter(w => w.length > 2);
     if (correctWords.length === 0) {
       return { isCorrect: cleanUser.includes(cleanCorrect) || cleanCorrect.includes(cleanUser), scoreRatio: 0.6 };
     }
@@ -478,7 +491,7 @@ export function App() {
       setSuccessMessage('تم نشر الامتحان بنجاح في قاعدة البيانات!');
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (e) {
-      alert('⚠️ لا يوجد انترنت.');
+      alert('⚠️ لا يوجد انترنت لحفظ التعديلات سحابياً.');
     }
   };
 
@@ -1597,7 +1610,7 @@ export function App() {
                 />
               </div>
 
-              {/* أ) الشروحات والتعاليل */}
+              {/* أ) الشروحات والتعاليل مع دعم التصحيح المرن والذكي للهمزات والحركات */}
               <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
@@ -1631,7 +1644,7 @@ export function App() {
                             const ansKey = `${note.id}_${iqIdx}`;
                             const userAns = studentInteractiveAnswers[ansKey] || '';
                             const isGraded = interactiveGradedStatus[ansKey];
-                            const isCorrect = userAns.trim().toLowerCase() === iq.correct.trim().toLowerCase();
+                            const isCorrect = evaluateAnswerSmart(userAns, iq.correct, iq.type).isCorrect;
 
                             return (
                               <div key={iqIdx} className="bg-white p-3 rounded-lg border space-y-2 relative">
@@ -1682,7 +1695,7 @@ export function App() {
                                   </button>
                                   {isGraded && (
                                     <span className={`text-[10px] font-black ${isCorrect ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                      {isCorrect ? '✅ صحيحة بطل!' : `❌ خطأ (الصحيحة: ${iq.correct})`}
+                                      {isCorrect ? '✅ صحيحة بطل!' : `❌ خطأ (العبارة الصحيحة: ${iq.correct})`}
                                     </span>
                                   )}
                                 </div>
@@ -1725,7 +1738,7 @@ export function App() {
                       )}
 
                       {interactiveType === 'fill' && (
-                        <input type="text" value={interactiveFill} onChange={(e) => setInteractiveFill(e.target.value)} placeholder="الإجابة بالفراغ..." className="w-full px-2 py-1 bg-emerald-50 border rounded text-xs font-bold text-emerald-900" />
+                        <input type="text" value={interactiveFill} onChange={(e) => setFillCorrect(e.target.value)} placeholder="الإجابة بالفراغ..." className="w-full px-2 py-1 bg-emerald-50 border rounded text-xs font-bold text-emerald-900" />
                       )}
 
                       {interactiveType === 'true_false' && (
@@ -2044,7 +2057,7 @@ export function App() {
                           <button onClick={async () => {
                             await updateDoc(doc(db, 'students', st.id), { status: 'غير متصل' });
                             setStudentsList(studentsList.map(item => item.id === st.id ? {...item, status: 'غير متصل'} : item));
-                            setSuccessMessage(`تم فك ارتباط الجلسة بنجاح للطالب ${st.name}!`);
+                            setSuccessMessage(`تم فك الارتباط بنجاح للطالب ${st.name}!`);
                             setTimeout(() => setSuccessMessage(null), 3000);
                           }} className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded text-[10px] font-black cursor-pointer flex items-center gap-1" title="فك ارتباط الجهاز وإتاحة الدخول">
                             <UnlockIcon className="w-3 h-3" /> فك الارتباط 🔓
