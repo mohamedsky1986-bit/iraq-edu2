@@ -286,9 +286,7 @@ export function App() {
   const [editBookletUrl, setEditBookletUrl] = useState('');
   const [editBookletVip, setEditBookletVip] = useState(false);
 
-  // حالات تعديل السؤال التفاعلي التابع للشرح (مع دعم تعديل الاختيارات بالكامل)
   const [editingInteractiveItem, setEditingInteractiveItem] = useState<{subjectId: string, noteId: string, questionIndex: number, questionObj: any} | null>(null);
-  const [editInteractiveQType, setEditInteractiveQType] = useState<'mcq' | 'fill' | 'true_false'>('mcq');
   const [editInteractiveQText, setEditInteractiveQText] = useState('');
   const [editInteractiveOptions, setEditInteractiveOptions] = useState(['', '', '', '']);
   const [editInteractiveCorrect, setEditInteractiveCorrect] = useState('');
@@ -312,7 +310,8 @@ export function App() {
   const [editSubName, setEditSubName] = useState('');
   const [editSubImage, setEditSubImage] = useState('');
 
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  // حالات تعديل الشرح أو التعليق الرئيسي (العنوان، النص، الصورة، الـ VIP)
+  const [editingNoteModal, setEditingNoteModal] = useState<{subjectId: string, note: any} | null>(null);
   const [editNoteTitle, setEditNoteTitle] = useState('');
   const [editNoteContent, setEditNoteContent] = useState('');
   const [editNoteImage, setEditNoteImage] = useState('');
@@ -639,7 +638,67 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-1 sm:pt-2">
       
-      {/* نافذة تعديل الامتحان للأدمن الشاملة (تعديل كامل الأسئلة، الخيارات، أنواع الأسئلة، واستيراد الأسئلة التفاعلية) */}
+      {/* نافذة تعديل الشرح أو التعليل الرئيسي بالكامل (العنوان، النص، الصورة، الـ VIP) */}
+      {editingNoteModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative space-y-4 text-right">
+            <button onClick={() => setEditingNoteModal(null)} className="absolute top-4 left-4 w-9 h-9 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
+              <X className="w-4 h-4" />
+            </button>
+            <h3 className="text-lg font-black text-slate-900 pb-2 border-b">تعديل الشرح أو التعليل الرئيسي</h3>
+            
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">عنوان الشرح / التعليل</label>
+                <input type="text" value={editNoteTitle} onChange={(e) => setEditNoteTitle(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">النص التفصيلي</label>
+                <textarea value={editNoteContent} onChange={(e) => setEditNoteContent(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold h-24" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">رابط الصورة التوضيحية للشرح (URL)</label>
+                <input type="text" value={editNoteImage} onChange={(e) => setEditNoteImage(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold" />
+              </div>
+              <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
+                <input type="checkbox" checked={editNoteVip} onChange={(e) => setEditNoteVip(e.target.checked)} className="w-4 h-4 text-amber-600" />
+                <span>شرح خاص بـ VIP؟</span>
+              </label>
+            </div>
+
+            <div className="flex gap-2 pt-3 border-t">
+              <button onClick={async () => {
+                const targetSub = subjects.find(s => s.id === editingNoteModal.subjectId);
+                if (!targetSub) return;
+                const updatedNotes = targetSub.notes.map((n: any) => n.id === editingNoteModal.note.id ? { 
+                  ...n, 
+                  title: editNoteTitle, 
+                  content: editNoteContent, 
+                  image: editNoteImage, 
+                  isVip: editNoteVip 
+                } : n);
+
+                try {
+                  await updateDoc(doc(db, 'subjects', editingNoteModal.subjectId), { notes: updatedNotes });
+                  const updatedSubs = subjects.map(s => s.id === editingNoteModal.subjectId ? {...s, notes: updatedNotes} : s);
+                  setSubjects(updatedSubs);
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                  setEditingNoteModal(null);
+                  setSuccessMessage('تم تعديل الشرح بنجاح!');
+                  setTimeout(() => setSuccessMessage(null), 3000);
+                } catch(e) {}
+              }} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold cursor-pointer">
+                حفظ التعديل
+              </button>
+              <button onClick={() => setEditingNoteModal(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer">
+                إلغاء
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تعديل الامتحان للأدمن */}
       {editingQuizItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative space-y-4 text-right">
@@ -658,7 +717,6 @@ export function App() {
                 <input type="number" value={editQuizDuration} onChange={(e) => setEditQuizDuration(Number(e.target.value))} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
               </div>
 
-              {/* قائمة الأسئلة الحالية مع إمكانية تعديل النص، نوع السؤال، والخيارات */}
               <div className="space-y-2 pt-2">
                 <h4 className="text-xs font-black text-indigo-900">أسئلة الامتحان الحالية (تعديل أو حذف):</h4>
                 {editQuizQuestions.map((eq: any, eqIdx: number) => (
@@ -684,7 +742,6 @@ export function App() {
                       className="w-full px-3 py-1.5 bg-white border rounded-lg text-xs font-bold" 
                     />
 
-                    {/* إذا كان السؤال يحتوي على خيارات (اختيارات أو صح وخطأ)، نعرضها لنتمكن من تعديلها بالكامل */}
                     {eq.options && Array.isArray(eq.options) && (
                       <div className="grid grid-cols-2 gap-1.5 pt-1">
                         {eq.options.map((opt: string, oIdx: number) => (
@@ -719,54 +776,7 @@ export function App() {
                 ))}
               </div>
 
-              {/* خيار الاستيراد السريع للأسئلة التفاعلية والشروحات السابقة داخل نافذة التعديل */}
-              {subjects.find(s => s.id === editingQuizItem.subjectId)?.notes && (
-                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl space-y-2">
-                  <label className="block text-xs font-black text-indigo-900">💡 استيراد سؤال من الأسئلة التفاعلية أو الشروحات السابقة:</label>
-                  <select 
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (!val) return;
-                      const currentSubObj = subjects.find(s => s.id === editingQuizItem.subjectId);
-                      if (!currentSubObj) return;
-
-                      if (val.includes('__iq_')) {
-                        const [nId, iqIdxStr] = val.split('__iq_');
-                        const foundNote = currentSubObj.notes.find((n: any) => n.id === nId);
-                        if (foundNote && foundNote.interactiveQuestions) {
-                          const iq = foundNote.interactiveQuestions[Number(iqIdxStr)];
-                          if (iq) {
-                            setEditQuizQuestions([...editQuizQuestions, { type: iq.type || 'fill', q: iq.q, options: iq.options || [], correct: iq.correct, isMinisterial: false }]);
-                            setSuccessMessage('تم استيراد السؤال التفاعلي بنجاح للامتحان!');
-                            setTimeout(() => setSuccessMessage(null), 2500);
-                          }
-                        }
-                      } else {
-                        const foundNote = currentSubObj.notes.find((n: any) => n.id === val);
-                        if (foundNote) {
-                          setEditQuizQuestions([...editQuizQuestions, { type: 'fill', q: foundNote.title, correct: foundNote.content, isMinisterial: false }]);
-                          setSuccessMessage('تم استيراد الشرح/التعليل بنجاح للامتحان!');
-                          setTimeout(() => setSuccessMessage(null), 2500);
-                        }
-                      }
-                      e.target.value = '';
-                    }}
-                    className="w-full px-3 py-2 bg-white border rounded-lg text-xs font-bold text-slate-800 cursor-pointer"
-                  >
-                    <option value="">-- اضغط لاختيار سؤال تفاعلي أو شرح لاستيراده --</option>
-                    {subjects.find(s => s.id === editingQuizItem.subjectId)?.notes.map((n: any) => (
-                      <React.Fragment key={n.id}>
-                        <option value={n.id}>📖 شرح: {n.title}</option>
-                        {n.interactiveQuestions && n.interactiveQuestions.map((iq: any, iqIdx: number) => (
-                          <option key={`${n.id}__iq_${iqIdx}`} value={`${n.id}__iq_${iqIdx}`}>&nbsp;&nbsp;&nbsp;&nbsp;⭐ سؤال تفاعلي: {iq.q}</option>
-                        ))}
-                      </React.Fragment>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* إضافة سؤال جديد متكامل (اختيارات، فراغات، صح وخطأ) داخل نافذة تعديل الامتحان */}
+              {/* إضافة سؤال جديد متكامل داخل نافذة تعديل الامتحان */}
               <div className="p-3 bg-slate-50 rounded-xl border space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-xs font-black text-slate-800">➕ إضافة سؤال جديد أثناء التعديل:</span>
@@ -862,7 +872,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة تعديل السؤال التفاعلي التابع للشرح (مع دعم تعديل الاختيارات بالكامل إذا كان نوعه MCQ) */}
+      {/* نافذة تعديل السؤال التفاعلي التابع للشرح */}
       {editingInteractiveItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-right">
@@ -877,7 +887,6 @@ export function App() {
                 <input type="text" value={editInteractiveQText} onChange={(e) => setEditInteractiveQText(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
               </div>
 
-              {/* إذا كان السؤال يحتوي على خيارات اختيارات، نعرضها للتعديل الكامل */}
               {editingInteractiveItem.questionObj.options && Array.isArray(editingInteractiveItem.questionObj.options) && (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">تعديل الخيارات الأربعة</label>
@@ -1802,7 +1811,7 @@ export function App() {
                 />
               </div>
 
-              {/* أ) الشروحات والتعاليل */}
+              {/* أ) الشروحات والتعاليل مع أزرار التعديل والحذف الكاملة لكل شرح وعنوان */}
               <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
@@ -1810,11 +1819,39 @@ export function App() {
                 <div className="space-y-4">
                   {filteredNotes.map((note: any, nIdx: number) => (
                     <div key={note.id} className="p-4 bg-white rounded-2xl border shadow-sm space-y-3 relative">
-                      <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2 border-b pb-2">
                         <div className="flex items-center gap-2">
                           <h5 className="font-black text-slate-900 text-xs sm:text-sm">💡 {note.title}</h5>
                           {note.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
                         </div>
+
+                        {isAdmin && (
+                          <div className="flex items-center gap-1.5">
+                            {/* زر تعديل الشرح الرئيسي (عنوان، نص، صورة) */}
+                            <button onClick={() => {
+                              setEditingNoteModal({ subjectId: currentSub.id, note: note });
+                              setEditNoteTitle(note.title);
+                              setEditNoteContent(note.content);
+                              setEditNoteImage(note.image || '');
+                              setEditNoteVip(note.isVip || false);
+                            }} className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1" title="تعديل الشرح والتعليل">
+                              <Edit3 className="w-3.5 h-3.5" /> تعديل الشرح ✏️
+                            </button>
+
+                            {/* زر حذف الشرح بالكامل */}
+                            <button onClick={async () => {
+                              if (window.confirm(`هل أنت متأكد من حذف هذا الشرح/التعليل (${note.title})؟`)) {
+                                const updatedNotes = currentSub.notes.filter((n: any) => n.id !== note.id);
+                                await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
+                                setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s));
+                                setSuccessMessage('تم حذف الشرح بنجاح!');
+                                setTimeout(() => setSuccessMessage(null), 3000);
+                              }
+                            }} className="px-2.5 py-1 bg-rose-50 text-rose-600 rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1" title="حذف الشرح">
+                              <Trash2 className="w-3.5 h-3.5" /> حذف 🗑️
+                            </button>
+                          </div>
+                        )}
                       </div>
 
                       <p className="text-xs text-slate-700 leading-relaxed">{note.content}</p>
