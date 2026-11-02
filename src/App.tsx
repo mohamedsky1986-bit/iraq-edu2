@@ -55,7 +55,7 @@ export function App() {
     link.setAttribute('href', manifestURL);
   }, []);
 
-  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+  const [isAdmin, setIsAdmin] = useState<boolean> (() => {
     return localStorage.getItem('nabough_is_admin') === 'true';
   });
 
@@ -266,10 +266,14 @@ export function App() {
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
 
+  // حالات تعديل الامتحان المتقدمة (تعديل عنوان، تعديل أسئلة، وإضافة أسئلة جديدة ضمن نافذة التعديل)
   const [editingQuizItem, setEditingQuizItem] = useState<{subjectId: string, quiz: any} | null>(null);
   const [editQuizTitle, setEditQuizTitle] = useState('');
   const [editQuizDuration, setEditQuizDuration] = useState(15);
   const [editQuizQuestions, setEditQuizQuestions] = useState<any[]>([]);
+  // حقول إضافة سؤال جديد داخل نافذة تعديل الامتحان
+  const [editNewQText, setEditNewQText] = useState('');
+  const [editNewQCorrect, setEditNewQCorrect] = useState('');
 
   const [editingVideoItem, setEditingVideoItem] = useState<{subjectId: string, video: any} | null>(null);
   const [editVideoTitle, setEditVideoTitle] = useState('');
@@ -368,7 +372,7 @@ export function App() {
     { id: 'sixth_lit', name: 'السادس الأدبي' },
   ];
 
-  // دالة التصحيح المرن والذكي للغة العربية (تتجاهل الحركات، الهمزات، والتاء المربوطة)
+  // دالة التصحيح المرن والذكي للغة العربية
   const normalizeArabic = (str: string) => {
     if (!str) return '';
     return str
@@ -631,7 +635,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-1 sm:pt-2">
       
-      {/* نافذة تعديل الامتحان للأدمن */}
+      {/* نافذة تعديل الامتحان للأدمن (مع دعم تعديل السؤال، وتعديل النص والإجابة، وإضافة أسئلة جديدة) */}
       {editingQuizItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative space-y-4 text-right">
@@ -651,21 +655,74 @@ export function App() {
               </div>
 
               <div className="space-y-2 pt-2">
-                <h4 className="text-xs font-black text-indigo-900">أسئلة الامتحان الحالية:</h4>
+                <h4 className="text-xs font-black text-indigo-900">أسئلة الامتحان الحالية (تعديل أو حذف):</h4>
                 {editQuizQuestions.map((eq: any, eqIdx: number) => (
-                  <div key={eqIdx} className="p-3 bg-slate-50 rounded-xl border flex items-center justify-between gap-2">
-                    <div className="text-xs font-bold">
-                      <span>س{eqIdx+1}: {eq.q}</span>
-                      <span className="block text-[10px] text-emerald-700 mt-0.5">الإجابة: {eq.correct}</span>
+                  <div key={eqIdx} className="p-3 bg-slate-50 rounded-xl border space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-slate-900">س{eqIdx+1}:</span>
+                      <button onClick={() => {
+                        setEditQuizQuestions(editQuizQuestions.filter((_, i) => i !== eqIdx));
+                      }} className="text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg text-xs flex items-center gap-1 font-bold">
+                        <Trash2 className="w-3.5 h-3.5" /> حذف السؤال
+                      </button>
                     </div>
-                    <button onClick={() => {
-                      setEditQuizQuestions(editQuizQuestions.filter((_, i) => i !== eqIdx));
-                    }} className="text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <input 
+                      type="text" 
+                      value={eq.q} 
+                      onChange={(e) => {
+                        const newQ = [...editQuizQuestions];
+                        newQ[eqIdx].q = e.target.value;
+                        setEditQuizQuestions(newQ);
+                      }} 
+                      placeholder="نص السؤال..." 
+                      className="w-full px-3 py-1.5 bg-white border rounded-lg text-xs font-bold" 
+                    />
+                    <input 
+                      type="text" 
+                      value={eq.correct} 
+                      onChange={(e) => {
+                        const newQ = [...editQuizQuestions];
+                        newQ[eqIdx].correct = e.target.value;
+                        setEditQuizQuestions(newQ);
+                      }} 
+                      placeholder="الإجابة الصحيحة..." 
+                      className="w-full px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900" 
+                    />
                   </div>
                 ))}
               </div>
+
+              {/* إضافة سؤال جديد داخل نافذة التعديل */}
+              <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 space-y-2">
+                <h5 className="text-xs font-black text-indigo-900">➕ إضافة سؤال جديد لهذا الامتحان أثناء التعديل:</h5>
+                <input 
+                  type="text" 
+                  value={editNewQText} 
+                  onChange={(e) => setEditNewQText(e.target.value)} 
+                  placeholder="نص السؤال الجديد..." 
+                  className="w-full px-3 py-1.5 bg-white border rounded-lg text-xs font-bold" 
+                />
+                <input 
+                  type="text" 
+                  value={editNewQCorrect} 
+                  onChange={(e) => setEditNewQCorrect(e.target.value)} 
+                  placeholder="الإجابة الصحيحة للسؤال الجديد..." 
+                  className="w-full px-3 py-1.5 bg-white border rounded-lg text-xs font-bold text-emerald-900" 
+                />
+                <button type="button" onClick={() => {
+                  if (!editNewQText || !editNewQCorrect) {
+                    alert('يرجى كتابة نص السؤال والإجابة الصحيحة.');
+                    return;
+                  }
+                  setEditQuizQuestions([...editQuizQuestions, { type: 'fill', q: editNewQText, correct: editNewQCorrect, isMinisterial: false }]);
+                  setEditNewQText('');
+                  setEditNewQCorrect('');
+                  alert('✅ تم إضافة السؤال الجديد للقائمة مؤقتاً، اضغط حفظ التعديلات نهائياً للاتمام.');
+                }} className="px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-bold cursor-pointer">
+                  + إرفاق هذا السؤال للامتحان
+                </button>
+              </div>
+
             </div>
 
             <div className="flex gap-2 pt-4 border-t">
@@ -680,13 +737,13 @@ export function App() {
                   setSubjects(updatedSubs);
                   localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                   setEditingQuizItem(null);
-                  setSuccessMessage('تم تحديث الامتحان بنجاح!');
+                  setSuccessMessage('تم تحديث الامتحان وتعديل الأسئلة بنجاح!');
                   setTimeout(() => setSuccessMessage(null), 3000);
                 } catch(e) {}
-              }} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold">
+              }} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold cursor-pointer">
                 حفظ التعديلات نهائياً
               </button>
-              <button onClick={() => setEditingQuizItem(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">
+              <button onClick={() => setEditingQuizItem(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer">
                 إلغاء
               </button>
             </div>
@@ -1125,7 +1182,6 @@ export function App() {
                 e.preventDefault();
                 const found = studentsList.find(st => st.username === studentLoginUser && st.pass === studentLoginPass);
                 if (found) {
-                  // فتح تام وسلس بدون قيود مزعجة على الأجهزة
                   const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
                   const device = getDeviceType();
 
@@ -1983,7 +2039,6 @@ export function App() {
                           onChange={(e) => {
                             const val = e.target.value;
                             if (!val) return;
-                            // إذا كان استيراداً من سؤال تفاعلي مدمج مع الشرح
                             if (val.includes('__iq_')) {
                               const [nId, iqIdxStr] = val.split('__iq_');
                               const foundNote = currentSub.notes.find((n: any) => n.id === nId);
@@ -1996,7 +2051,6 @@ export function App() {
                                 }
                               }
                             } else {
-                              // استيراد من عنوان الشرح/التعليل
                               const foundNote = currentSub.notes.find((n: any) => n.id === val);
                               if (foundNote) {
                                 setCurrentQuestionsList([...currentQuestionsList, { type: 'fill', q: foundNote.title, correct: foundNote.content, isMinisterial: false }]);
