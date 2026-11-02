@@ -1610,7 +1610,7 @@ export function App() {
                 />
               </div>
 
-              {/* أ) الشروحات والتعاليل مع دعم التصحيح المرن والذكي للهمزات والحركات */}
+              {/* أ) الشروحات والتعاليل */}
               <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
@@ -1738,7 +1738,7 @@ export function App() {
                       )}
 
                       {interactiveType === 'fill' && (
-                        <input type="text" value={interactiveFill} onChange={(e) => setFillCorrect(e.target.value)} placeholder="الإجابة بالفراغ..." className="w-full px-2 py-1 bg-emerald-50 border rounded text-xs font-bold text-emerald-900" />
+                        <input type="text" value={interactiveFill} onChange={(e) => setInteractiveFill(e.target.value)} placeholder="الإجابة بالفراغ..." className="w-full px-2 py-1 bg-emerald-50 border rounded text-xs font-bold text-emerald-900" />
                       )}
 
                       {interactiveType === 'true_false' && (
@@ -1928,7 +1928,7 @@ export function App() {
                 )}
               </div>
 
-              {/* د) الامتحانات */}
+              {/* د) الامتحانات (مع خاصية الاستيراد السريع للأسئلة التفاعلية المضافة سابقاً) */}
               <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <CheckSquare className="w-4 h-4 text-indigo-600" /> الامتحانات المتاحة ({currentSub.quizzes?.length || 0})
@@ -1972,12 +1972,58 @@ export function App() {
 
                 {isAdmin && (
                   <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
-                    <h5 className="text-xs font-black text-slate-800">🛠️ صياغة امتحان جديد:</h5>
+                    <h5 className="text-xs font-black text-slate-800">🛠️ صياغة امتحان جديد (مع الاستيراد السريع للأسئلة التفاعلية):</h5>
                     <input type="text" value={quizTitle} onChange={(e) => setQuizTitle(e.target.value)} placeholder="عنوان الامتحان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
                     
+                    {/* استيراد سريع من الشروحات والأسئلة التفاعلية المضافة سابقاً */}
+                    {currentSub.notes && currentSub.notes.length > 0 && (
+                      <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl space-y-2">
+                        <label className="block text-xs font-black text-indigo-900">💡 استيراد سؤال من الأسئلة التفاعلية أو الشروحات السابقة:</label>
+                        <select 
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (!val) return;
+                            // إذا كان استيراداً من سؤال تفاعلي مدمج مع الشرح
+                            if (val.includes('__iq_')) {
+                              const [nId, iqIdxStr] = val.split('__iq_');
+                              const foundNote = currentSub.notes.find((n: any) => n.id === nId);
+                              if (foundNote && foundNote.interactiveQuestions) {
+                                const iq = foundNote.interactiveQuestions[Number(iqIdxStr)];
+                                if (iq) {
+                                  setCurrentQuestionsList([...currentQuestionsList, { type: iq.type || 'fill', q: iq.q, options: iq.options || [], correct: iq.correct, isMinisterial: false }]);
+                                  setSuccessMessage('تم استيراد السؤال التفاعلي بنجاح إلى الامتحان!');
+                                  setTimeout(() => setSuccessMessage(null), 2500);
+                                }
+                              }
+                            } else {
+                              // استيراد من عنوان الشرح/التعليل
+                              const foundNote = currentSub.notes.find((n: any) => n.id === val);
+                              if (foundNote) {
+                                setCurrentQuestionsList([...currentQuestionsList, { type: 'fill', q: foundNote.title, correct: foundNote.content, isMinisterial: false }]);
+                                setSuccessMessage('تم استيراد الشرح/التعليل بنجاح إلى الامتحان!');
+                                setTimeout(() => setSuccessMessage(null), 2500);
+                              }
+                            }
+                            e.target.value = '';
+                          }}
+                          className="w-full px-3 py-2 bg-white border rounded-lg text-xs font-bold text-slate-800 cursor-pointer"
+                        >
+                          <option value="">-- اضغط لاختيار سؤال تفاعلي أو شرح لاستيراده للامتحان --</option>
+                          {currentSub.notes.map((n: any) => (
+                            <React.Fragment key={n.id}>
+                              <option value={n.id}>📖 شرح: {n.title}</option>
+                              {n.interactiveQuestions && n.interactiveQuestions.map((iq: any, iqIdx: number) => (
+                                <option key={`${n.id}__iq_${iqIdx}`} value={`${n.id}__iq_${iqIdx}`}>&nbsp;&nbsp;&nbsp;&nbsp;⭐ سؤال تفاعلي: {iq.q}</option>
+                              ))}
+                            </React.Fragment>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     <div className="p-3 bg-slate-50 rounded-xl border space-y-2">
                       <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold">أضف سؤال ({currentQuestionsList.length} مضافة)</span>
+                        <span className="text-xs font-bold">أضف سؤال يدوياً ({currentQuestionsList.length} مضافة)</span>
                         <select value={questionType} onChange={(e) => setQuestionType(e.target.value as any)} className="px-2 py-1 border rounded text-xs font-bold">
                           <option value="mcq">اختيار من متعدد</option>
                           <option value="fill">فراغات</option>
@@ -1986,7 +2032,6 @@ export function App() {
                       </div>
                       <input type="text" value={questionText} onChange={(e) => setQuestionText(e.target.value)} placeholder="نص السؤال..." className="w-full px-3 py-1.5 bg-white border rounded text-xs font-bold" />
                       
-                      {/* خيار وزاري مهم 🔥 */}
                       <label className="flex items-center gap-2 p-2 bg-amber-50 border rounded-lg text-xs font-black text-amber-900 cursor-pointer">
                         <input type="checkbox" checked={isMinisterialQuestion} onChange={(e) => setIsMinisterialQuestion(e.target.checked)} className="w-4 h-4 text-amber-600 rounded" />
                         <span>🔥 تعليم هذا السؤال كـ (وزاري مهم)</span>
