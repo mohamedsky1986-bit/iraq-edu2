@@ -55,7 +55,7 @@ export function App() {
     link.setAttribute('href', manifestURL);
   }, []);
 
-  const [isAdmin, setIsAdmin] = useState<boolean> (() => {
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     return localStorage.getItem('nabough_is_admin') === 'true';
   });
 
@@ -271,8 +271,11 @@ export function App() {
   const [editQuizTitle, setEditQuizTitle] = useState('');
   const [editQuizDuration, setEditQuizDuration] = useState(15);
   const [editQuizQuestions, setEditQuizQuestions] = useState<any[]>([]);
-  // حقول إضافة سؤال جديد داخل نافذة تعديل الامتحان
+  
+  // حقول إضافة سؤال جديد متكامل داخل نافذة تعديل الامتحان
+  const [editNewQType, setEditNewQType] = useState<'mcq' | 'fill' | 'true_false'>('mcq');
   const [editNewQText, setEditNewQText] = useState('');
+  const [editNewQOptions, setEditNewQOptions] = useState(['', '', '', '']);
   const [editNewQCorrect, setEditNewQCorrect] = useState('');
 
   const [editingVideoItem, setEditingVideoItem] = useState<{subjectId: string, video: any} | null>(null);
@@ -285,8 +288,10 @@ export function App() {
   const [editBookletUrl, setEditBookletUrl] = useState('');
   const [editBookletVip, setEditBookletVip] = useState(false);
 
+  // حالات تعديل السؤال التفاعلي التابع للشرح (مع دعم تعديل الاختيارات إذا كان MCQ)
   const [editingInteractiveItem, setEditingInteractiveItem] = useState<{subjectId: string, noteId: string, questionIndex: number, questionObj: any} | null>(null);
   const [editInteractiveQText, setEditInteractiveQText] = useState('');
+  const [editInteractiveOptions, setEditInteractiveOptions] = useState(['', '', '', '']);
   const [editInteractiveCorrect, setEditInteractiveCorrect] = useState('');
 
   const getEmbedPdfUrl = (url: string) => {
@@ -635,7 +640,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-1 sm:pt-2">
       
-      {/* نافذة تعديل الامتحان للأدمن (مع دعم تعديل السؤال، وتعديل النص والإجابة، وإضافة أسئلة جديدة) */}
+      {/* نافذة تعديل الامتحان للأدمن المتقدمة (تعديل كامل الأسئلة والخيارات واستيراد الأسئلة التفاعلية) */}
       {editingQuizItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative space-y-4 text-right">
@@ -654,6 +659,7 @@ export function App() {
                 <input type="number" value={editQuizDuration} onChange={(e) => setEditQuizDuration(Number(e.target.value))} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
               </div>
 
+              {/* قائمة الأسئلة الحالية مع إمكانية تعديل النص والخيار والإجابة */}
               <div className="space-y-2 pt-2">
                 <h4 className="text-xs font-black text-indigo-900">أسئلة الامتحان الحالية (تعديل أو حذف):</h4>
                 {editQuizQuestions.map((eq: any, eqIdx: number) => (
@@ -662,10 +668,11 @@ export function App() {
                       <span className="text-xs font-bold text-slate-900">س{eqIdx+1}:</span>
                       <button onClick={() => {
                         setEditQuizQuestions(editQuizQuestions.filter((_, i) => i !== eqIdx));
-                      }} className="text-rose-500 hover:bg-rose-50 p-1.5 rounded-lg text-xs flex items-center gap-1 font-bold">
+                      }} className="text-rose-500 hover:bg-rose-50 p-1 rounded text-xs flex items-center gap-1 font-bold cursor-pointer">
                         <Trash2 className="w-3.5 h-3.5" /> حذف السؤال
                       </button>
                     </div>
+
                     <input 
                       type="text" 
                       value={eq.q} 
@@ -677,6 +684,27 @@ export function App() {
                       placeholder="نص السؤال..." 
                       className="w-full px-3 py-1.5 bg-white border rounded-lg text-xs font-bold" 
                     />
+
+                    {/* إذا كان السؤال يحتوي على خيارات (اختيارات أو صح وخطأ)، نعرضها لنتمكن من تعديلها */}
+                    {eq.options && Array.isArray(eq.options) && (
+                      <div className="grid grid-cols-2 gap-1.5 pt-1">
+                        {eq.options.map((opt: string, oIdx: number) => (
+                          <input 
+                            key={oIdx} 
+                            type="text" 
+                            value={opt} 
+                            onChange={(e) => {
+                              const newQ = [...editQuizQuestions];
+                              newQ[eqIdx].options[oIdx] = e.target.value;
+                              setEditQuizQuestions(newQ);
+                            }} 
+                            placeholder={`خيار ${oIdx+1}`} 
+                            className="px-2 py-1 bg-white border rounded text-xs" 
+                          />
+                        ))}
+                      </div>
+                    )}
+
                     <input 
                       type="text" 
                       value={eq.correct} 
@@ -685,16 +713,71 @@ export function App() {
                         newQ[eqIdx].correct = e.target.value;
                         setEditQuizQuestions(newQ);
                       }} 
-                      placeholder="الإجابة الصحيحة..." 
+                      placeholder="الإجابة الصحيحة تماماً..." 
                       className="w-full px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-bold text-emerald-900" 
                     />
                   </div>
                 ))}
               </div>
 
-              {/* إضافة سؤال جديد داخل نافذة التعديل */}
-              <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 space-y-2">
-                <h5 className="text-xs font-black text-indigo-900">➕ إضافة سؤال جديد لهذا الامتحان أثناء التعديل:</h5>
+              {/* خيار الاستيراد السريع للأسئلة التفاعلية والشروحات السابقة داخل نافذة التعديل */}
+              {subjects.find(s => s.id === editingQuizItem.subjectId)?.notes && (
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl space-y-2">
+                  <label className="block text-xs font-black text-indigo-900">💡 استيراد سؤال من الأسئلة التفاعلية أو الشروحات السابقة:</label>
+                  <select 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (!val) return;
+                      const currentSubObj = subjects.find(s => s.id === editingQuizItem.subjectId);
+                      if (!currentSubObj) return;
+
+                      if (val.includes('__iq_')) {
+                        const [nId, iqIdxStr] = val.split('__iq_');
+                        const foundNote = currentSubObj.notes.find((n: any) => n.id === nId);
+                        if (foundNote && foundNote.interactiveQuestions) {
+                          const iq = foundNote.interactiveQuestions[Number(iqIdxStr)];
+                          if (iq) {
+                            setEditQuizQuestions([...editQuizQuestions, { type: iq.type || 'fill', q: iq.q, options: iq.options || [], correct: iq.correct, isMinisterial: false }]);
+                            setSuccessMessage('تم استيراد السؤال التفاعلي بنجاح للامتحان!');
+                            setTimeout(() => setSuccessMessage(null), 2500);
+                          }
+                        }
+                      } else {
+                        const foundNote = currentSubObj.notes.find((n: any) => n.id === val);
+                        if (foundNote) {
+                          setEditQuizQuestions([...editQuizQuestions, { type: 'fill', q: foundNote.title, correct: foundNote.content, isMinisterial: false }]);
+                          setSuccessMessage('تم استيراد الشرح/التعليل بنجاح للامتحان!');
+                          setTimeout(() => setSuccessMessage(null), 2500);
+                        }
+                      }
+                      e.target.value = '';
+                    }}
+                    className="w-full px-3 py-2 bg-white border rounded-lg text-xs font-bold text-slate-800 cursor-pointer"
+                  >
+                    <option value="">-- اضغط لاختيار سؤال تفاعلي أو شرح لاستيراده --</option>
+                    {subjects.find(s => s.id === editingQuizItem.subjectId)?.notes.map((n: any) => (
+                      <React.Fragment key={n.id}>
+                        <option value={n.id}>📖 شرح: {n.title}</option>
+                        {n.interactiveQuestions && n.interactiveQuestions.map((iq: any, iqIdx: number) => (
+                          <option key={`${n.id}__iq_${iqIdx}`} value={`${n.id}__iq_${iqIdx}`}>&nbsp;&nbsp;&nbsp;&nbsp;⭐ سؤال تفاعلي: {iq.q}</option>
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* إضافة سؤال جديد متكامل داخل نافذة تعديل الامتحان */}
+              <div className="p-3 bg-slate-50 rounded-xl border space-y-2">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-black text-slate-800">➕ إضافة سؤال جديد أثناء التعديل:</span>
+                  <select value={editNewQType} onChange={(e) => setEditNewQType(e.target.value as any)} className="px-2 py-1 border rounded text-xs font-bold">
+                    <option value="mcq">اختيار من متعدد</option>
+                    <option value="fill">فراغات</option>
+                    <option value="true_false">صح وخطأ</option>
+                  </select>
+                </div>
+
                 <input 
                   type="text" 
                   value={editNewQText} 
@@ -702,22 +785,51 @@ export function App() {
                   placeholder="نص السؤال الجديد..." 
                   className="w-full px-3 py-1.5 bg-white border rounded-lg text-xs font-bold" 
                 />
+
+                {editNewQType === 'mcq' && (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {editNewQOptions.map((opt, oIdx) => (
+                      <input 
+                        key={oIdx} 
+                        type="text" 
+                        value={opt} 
+                        onChange={(e) => {
+                          const opts = [...editNewQOptions];
+                          opts[oIdx] = e.target.value;
+                          setEditNewQOptions(opts);
+                        }} 
+                        placeholder={`خيار ${oIdx+1}`} 
+                        className="px-2 py-1 bg-white border rounded text-xs" 
+                      />
+                    ))}
+                  </div>
+                )}
+
                 <input 
                   type="text" 
                   value={editNewQCorrect} 
                   onChange={(e) => setEditNewQCorrect(e.target.value)} 
-                  placeholder="الإجابة الصحيحة للسؤال الجديد..." 
-                  className="w-full px-3 py-1.5 bg-white border rounded-lg text-xs font-bold text-emerald-900" 
+                  placeholder="الإجابة الصحيحة..." 
+                  className="w-full px-3 py-1.5 bg-emerald-50 border rounded-lg text-xs font-bold text-emerald-900" 
                 />
+
                 <button type="button" onClick={() => {
                   if (!editNewQText || !editNewQCorrect) {
                     alert('يرجى كتابة نص السؤال والإجابة الصحيحة.');
                     return;
                   }
-                  setEditQuizQuestions([...editQuizQuestions, { type: 'fill', q: editNewQText, correct: editNewQCorrect, isMinisterial: false }]);
+                  const newQObj = {
+                    type: editNewQType,
+                    q: editNewQText,
+                    options: editNewQType === 'mcq' ? editNewQOptions : (editNewQType === 'true_false' ? ['صح', 'خطأ'] : []),
+                    correct: editNewQCorrect,
+                    isMinisterial: false
+                  };
+                  setEditQuizQuestions([...editQuizQuestions, newQObj]);
                   setEditNewQText('');
                   setEditNewQCorrect('');
-                  alert('✅ تم إضافة السؤال الجديد للقائمة مؤقتاً، اضغط حفظ التعديلات نهائياً للاتمام.');
+                  setEditNewQOptions(['', '', '', '']);
+                  alert('✅ تمت إضافة السؤال الجديد للقائمة مؤقتاً، اضغط حفظ التعديلات نهائياً للاتمام.');
                 }} className="px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-bold cursor-pointer">
                   + إرفاق هذا السؤال للامتحان
                 </button>
@@ -751,7 +863,7 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة تعديل السؤال التفاعلي التابع للشرح */}
+      {/* نافذة تعديل السؤال التفاعلي التابع للشرح (مع دعم تعديل الاختيارات إذا كان MCQ) */}
       {editingInteractiveItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-right">
@@ -765,6 +877,30 @@ export function App() {
                 <label className="block text-xs font-bold text-slate-700 mb-1">نص السؤال</label>
                 <input type="text" value={editInteractiveQText} onChange={(e) => setEditInteractiveQText(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
               </div>
+
+              {/* إذا كان السؤال يحتوي على خيارات اختيارات، نعرضها للتعديل */}
+              {editingInteractiveItem.questionObj.options && Array.isArray(editingInteractiveItem.questionObj.options) && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">تعديل الخيارات الأربعة</label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {editInteractiveOptions.map((opt, oIdx) => (
+                      <input 
+                        key={oIdx} 
+                        type="text" 
+                        value={opt} 
+                        onChange={(e) => {
+                          const newOpts = [...editInteractiveOptions];
+                          newOpts[oIdx] = e.target.value;
+                          setEditInteractiveOptions(newOpts);
+                        }} 
+                        placeholder={`خيار ${oIdx+1}`} 
+                        className="px-2 py-1 border rounded text-xs" 
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">الإجابة الصحيحة</label>
                 <input type="text" value={editInteractiveCorrect} onChange={(e) => setEditInteractiveCorrect(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold text-emerald-900 bg-emerald-50" />
@@ -781,6 +917,7 @@ export function App() {
                     newIqList[editingInteractiveItem.questionIndex] = {
                       ...newIqList[editingInteractiveItem.questionIndex],
                       q: editInteractiveQText,
+                      options: editingInteractiveItem.questionObj.options ? editInteractiveOptions : newIqList[editingInteractiveItem.questionIndex].options,
                       correct: editInteractiveCorrect
                     };
                     return { ...n, interactiveQuestions: newIqList };
@@ -797,10 +934,10 @@ export function App() {
                   setSuccessMessage('تم تعديل السؤال التفاعلي بنجاح!');
                   setTimeout(() => setSuccessMessage(null), 3000);
                 } catch(e) {}
-              }} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold">
+              }} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold cursor-pointer">
                 حفظ التعديل
               </button>
-              <button onClick={() => setEditingInteractiveItem(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">
+              <button onClick={() => setEditingInteractiveItem(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer">
                 إلغاء
               </button>
             </div>
@@ -1017,7 +1154,7 @@ export function App() {
                 setSuccessMessage('تم تفعيل وضع الإدارة بنجاح!');
                 setTimeout(() => setSuccessMessage(null), 3000);
               } else {
-                alert('كلمة مرور الأدمن غير صحيحة!');
+                alert('كلمة مرور الأدمن غير صحيحةة!');
               }
             }} className="space-y-3">
               <input 
@@ -1711,6 +1848,7 @@ export function App() {
                                       <button onClick={() => {
                                         setEditingInteractiveItem({ subjectId: currentSub.id, noteId: note.id, questionIndex: iqIdx, questionObj: iq });
                                         setEditInteractiveQText(iq.q);
+                                        setEditInteractiveOptions(iq.options ? [...iq.options] : ['', '', '', '']);
                                         setEditInteractiveCorrect(iq.correct);
                                       }} className="p-1 bg-indigo-50 text-indigo-600 rounded text-[10px] cursor-pointer" title="تعديل السؤال"><Edit3 className="w-3 h-3" /></button>
                                       
@@ -1984,7 +2122,7 @@ export function App() {
                 )}
               </div>
 
-              {/* د) الامتحانات (مع خاصية الاستيراد السريع للأسئلة التفاعلية المضافة سابقاً) */}
+              {/* د) الامتحانات */}
               <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <CheckSquare className="w-4 h-4 text-indigo-600" /> الامتحانات المتاحة ({currentSub.quizzes?.length || 0})
@@ -2028,56 +2166,12 @@ export function App() {
 
                 {isAdmin && (
                   <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
-                    <h5 className="text-xs font-black text-slate-800">🛠️ صياغة امتحان جديد (مع الاستيراد السريع للأسئلة التفاعلية):</h5>
+                    <h5 className="text-xs font-black text-slate-800">🛠️ صياغة امتحان جديد:</h5>
                     <input type="text" value={quizTitle} onChange={(e) => setQuizTitle(e.target.value)} placeholder="عنوان الامتحان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
                     
-                    {/* استيراد سريع من الشروحات والأسئلة التفاعلية المضافة سابقاً */}
-                    {currentSub.notes && currentSub.notes.length > 0 && (
-                      <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl space-y-2">
-                        <label className="block text-xs font-black text-indigo-900">💡 استيراد سؤال من الأسئلة التفاعلية أو الشروحات السابقة:</label>
-                        <select 
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (!val) return;
-                            if (val.includes('__iq_')) {
-                              const [nId, iqIdxStr] = val.split('__iq_');
-                              const foundNote = currentSub.notes.find((n: any) => n.id === nId);
-                              if (foundNote && foundNote.interactiveQuestions) {
-                                const iq = foundNote.interactiveQuestions[Number(iqIdxStr)];
-                                if (iq) {
-                                  setCurrentQuestionsList([...currentQuestionsList, { type: iq.type || 'fill', q: iq.q, options: iq.options || [], correct: iq.correct, isMinisterial: false }]);
-                                  setSuccessMessage('تم استيراد السؤال التفاعلي بنجاح إلى الامتحان!');
-                                  setTimeout(() => setSuccessMessage(null), 2500);
-                                }
-                              }
-                            } else {
-                              const foundNote = currentSub.notes.find((n: any) => n.id === val);
-                              if (foundNote) {
-                                setCurrentQuestionsList([...currentQuestionsList, { type: 'fill', q: foundNote.title, correct: foundNote.content, isMinisterial: false }]);
-                                setSuccessMessage('تم استيراد الشرح/التعليل بنجاح إلى الامتحان!');
-                                setTimeout(() => setSuccessMessage(null), 2500);
-                              }
-                            }
-                            e.target.value = '';
-                          }}
-                          className="w-full px-3 py-2 bg-white border rounded-lg text-xs font-bold text-slate-800 cursor-pointer"
-                        >
-                          <option value="">-- اضغط لاختيار سؤال تفاعلي أو شرح لاستيراده للامتحان --</option>
-                          {currentSub.notes.map((n: any) => (
-                            <React.Fragment key={n.id}>
-                              <option value={n.id}>📖 شرح: {n.title}</option>
-                              {n.interactiveQuestions && n.interactiveQuestions.map((iq: any, iqIdx: number) => (
-                                <option key={`${n.id}__iq_${iqIdx}`} value={`${n.id}__iq_${iqIdx}`}>&nbsp;&nbsp;&nbsp;&nbsp;⭐ سؤال تفاعلي: {iq.q}</option>
-                              ))}
-                            </React.Fragment>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
                     <div className="p-3 bg-slate-50 rounded-xl border space-y-2">
                       <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold">أضف سؤال يدوياً ({currentQuestionsList.length} مضافة)</span>
+                        <span className="text-xs font-bold">أضف سؤال ({currentQuestionsList.length} مضافة)</span>
                         <select value={questionType} onChange={(e) => setQuestionType(e.target.value as any)} className="px-2 py-1 border rounded text-xs font-bold">
                           <option value="mcq">اختيار من متعدد</option>
                           <option value="fill">فراغات</option>
@@ -2086,6 +2180,7 @@ export function App() {
                       </div>
                       <input type="text" value={questionText} onChange={(e) => setQuestionText(e.target.value)} placeholder="نص السؤال..." className="w-full px-3 py-1.5 bg-white border rounded text-xs font-bold" />
                       
+                      {/* خيار وزاري مهم 🔥 */}
                       <label className="flex items-center gap-2 p-2 bg-amber-50 border rounded-lg text-xs font-black text-amber-900 cursor-pointer">
                         <input type="checkbox" checked={isMinisterialQuestion} onChange={(e) => setIsMinisterialQuestion(e.target.checked)} className="w-4 h-4 text-amber-600 rounded" />
                         <span>🔥 تعليم هذا السؤال كـ (وزاري مهم)</span>
