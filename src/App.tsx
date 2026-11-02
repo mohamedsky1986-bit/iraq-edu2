@@ -310,7 +310,7 @@ export function App() {
   const [editSubName, setEditSubName] = useState('');
   const [editSubImage, setEditSubImage] = useState('');
 
-  // حالات تعديل الشرح أو التعليق الرئيسي (العنوان، النص، الصورة، الـ VIP)
+  // حالات تعديل الشرح أو التعليل الرئيسي
   const [editingNoteModal, setEditingNoteModal] = useState<{subjectId: string, note: any} | null>(null);
   const [editNoteTitle, setEditNoteTitle] = useState('');
   const [editNoteContent, setEditNoteContent] = useState('');
@@ -638,7 +638,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-1 sm:pt-2">
       
-      {/* نافذة تعديل الشرح أو التعليل الرئيسي بالكامل (العنوان، النص، الصورة، الـ VIP) */}
+      {/* نافذة تعديل الشرح الرئيسي (عنوان، نص، صورة، VIP) */}
       {editingNoteModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl relative space-y-4 text-right">
@@ -1811,7 +1811,7 @@ export function App() {
                 />
               </div>
 
-              {/* أ) الشروحات والتعاليل مع أزرار التعديل والحذف الكاملة لكل شرح وعنوان */}
+              {/* أ) الشروحات والتعاليل مع أزرار التعديل والحذف لكل شرح وعنوان الرئيسي */}
               <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
@@ -1827,7 +1827,7 @@ export function App() {
 
                         {isAdmin && (
                           <div className="flex items-center gap-1.5">
-                            {/* زر تعديل الشرح الرئيسي (عنوان، نص، صورة) */}
+                            {/* زر تعديل الشرح الرئيسي (عنوان، نص، صورة، VIP) */}
                             <button onClick={() => {
                               setEditingNoteModal({ subjectId: currentSub.id, note: note });
                               setEditNoteTitle(note.title);
@@ -1856,9 +1856,10 @@ export function App() {
 
                       <p className="text-xs text-slate-700 leading-relaxed">{note.content}</p>
 
+                      {/* معالجة عرض الصورة بحجمها الطبيعي والصحيح دون تمدد أو تشويه */}
                       {note.image && (
-                        <div className="mt-2 h-48 w-full rounded-xl overflow-hidden border shadow-sm">
-                          <img src={note.image} alt={note.title} className="w-full h-full object-cover" />
+                        <div className="mt-2 w-full max-h-72 rounded-xl overflow-hidden border shadow-sm bg-slate-50 flex items-center justify-center p-2">
+                          <img src={note.image} alt={note.title} className="max-h-64 w-auto object-contain rounded-lg" />
                         </div>
                       )}
 
