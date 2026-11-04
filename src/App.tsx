@@ -265,19 +265,12 @@ export function App() {
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
-  
-  // مشغل عرض ملفات الـ HTML التفاعلية المرفوعة
   const [activeHtmlQuizUrl, setActiveHtmlQuizUrl] = useState<string | null>(null);
 
   const [editingQuizItem, setEditingQuizItem] = useState<{subjectId: string, quiz: any} | null>(null);
   const [editQuizTitle, setEditQuizTitle] = useState('');
   const [editQuizDuration, setEditQuizDuration] = useState(15);
   const [editQuizQuestions, setEditQuizQuestions] = useState<any[]>([]);
-  
-  const [editNewQType, setEditNewQType] = useState<'mcq' | 'fill' | 'true_false'>('mcq');
-  const [editNewQText, setEditNewQText] = useState('');
-  const [editNewQOptions, setEditNewQOptions] = useState(['', '', '', '']);
-  const [editNewQCorrect, setEditNewQCorrect] = useState('');
 
   const [editingVideoItem, setEditingVideoItem] = useState<{subjectId: string, video: any} | null>(null);
   const [editVideoTitle, setEditVideoTitle] = useState('');
@@ -350,11 +343,9 @@ export function App() {
   const [newBookletUrl, setNewBookletUrl] = useState('');
   const [newBookletVip, setNewBookletVip] = useState(false);
 
-  // حالات رفع الاختبار الجاهز (HTML) من لوحة التحكم
-  const [uploadHtmlSubjectId, setUploadHtmlSubjectId] = useState<string>('');
-  const [uploadHtmlTitle, setUploadHtmlTitle] = useState<string>('');
-  const [uploadHtmlUrl, setUploadHtmlUrl] = useState<string>('');
-  const [uploadHtmlIsVip, setUploadHtmlIsVip] = useState<boolean>(false);
+  // حالات رفع اختبار تفاعلي جاهز من الحاسبة (ملف HTML)
+  const [uploadHtmlTitle, setUploadHtmlTitle] = useState('');
+  const [uploadHtmlContent, setUploadHtmlContent] = useState('');
 
   const [quizTitle, setQuizTitle] = useState('');
   const [quizIsVip, setQuizIsVip] = useState(false);
@@ -645,7 +636,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-1 sm:pt-2">
       
-      {/* نافذة مشغل الاختبارات الجاهزة (HTML) */}
+      {/* نافذة مشغل ملفات HTML التفاعلية المرفوعة */}
       {activeHtmlQuizUrl && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-3xl max-w-4xl w-full h-[90vh] p-4 shadow-2xl relative flex flex-col">
@@ -656,7 +647,7 @@ export function App() {
               </button>
             </div>
             <div className="flex-1 w-full rounded-2xl overflow-hidden bg-white mt-3 border">
-              <iframe src={activeHtmlQuizUrl} className="w-full h-full border-0"></iframe>
+              <iframe srcDoc={activeHtmlQuizUrl} className="w-full h-full border-0"></iframe>
             </div>
           </div>
         </div>
@@ -827,87 +818,6 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة تعديل السؤال التفاعلي */}
-      {editingInteractiveItem && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-right">
-            <button onClick={() => setEditingInteractiveItem(null)} className="absolute top-4 left-4 w-9 h-9 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
-              <X className="w-4 h-4" />
-            </button>
-            <h3 className="text-lg font-black text-slate-900 pb-2 border-b">تعديل السؤال التفاعلي السريع</h3>
-            
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">نص السؤال</label>
-                <input type="text" value={editInteractiveQText} onChange={(e) => setEditInteractiveQText(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
-              </div>
-
-              {editingInteractiveItem.questionObj.options && Array.isArray(editingInteractiveItem.questionObj.options) && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">تعديل الخيارات الأربعة</label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {editInteractiveOptions.map((opt, oIdx) => (
-                      <input 
-                        key={oIdx} 
-                        type="text" 
-                        value={opt} 
-                        onChange={(e) => {
-                          const newOpts = [...editInteractiveOptions];
-                          newOpts[oIdx] = e.target.value;
-                          setEditInteractiveOptions(newOpts);
-                        }} 
-                        placeholder={`خيار ${oIdx+1}`} 
-                        className="px-2 py-1 border rounded text-xs" 
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">الإجابة الصحيحة</label>
-                <input type="text" value={editInteractiveCorrect} onChange={(e) => setEditInteractiveCorrect(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold text-emerald-900 bg-emerald-50" />
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-3 border-t">
-              <button onClick={async () => {
-                const targetSub = subjects.find(s => s.id === editingInteractiveItem.subjectId);
-                if (!targetSub) return;
-                const updatedNotes = targetSub.notes.map((n: any) => {
-                  if (n.id === editingInteractiveItem.noteId) {
-                    const newIqList = [...n.interactiveQuestions];
-                    newIqList[editingInteractiveItem.questionIndex] = {
-                      ...newIqList[editingInteractiveItem.questionIndex],
-                      q: editInteractiveQText,
-                      options: editingInteractiveItem.questionObj.options ? editInteractiveOptions : newIqList[editingInteractiveItem.questionIndex].options,
-                      correct: editInteractiveCorrect
-                    };
-                    return { ...n, interactiveQuestions: newIqList };
-                  }
-                  return n;
-                });
-
-                try {
-                  await updateDoc(doc(db, 'subjects', editingInteractiveItem.subjectId), { notes: updatedNotes });
-                  const updatedSubs = subjects.map(s => s.id === editingInteractiveItem.subjectId ? {...s, notes: updatedNotes} : s);
-                  setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                  setEditingInteractiveItem(null);
-                  setSuccessMessage('تم تعديل السؤال التفاعلي بنجاح!');
-                  setTimeout(() => setSuccessMessage(null), 3000);
-                } catch(e) {}
-              }} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold">
-                حفظ التعديل
-              </button>
-              <button onClick={() => setEditingInteractiveItem(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* رأس الصفحة */}
       <div className="w-full bg-slate-900 py-2.5 px-3 sm:px-6 shadow-md flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
@@ -1027,7 +937,7 @@ export function App() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {filteredSubjects.map((sub, sIdx) => (
+              {filteredSubjects.map((sub) => (
                 <div 
                   key={sub.id}
                   onClick={() => {
@@ -1065,11 +975,6 @@ export function App() {
                   
                   <div className="p-4">
                     <h3 className="text-base font-black text-slate-900">{sub.name}</h3>
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] font-bold text-slate-500 mt-2">
-                      <span>{sub.videos?.length || 0} فيديو</span>
-                      <span>{sub.booklets?.length || 0} ملزمة</span>
-                      <span>{sub.quizzes?.length || 0} امتحان</span>
-                    </div>
                   </div>
                 </div>
               ))}
@@ -1077,7 +982,7 @@ export function App() {
           </div>
         )}
 
-        {/* 2. إدارة وتصفح المادة الدراسية المفصلة (مع قسم رفع الاختبارات التفاعلية الجاهزة HTML) */}
+        {/* 2. إدارة وتصفح المادة الدراسية المفصلة (مع زر رفع ملف HTML مباشر من الحاسبة) */}
         {selectedSubjectId && (() => {
           const currentSub = subjects.find(s => s.id === selectedSubjectId);
           if (!currentSub) return null;
@@ -1101,37 +1006,47 @@ export function App() {
                 </button>
               </div>
 
-              {/* قسم رفع اختبار تفاعلي جاهز (HTML) للأدمن */}
+              {/* قسم رفع اختبار تفاعلي جاهز (تصفح واختيار ملف HTML من الحاسبة مباشرة) */}
               {isAdmin && (
                 <div className="bg-indigo-50 border-2 border-indigo-200 p-4 rounded-2xl space-y-3">
                   <h4 className="font-black text-indigo-900 text-sm flex items-center gap-2">
-                    <Upload className="w-4 h-4 text-indigo-600" /> رفع اختبار تفاعلي جاهز (ملف HTML) 🌟
+                    <Upload className="w-4 h-4 text-indigo-600" /> رفع اختبار تفاعلي جاهز (اختر ملف HTML من حاسبتك) 🌟
                   </h4>
-                  <p className="text-xs text-slate-600">أدخل عنوان الاختبار ورابط ملف الـ HTML الجاهز (أو كود الرابط المباشر) ليظهر للطالب فوراً:</p>
+                  <p className="text-xs text-slate-600">اكتب عنوان الاختبار، ثم اضغط تصفح لاختيار ملف الـ HTML الجاهز من حاسبتك:</p>
                   
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="space-y-2">
                     <input 
                       type="text" 
-                      id="input_html_title"
-                      placeholder="عنوان الاختبار (مثال: اختبار القواعد الشامل)..." 
-                      className="px-3 py-2 bg-white border rounded-xl text-xs font-bold" 
+                      value={uploadHtmlTitle}
+                      onChange={(e) => setUploadHtmlTitle(e.target.value)}
+                      placeholder="عنوان الاختبار (مثال: اختبار الوحدة الأولى)..." 
+                      className="w-full px-3 py-2 bg-white border rounded-xl text-xs font-bold" 
                     />
-                    <input 
-                      type="text" 
-                      id="input_html_url"
-                      placeholder="رابط ملف الـ HTML (مثال: /english-quiz.html)..." 
-                      className="px-3 py-2 bg-white border rounded-xl text-xs font-mono font-bold" 
-                    />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <input 
+                        type="file" 
+                        accept=".html,.htm"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              setUploadHtmlContent(event.target?.result as string || '');
+                            };
+                            reader.readAsText(file);
+                          }
+                        }}
+                        className="w-full sm:w-auto text-xs font-bold file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 cursor-pointer bg-white border rounded-xl p-2"
+                      />
+                    </div>
                   </div>
 
                   <button onClick={async () => {
-                    const titleInput = (document.getElementById('input_html_title') as HTMLInputElement)?.value;
-                    const urlInput = (document.getElementById('input_html_url') as HTMLInputElement)?.value;
-                    if (!titleInput || !urlInput) {
-                      alert('يرجى كتابة عنوان الاختبار ورابط الـ HTML.');
+                    if (!uploadHtmlTitle || !uploadHtmlContent) {
+                      alert('يرجى كتابة عنوان الاختبار واختيار ملف الـ HTML من الحاسبة.');
                       return;
                     }
-                    const newHtmlQuiz = { id: Date.now().toString(), title: titleInput, url: urlInput };
+                    const newHtmlQuiz = { id: Date.now().toString(), title: uploadHtmlTitle, content: uploadHtmlContent };
                     const updatedHtmlQuizzes = [...(currentSub.htmlQuizzes || []), newHtmlQuiz];
                     
                     try {
@@ -1139,31 +1054,31 @@ export function App() {
                       const updatedSubs = subjects.map(s => s.id === currentSub.id ? {...s, htmlQuizzes: updatedHtmlQuizzes} : s);
                       setSubjects(updatedSubs);
                       localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                      (document.getElementById('input_html_title') as HTMLInputElement).value = '';
-                      (document.getElementById('input_html_url') as HTMLInputElement).value = '';
-                      setSuccessMessage('تم نشر الاختبار التفاعلي الجاهز بنجاح!');
+                      setUploadHtmlTitle('');
+                      setUploadHtmlContent('');
+                      setSuccessMessage('تم رفع ونشر الاختبار التفاعلي بنجاح!');
                       setTimeout(() => setSuccessMessage(null), 3000);
                     } catch(err) {
                       alert('حدث خطأ أثناء النشر.');
                     }
                   }} className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow cursor-pointer">
-                    + نشر الاختبار التفاعلي الجاهز في هذه المادة 🚀
+                    + نشر الاختبار التفاعلي المرفوع في هذه المادة 🚀
                   </button>
                 </div>
               )}
 
-              {/* استعراض الاختبارات التفاعلية الجاهزة (HTML) للطلاب */}
+              {/* استعراض الاختبارات التفاعلية المرفوعة للطلاب */}
               {currentSub.htmlQuizzes && currentSub.htmlQuizzes.length > 0 && (
                 <div className="bg-slate-50 p-4 rounded-2xl border space-y-3">
                   <h4 className="font-black text-slate-900 text-sm flex items-center gap-2">
-                    🌟 الاختبارات التفاعلية الجاهزة ({currentSub.htmlQuizzes.length})
+                    🌟 الاختبارات التفاعلية المرفوعة ({currentSub.htmlQuizzes.length})
                   </h4>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {currentSub.htmlQuizzes.map((hq: any) => (
                       <div key={hq.id} className="p-3 bg-white rounded-xl border flex items-center justify-between shadow-sm">
                         <span className="font-black text-slate-800 text-xs">⭐ {hq.title}</span>
                         <div className="flex items-center gap-2">
-                          <button onClick={() => setActiveHtmlQuizUrl(hq.url)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">
+                          <button onClick={() => setActiveHtmlQuizUrl(hq.content)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">
                             فتح الاختبار 🎯
                           </button>
                           {isAdmin && (
@@ -1225,7 +1140,6 @@ export function App() {
 
                       <p className="text-xs text-slate-700 leading-relaxed">{note.content}</p>
 
-                      {/* عرض الصور بدقة ونظام تناسق صحيح */}
                       {note.image && (
                         <div className="mt-2 w-full max-h-72 rounded-xl overflow-hidden border shadow-sm bg-slate-50 flex items-center justify-center p-2">
                           <img src={note.image} alt={note.title} className="max-h-64 w-auto object-contain rounded-lg" />
