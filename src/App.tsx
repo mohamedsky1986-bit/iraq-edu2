@@ -272,11 +272,13 @@ export function App() {
   const [editQuizDuration, setEditQuizDuration] = useState(15);
   const [editQuizQuestions, setEditQuizQuestions] = useState<any[]>([]);
 
+  // حالات تعديل الفيديو للأدمن
   const [editingVideoItem, setEditingVideoItem] = useState<{subjectId: string, video: any} | null>(null);
   const [editVideoTitle, setEditVideoTitle] = useState('');
   const [editVideoUrl, setEditVideoUrl] = useState('');
   const [editVideoVip, setEditVideoVip] = useState(false);
 
+  // حالات تعديل الملزمة PDF للأدمن
   const [editingBookletItem, setEditingBookletItem] = useState<{subjectId: string, booklet: any} | null>(null);
   const [editBookletTitle, setEditBookletTitle] = useState('');
   const [editBookletUrl, setEditBookletUrl] = useState('');
@@ -902,7 +904,7 @@ export function App() {
             
             <h1 className="text-xl sm:text-3xl font-black tracking-tight leading-snug">
               {isAdmin ? 'لوحة تحكم المدير العام والإدارة 🎓' : loggedStudent ? `أهلاً بك يا ${loggedStudent?.name} (${loggedStudent?.stage}) 📚` : 'تصفح المناهج والامتحانات التفاعلية 🎓'}
-            </h1>
+            </h3>
           </div>
         </div>
 
@@ -1015,7 +1017,7 @@ export function App() {
                 </button>
               </div>
 
-              {/* قسم رفع اختبار تفاعلي جاهز (ملف HTML من الحاسبة) مع دعم قفل VIP */}
+              {/* قسم رفع اختبار تفاعلي جاهز (ملف HTML من الحاسبة) مع دعم VIP */}
               {isAdmin && (
                 <div className="bg-indigo-50 border-2 border-indigo-200 p-4 rounded-2xl space-y-3">
                   <h4 className="font-black text-indigo-900 text-sm flex items-center gap-2">
@@ -1109,7 +1111,7 @@ export function App() {
                 </div>
               )}
 
-              {/* أ) الشروحات والتعاليل والأسئلة التفاعلية اليدوية */}
+              {/* أ) الشروحات والتعاليل */}
               <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
@@ -1158,7 +1160,6 @@ export function App() {
                         </div>
                       )}
 
-                      {/* الأسئلة التفاعلية اليدوية */}
                       {note.interactiveQuestions && note.interactiveQuestions.length > 0 && (
                         <div className="mt-3 p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2.5">
                           <h6 className="text-[11px] font-black text-indigo-900">⭐ الأسئلة التفاعلية السريعة:</h6>
@@ -1208,7 +1209,6 @@ export function App() {
                   ))}
                 </div>
 
-                {/* نموذج إضافة شرح جديد مع الأسئلة التفاعلية اليدوية */}
                 {isAdmin && (
                   <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
                     <h5 className="text-xs font-black text-slate-800">➕ إضافة شرح أو تعليل جديد (مع سؤال تفاعلي يدوي):</h5>
