@@ -325,6 +325,7 @@ export function App() {
   const [newNoteImage, setNewNoteImage] = useState('');
   const [newNoteVip, setNewNoteVip] = useState(false);
 
+  // إعدادات إنشاء الأسئلة التفاعلية اليدوية ضمن الشروحات
   const [interactiveType, setInteractiveType] = useState<'mcq' | 'fill' | 'true_false'>('mcq');
   const [interactiveQText, setInteractiveQText] = useState('');
   const [interactiveOptions, setInteractiveOptions] = useState(['', '', '', '']);
@@ -982,7 +983,7 @@ export function App() {
           </div>
         )}
 
-        {/* 2. إدارة وتصفح المادة الدراسية المفصلة (مع زر رفع ملف HTML مباشر من الحاسبة) */}
+        {/* 2. إدارة وتصفح المادة الدراسية المفصلة (مع استعادة الشروحات والأسئلة التفاعلية اليدوية بالكامل) */}
         {selectedSubjectId && (() => {
           const currentSub = subjects.find(s => s.id === selectedSubjectId);
           if (!currentSub) return null;
@@ -1006,13 +1007,13 @@ export function App() {
                 </button>
               </div>
 
-              {/* قسم رفع اختبار تفاعلي جاهز (تصفح واختيار ملف HTML من الحاسبة مباشرة) */}
+              {/* قسم رفع اختبار تفاعلي جاهز (ملف HTML من الحاسبة مباشرة) */}
               {isAdmin && (
                 <div className="bg-indigo-50 border-2 border-indigo-200 p-4 rounded-2xl space-y-3">
                   <h4 className="font-black text-indigo-900 text-sm flex items-center gap-2">
                     <Upload className="w-4 h-4 text-indigo-600" /> رفع اختبار تفاعلي جاهز (اختر ملف HTML من حاسبتك) 🌟
                   </h4>
-                  <p className="text-xs text-slate-600">اكتب عنوان الاختبار، ثم اضغط تصفح لاختيار ملف الـ HTML الجاهز من حاسبتك:</p>
+                  <p className="text-xs text-slate-600">اكتب عنوان الاختبار، ثم اضغط تصفح لاختيار ملف الـ HTML من حاسبتك:</p>
                   
                   <div className="space-y-2">
                     <input 
@@ -1097,7 +1098,7 @@ export function App() {
                 </div>
               )}
 
-              {/* الشروحات والتعاليل مع أزرار التعديل والحذف وتنسيق الصور */}
+              {/* أ) الشروحات والتعاليل مع الأسئلة التفاعلية اليدوية بكامل تفاصيلها وأزرار التعديل والحذف */}
               <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
@@ -1145,17 +1146,150 @@ export function App() {
                           <img src={note.image} alt={note.title} className="max-h-64 w-auto object-contain rounded-lg" />
                         </div>
                       )}
+
+                      {/* الأسئلة التفاعلية اليدوية التابعة للشرح */}
+                      {note.interactiveQuestions && note.interactiveQuestions.length > 0 && (
+                        <div className="mt-3 p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <h6 className="text-[11px] font-black text-indigo-900 flex items-center gap-1">
+                              <Sparkles className="w-3.5 h-3.5 text-indigo-600" /> الأسئلة التفاعلية السريعة:
+                            </h6>
+                          </div>
+                          {note.interactiveQuestions.map((iq: any, iqIdx: number) => {
+                            const ansKey = `${note.id}_${iqIdx}`;
+                            const userAns = studentInteractiveAnswers[ansKey] || '';
+                            const isGraded = interactiveGradedStatus[ansKey];
+                            const isCorrect = evaluateAnswerSmart(userAns, iq.correct, iq.type).isCorrect;
+
+                            return (
+                              <div key={iqIdx} className="bg-white p-3 rounded-lg border space-y-2 relative">
+                                <div className="flex items-center justify-between">
+                                  <div className="text-xs font-bold text-slate-900">س: {iq.q}</div>
+                                  {isAdmin && (
+                                    <div className="flex items-center gap-1">
+                                      <button onClick={() => {
+                                        setEditingInteractiveItem({ subjectId: currentSub.id, noteId: note.id, questionIndex: iqIdx, questionObj: iq });
+                                        setEditInteractiveQText(iq.q);
+                                        setEditInteractiveOptions(iq.options ? [...iq.options] : ['', '', '', '']);
+                                        setEditInteractiveCorrect(iq.correct);
+                                      }} className="p-1 bg-indigo-50 text-indigo-600 rounded text-[10px] cursor-pointer" title="تعديل السؤال"><Edit3 className="w-3 h-3" /></button>
+                                      
+                                      <button onClick={async () => {
+                                        if (window.confirm('حذف هذا السؤال التفاعلي؟')) {
+                                          const newIqList = note.interactiveQuestions.filter((_: any, idx: number) => idx !== iqIdx);
+                                          const updatedNotes = currentSub.notes.map((n: any) => n.id === note.id ? { ...n, interactiveQuestions: newIqList } : n);
+                                          await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
+                                          setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s));
+                                        }
+                                      }} className="p-1 text-rose-500 rounded text-[10px] cursor-pointer" title="حذف السؤال"><Trash2 className="w-3 h-3" /></button>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {iq.type === 'mcq' || iq.type === 'true_false' ? (
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                                    {iq.options.map((opt: string, oIdx: number) => (
+                                      <label key={oIdx} className={`flex items-center gap-2 p-2 rounded border cursor-pointer text-xs font-bold transition-all ${userAns === opt ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50'}`}>
+                                        <input type="radio" name={`iq_${ansKey}`} checked={userAns === opt} onChange={() => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: opt})} className="hidden" />
+                                        <span>{opt}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <input 
+                                    type="text" 
+                                    value={userAns} 
+                                    onChange={(e) => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: e.target.value})} 
+                                    placeholder="اكتب إجابتك هنا..." 
+                                    className="w-full px-3 py-1.5 bg-slate-50 border rounded text-xs font-bold" 
+                                  />
+                                )}
+
+                                <div className="flex items-center justify-between pt-1">
+                                  <button onClick={() => setInteractiveGradedStatus({...interactiveGradedStatus, [ansKey]: true})} className="px-3 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold shadow cursor-pointer">
+                                    تحقق ✓
+                                  </button>
+                                  {isGraded && (
+                                    <span className={`text-[10px] font-black ${isCorrect ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                      {isCorrect ? '✅ صحيحة بطل!' : `❌ خطأ (العبارة الصحيحة: ${iq.correct})`}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
 
+                {/* نموذج إضافة شرح جديد مع الأسئلة التفاعلية اليدوية */}
                 {isAdmin && (
                   <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
-                    <h5 className="text-xs font-black text-slate-800">➕ إضافة شرح أو تعليل جديد:</h5>
+                    <h5 className="text-xs font-black text-slate-800">➕ إضافة شرح أو تعليل جديد (مع صورة توضيحية وسؤال تفاعلي يدوي):</h5>
                     <input type="text" value={newNoteTitle} onChange={(e) => setNewNoteTitle(e.target.value)} placeholder="العنوان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
                     <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="النص التفصيلي..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold h-20" />
                     <input type="text" value={newNoteImage} onChange={(e) => setNewNoteImage(e.target.value)} placeholder="رابط صورة توضيحية للشرح (اختياري)..." className="w-full px-3 py-2 border rounded-xl text-xs font-mono" />
                     
+                    {/* إرفاق سؤال تفاعلي يدوي */}
+                    <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-2">
+                      <h6 className="text-xs font-black text-indigo-900">إرفاق سؤال تفاعلي سريع (اختيارات / فراغ / صح وخطأ):</h6>
+                      <div className="flex gap-2">
+                        <select value={interactiveType} onChange={(e) => setInteractiveType(e.target.value as any)} className="px-2 py-1 bg-white border rounded text-xs font-bold">
+                          <option value="mcq">اختيارات</option>
+                          <option value="fill">فراغ</option>
+                          <option value="true_false">صح وخطأ</option>
+                        </select>
+                        <input type="text" value={interactiveQText} onChange={(e) => setInteractiveQText(e.target.value)} placeholder="نص السؤال التفاعلي..." className="flex-1 px-2 py-1 bg-white border rounded text-xs font-bold" />
+                      </div>
+
+                      {interactiveType === 'mcq' && (
+                        <div className="grid grid-cols-2 gap-2">
+                          {interactiveOptions.map((opt, oIdx) => (
+                            <input key={oIdx} type="text" value={opt} onChange={(e) => {
+                              const opts = [...interactiveOptions]; opts[oIdx] = e.target.value; setInteractiveOptions(opts);
+                            }} placeholder={`الخيار ${oIdx+1}`} className="px-2 py-1 bg-white border rounded text-xs" />
+                          ))}
+                          <input type="text" value={interactiveCorrect} onChange={(e) => setInteractiveCorrect(e.target.value)} placeholder="الخيار الصحيح..." className="col-span-2 px-2 py-1 bg-emerald-50 border rounded text-xs font-bold text-emerald-900" />
+                        </div>
+                      )}
+
+                      {interactiveType === 'fill' && (
+                        <input type="text" value={interactiveFill} onChange={(e) => setInteractiveFill(e.target.value)} placeholder="الإجابة بالفراغ..." className="w-full px-2 py-1 bg-emerald-50 border rounded text-xs font-bold text-emerald-900" />
+                      )}
+
+                      {interactiveType === 'true_false' && (
+                        <div className="flex gap-4 text-xs font-bold items-center">
+                          <span>الإجابة الصحيحة:</span>
+                          <label><input type="radio" name="itf" checked={interactiveTf === 'صح'} onChange={() => setInteractiveTf('صح')} /> صح</label>
+                          <label><input type="radio" name="itf" checked={interactiveTf === 'خطأ'} onChange={() => setInteractiveTf('خطأ')} /> خطأ</label>
+                        </div>
+                      )}
+
+                      <button type="button" onClick={() => {
+                        if (!interactiveQText) { alert('اكتب نص السؤال'); return; }
+                        const qObj = {
+                          type: interactiveType,
+                          q: interactiveQText,
+                          options: interactiveType === 'mcq' ? interactiveOptions : (interactiveType === 'true_false' ? ['صح', 'خطأ'] : []),
+                          correct: interactiveType === 'mcq' ? interactiveCorrect : (interactiveType === 'fill' ? interactiveFill : interactiveTf)
+                        };
+                        setInteractiveList([...interactiveList, qObj]);
+                        setInteractiveQText(''); setInteractiveCorrect(''); setInteractiveFill('');
+                        alert('✅ تم إضافة السؤال للقائمة!');
+                      }} className="px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-bold cursor-pointer">
+                        + إضافة السؤال للقائمة ({interactiveList.length} مضافة)
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-xl border font-bold text-xs cursor-pointer">
+                        <input type="checkbox" checked={newNoteVip} onChange={(e) => setNewNoteVip(e.target.checked)} className="w-4 h-4 text-amber-600 rounded" />
+                        <span>شرح خاص بـ VIP؟</span>
+                      </label>
+                    </div>
+
                     <button onClick={async () => {
                       if (!newNoteTitle || !newNoteContent) return;
                       const newNoteObj = { 
@@ -1164,13 +1298,13 @@ export function App() {
                         content: newNoteContent, 
                         image: newNoteImage, 
                         isVip: newNoteVip,
-                        interactiveQuestions: []
+                        interactiveQuestions: interactiveList
                       };
                       const updatedNotes = [...(currentSub.notes || []), newNoteObj];
                       await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
                       setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s));
-                      setNewNoteTitle(''); setNewNoteContent(''); setNewNoteImage(''); setNewNoteVip(false);
-                      setSuccessMessage('تم نشر الشرح والصورة بنجاح!');
+                      setNewNoteTitle(''); setNewNoteContent(''); setNewNoteImage(''); setNewNoteVip(false); setInteractiveList([]);
+                      setSuccessMessage('تم نشر الشرح والصورة والأسئلة بنجاح!');
                       setTimeout(() => setSuccessMessage(null), 3000);
                     }} className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold shadow cursor-pointer">
                       نشر الشرح في المادة
