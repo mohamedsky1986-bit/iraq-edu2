@@ -207,7 +207,7 @@ export function App() {
     return safeGetStorage('nabough_cached_students', []);
   });
 
-  // جلب البيانات مع دعم العمل بدون إنترنت
+  // جلب البيانات مع دعم العمل بدون إنترنت (تخزين محلي مؤمن)
   useEffect(() => {
     async function loadDataOfflineFirst() {
       try {
@@ -1811,7 +1811,7 @@ export function App() {
                 />
               </div>
 
-              {/* أ) الشروحات والتعاليل مع أزرار التعديل والحذف لكل شرح وعنوان الرئيسي */}
+              {/* أ) الشروحات والتعاليل مع أزرار التعديل الحقيقية للأدمن */}
               <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
@@ -1856,7 +1856,7 @@ export function App() {
 
                       <p className="text-xs text-slate-700 leading-relaxed">{note.content}</p>
 
-                      {/* معالجة عرض الصورة بحجمها الطبيعي والصحيح دون تمدد أو تشويه */}
+                      {/* معالجة عرض الصور لئلا تتمدد بشكل خاطئ */}
                       {note.image && (
                         <div className="mt-2 w-full max-h-72 rounded-xl overflow-hidden border shadow-sm bg-slate-50 flex items-center justify-center p-2">
                           <img src={note.image} alt={note.title} className="max-h-64 w-auto object-contain rounded-lg" />
