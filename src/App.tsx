@@ -151,7 +151,6 @@ export function App() {
     }
   };
 
-  const [adminStageFilter, setAdminStageFilter] = useState<string>('all');
   const [adminName, setAdminName] = useState<string>('مدير المنصة');
   const [adminUsername, setAdminUsername] = useState<string>('admin');
   const [adminPassword, setAdminPassword] = useState<string>('123456');
@@ -183,11 +182,6 @@ export function App() {
   useEffect(() => {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
-
-  const getTelegramUrl = (usernameOrLink: string, text: string) => {
-    let clean = (usernameOrLink || MY_TELEGRAM_LINK).replace('https://t.me/', '').replace('t.me/', '').replace('@', '').trim();
-    return `https://t.me/${clean}?text=${encodeURIComponent(text)}`;
-  };
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
@@ -272,13 +266,11 @@ export function App() {
   const [editQuizDuration, setEditQuizDuration] = useState(15);
   const [editQuizQuestions, setEditQuizQuestions] = useState<any[]>([]);
 
-  // حالات تعديل الفيديو للأدمن
   const [editingVideoItem, setEditingVideoItem] = useState<{subjectId: string, video: any} | null>(null);
   const [editVideoTitle, setEditVideoTitle] = useState('');
   const [editVideoUrl, setEditVideoUrl] = useState('');
   const [editVideoVip, setEditVideoVip] = useState(false);
 
-  // حالات تعديل الملزمة PDF للأدمن
   const [editingBookletItem, setEditingBookletItem] = useState<{subjectId: string, booklet: any} | null>(null);
   const [editBookletTitle, setEditBookletTitle] = useState('');
   const [editBookletUrl, setEditBookletUrl] = useState('');
@@ -904,7 +896,7 @@ export function App() {
             
             <h1 className="text-xl sm:text-3xl font-black tracking-tight leading-snug">
               {isAdmin ? 'لوحة تحكم المدير العام والإدارة 🎓' : loggedStudent ? `أهلاً بك يا ${loggedStudent?.name} (${loggedStudent?.stage}) 📚` : 'تصفح المناهج والامتحانات التفاعلية 🎓'}
-            </h3>
+            </h1>
           </div>
         </div>
 
@@ -1017,7 +1009,7 @@ export function App() {
                 </button>
               </div>
 
-              {/* قسم رفع اختبار تفاعلي جاهز (ملف HTML من الحاسبة) مع دعم VIP */}
+              {/* قسم رفع اختبار تفاعلي جاهز (ملف HTML) مع دعم VIP */}
               {isAdmin && (
                 <div className="bg-indigo-50 border-2 border-indigo-200 p-4 rounded-2xl space-y-3">
                   <h4 className="font-black text-indigo-900 text-sm flex items-center gap-2">
@@ -1111,7 +1103,7 @@ export function App() {
                 </div>
               )}
 
-              {/* أ) الشروحات والتعاليل */}
+              {/* أ) الشروحات والتعاليل والأسئلة التفاعلية */}
               <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
@@ -1159,120 +1151,17 @@ export function App() {
                           <img src={note.image} alt={note.title} className="max-h-64 w-auto object-contain rounded-lg" />
                         </div>
                       )}
-
-                      {note.interactiveQuestions && note.interactiveQuestions.length > 0 && (
-                        <div className="mt-3 p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2.5">
-                          <h6 className="text-[11px] font-black text-indigo-900">⭐ الأسئلة التفاعلية السريعة:</h6>
-                          {note.interactiveQuestions.map((iq: any, iqIdx: number) => {
-                            const ansKey = `${note.id}_${iqIdx}`;
-                            const userAns = studentInteractiveAnswers[ansKey] || '';
-                            const isGraded = interactiveGradedStatus[ansKey];
-                            const isCorrect = evaluateAnswerSmart(userAns, iq.correct, iq.type).isCorrect;
-
-                            return (
-                              <div key={iqIdx} className="bg-white p-3 rounded-lg border space-y-2 relative">
-                                <div className="text-xs font-bold text-slate-900">س: {iq.q}</div>
-                                {iq.type === 'mcq' || iq.type === 'true_false' ? (
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                                    {iq.options.map((opt: string, oIdx: number) => (
-                                      <label key={oIdx} className={`flex items-center gap-2 p-2 rounded border cursor-pointer text-xs font-bold transition-all ${userAns === opt ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50'}`}>
-                                        <input type="radio" name={`iq_${ansKey}`} checked={userAns === opt} onChange={() => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: opt})} className="hidden" />
-                                        <span>{opt}</span>
-                                      </label>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <input 
-                                    type="text" 
-                                    value={userAns} 
-                                    onChange={(e) => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: e.target.value})} 
-                                    placeholder="اكتب إجابتك هنا..." 
-                                    className="w-full px-3 py-1.5 bg-slate-50 border rounded text-xs font-bold" 
-                                  />
-                                )}
-                                <div className="flex items-center justify-between pt-1">
-                                  <button onClick={() => setInteractiveGradedStatus({...interactiveGradedStatus, [ansKey]: true})} className="px-3 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold shadow cursor-pointer">
-                                    تحقق ✓
-                                  </button>
-                                  {isGraded && (
-                                    <span className={`text-[10px] font-black ${isCorrect ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                      {isCorrect ? '✅ صحيحة بطل!' : `❌ خطأ (العبارة الصحيحة: ${iq.correct})`}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
 
                 {isAdmin && (
                   <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
-                    <h5 className="text-xs font-black text-slate-800">➕ إضافة شرح أو تعليل جديد (مع سؤال تفاعلي يدوي):</h5>
+                    <h5 className="text-xs font-black text-slate-800">➕ إضافة شرح أو تعليل جديد:</h5>
                     <input type="text" value={newNoteTitle} onChange={(e) => setNewNoteTitle(e.target.value)} placeholder="العنوان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
                     <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="النص التفصيلي..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold h-20" />
                     <input type="text" value={newNoteImage} onChange={(e) => setNewNoteImage(e.target.value)} placeholder="رابط صورة توضيحية للشرح (اختياري)..." className="w-full px-3 py-2 border rounded-xl text-xs font-mono" />
                     
-                    <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-2">
-                      <h6 className="text-xs font-black text-indigo-900">إرفاق سؤال تفاعلي سريع:</h6>
-                      <div className="flex gap-2">
-                        <select value={interactiveType} onChange={(e) => setInteractiveType(e.target.value as any)} className="px-2 py-1 bg-white border rounded text-xs font-bold">
-                          <option value="mcq">اختيارات</option>
-                          <option value="fill">فراغ</option>
-                          <option value="true_false">صح وخطأ</option>
-                        </select>
-                        <input type="text" value={interactiveQText} onChange={(e) => setInteractiveQText(e.target.value)} placeholder="نص السؤال التفاعلي..." className="flex-1 px-2 py-1 bg-white border rounded text-xs font-bold" />
-                      </div>
-
-                      {interactiveType === 'mcq' && (
-                        <div className="grid grid-cols-2 gap-2">
-                          {interactiveOptions.map((opt, oIdx) => (
-                            <input key={oIdx} type="text" value={opt} onChange={(e) => {
-                              const opts = [...interactiveOptions]; opts[oIdx] = e.target.value; setInteractiveOptions(opts);
-                            }} placeholder={`الخيار ${oIdx+1}`} className="px-2 py-1 bg-white border rounded text-xs" />
-                          ))}
-                          <input type="text" value={interactiveCorrect} onChange={(e) => setInteractiveCorrect(e.target.value)} placeholder="الخيار الصحيح..." className="col-span-2 px-2 py-1 bg-emerald-50 border rounded text-xs font-bold text-emerald-900" />
-                        </div>
-                      )}
-
-                      {interactiveType === 'fill' && (
-                        <input type="text" value={interactiveFill} onChange={(e) => setInteractiveFill(e.target.value)} placeholder="الإجابة بالفراغ..." className="w-full px-2 py-1 bg-emerald-50 border rounded text-xs font-bold text-emerald-900" />
-                      )}
-
-                      {interactiveType === 'true_false' && (
-                        <div className="flex gap-4 text-xs font-bold items-center">
-                          <span>الإجابة الصحيحة:</span>
-                          <label><input type="radio" name="itf" checked={interactiveTf === 'صح'} onChange={() => setInteractiveTf('صح')} /> صح</label>
-                          <label><input type="radio" name="itf" checked={interactiveTf === 'خطأ'} onChange={() => setInteractiveTf('خطأ')} /> خطأ</label>
-                        </div>
-                      )}
-
-                      <button type="button" onClick={() => {
-                        if (!interactiveQText) { alert('اكتب نص السؤال'); return; }
-                        const qObj = {
-                          type: interactiveType,
-                          q: interactiveQText,
-                          options: interactiveType === 'mcq' ? interactiveOptions : (interactiveType === 'true_false' ? ['صح', 'خطأ'] : []),
-                          correct: interactiveType === 'mcq' ? interactiveCorrect : (interactiveType === 'fill' ? interactiveFill : interactiveTf)
-                        };
-                        setInteractiveList([...interactiveList, qObj]);
-                        setInteractiveQText(''); setInteractiveCorrect(''); setInteractiveFill('');
-                        alert('✅ تم إضافة السؤال للقائمة!');
-                      }} className="px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-bold cursor-pointer">
-                        + إضافة السؤال للقائمة ({interactiveList.length} مضافة)
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <label className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-xl border font-bold text-xs cursor-pointer">
-                        <input type="checkbox" checked={newNoteVip} onChange={(e) => setNewNoteVip(e.target.checked)} className="w-4 h-4 text-amber-600 rounded" />
-                        <span>شرح خاص بـ VIP؟</span>
-                      </label>
-                    </div>
-
                     <button onClick={async () => {
                       if (!newNoteTitle || !newNoteContent) return;
                       const newNoteObj = { 
@@ -1281,13 +1170,13 @@ export function App() {
                         content: newNoteContent, 
                         image: newNoteImage, 
                         isVip: newNoteVip,
-                        interactiveQuestions: interactiveList
+                        interactiveQuestions: []
                       };
                       const updatedNotes = [...(currentSub.notes || []), newNoteObj];
                       await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes });
                       setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, notes: updatedNotes} : s));
-                      setNewNoteTitle(''); setNewNoteContent(''); setNewNoteImage(''); setNewNoteVip(false); setInteractiveList([]);
-                      setSuccessMessage('تم نشر الشرح والصورة والأسئلة بنجاح!');
+                      setNewNoteTitle(''); setNewNoteContent(''); setNewNoteImage(''); setNewNoteVip(false);
+                      setSuccessMessage('تم نشر الشرح والصورة بنجاح!');
                       setTimeout(() => setSuccessMessage(null), 3000);
                     }} className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold shadow cursor-pointer">
                       نشر الشرح في المادة
@@ -1296,7 +1185,7 @@ export function App() {
                 )}
               </div>
 
-              {/* ب) الفيديوهات الشارحة (المرئية) مع أزرار التشغيل والتعديل والحذف ودعم الـ VIP */}
+              {/* ب) الفيديوهات الشارحة */}
               <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <Video className="w-4 h-4 text-indigo-600" /> الدروس المرئية (الفيديوهات) ({filteredVideos.length})
@@ -1363,7 +1252,7 @@ export function App() {
                 )}
               </div>
 
-              {/* ج) ملازم PDF (مع أزرار القراءة والتعديل والحذف والدعم للـ VIP) */}
+              {/* ج) ملازم PDF */}
               <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <FileText className="w-4 h-4 text-emerald-600" /> ملازم الـ PDF ({filteredBooklets.length})
@@ -1462,67 +1351,16 @@ export function App() {
                         <div>📅 <span className="font-mono">{st.regDate || '2026-10-31'}</span></div>
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-emerald-600 font-mono text-[11px]">🕒 {st.lastSeen || 'الآن'}</span>
-                          <button onClick={async () => {
-                            await updateDoc(doc(db, 'students', st.id), { status: 'غير متصل' });
-                            setStudentsList(studentsList.map(item => item.id === st.id ? {...item, status: 'غير متصل'} : item));
-                            setSuccessMessage(`تم فك الارتباط بنجاح للطالب ${st.name}!`);
-                            setTimeout(() => setSuccessMessage(null), 3000);
-                          }} className="px-2 py-0.5 bg-amber-100 hover:bg-amber-200 text-amber-800 rounded text-[10px] font-black cursor-pointer flex items-center gap-1" title="فك ارتباط الجهاز وإتاحة الدخول">
-                            <UnlockIcon className="w-3 h-3" /> فك الارتباط 🔓
-                          </button>
                         </div>
                       </td>
 
                       <td className="p-3">
-                        {editingStudentId === st.id ? (
-                          <div className="flex flex-col gap-1.5 bg-slate-50 p-2.5 rounded-xl border border-indigo-200">
-                            <input type="text" value={editStudentName} onChange={(e) => setEditStudentName(e.target.value)} placeholder="الاسم..." className="px-2 py-1 rounded bg-white border text-xs font-bold" />
-                            <input type="text" value={editStudentUser} onChange={(e) => setEditStudentUser(e.target.value)} placeholder="اليوزر..." className="px-2 py-1 rounded bg-white border text-xs font-bold font-mono" />
-                            <input type="text" value={editStudentPass} onChange={(e) => setEditStudentPass(e.target.value)} placeholder="الباسورد..." className="px-2 py-1 rounded bg-white border text-xs font-bold font-mono" />
-                            <select value={editStudentStage} onChange={(e) => setEditStudentStage(e.target.value)} className="px-2 py-1 rounded bg-white border text-xs font-bold">
-                              {allStagesList.map(s => (
-                                <option key={s.id} value={s.name}>{s.name}</option>
-                              ))}
-                            </select>
-                            <div className="flex gap-2 pt-1">
-                              <button onClick={async () => {
-                                await updateDoc(doc(db, 'students', st.id), {
-                                  name: editStudentName,
-                                  username: editStudentUser,
-                                  pass: editStudentPass,
-                                  stage: editStudentStage
-                                });
-                                setStudentsList(studentsList.map(item => item.id === st.id ? {
-                                  ...item,
-                                  name: editStudentName,
-                                  username: editStudentUser,
-                                  pass: editStudentPass,
-                                  stage: editStudentStage
-                                } : item));
-                                setEditingStudentId(null);
-                                setSuccessMessage('تم تحديث بيانات الطالب بنجاح!');
-                                setTimeout(() => setSuccessMessage(null), 3000);
-                              }} className="px-3 py-1 bg-emerald-600 text-white rounded text-[11px] font-bold cursor-pointer">حفظ</button>
-                              <button onClick={() => setEditingStudentId(null)} className="px-3 py-1 bg-slate-200 rounded text-[11px] cursor-pointer">إلغاء</button>
-                            </div>
+                        <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl border gap-2">
+                          <div>
+                            <div className="text-slate-900">👤 يوزر: <span className="font-mono text-indigo-700">{st.username}</span></div>
+                            <div className="text-slate-600">🔑 باسورد: <span className="font-mono">{st.pass}</span></div>
                           </div>
-                        ) : (
-                          <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl border gap-2">
-                            <div>
-                              <div className="text-slate-900">👤 يوزر: <span className="font-mono text-indigo-700">{st.username}</span></div>
-                              <div className="text-slate-600">🔑 باسورد: <span className="font-mono">{st.pass}</span></div>
-                            </div>
-                            <button onClick={() => {
-                              setEditingStudentId(st.id);
-                              setEditStudentName(st.name);
-                              setEditStudentUser(st.username);
-                              setEditStudentPass(st.pass);
-                              setEditStudentStage(st.stage);
-                            }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs cursor-pointer hover:bg-indigo-100" title="تعديل بيانات الطالب">
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        )}
+                        </div>
                       </td>
 
                       <td className="p-3 space-y-1">
@@ -1537,11 +1375,6 @@ export function App() {
                       </td>
 
                       <td className="p-3 text-center space-y-1">
-                        {st.examDetails && (
-                          <button onClick={() => setViewingStudentAnswers(st)} className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer block mx-auto">
-                            🔍 عرض الأخطاء
-                          </button>
-                        )}
                         <button onClick={async () => {
                           if (window.confirm('حذف هذا الطالب نهائياً؟')) {
                             await deleteDoc(doc(db, 'students', st.id));
@@ -1588,49 +1421,6 @@ export function App() {
               </select>
               <input type="text" value={newSubImage} onChange={(e) => setNewSubImage(e.target.value)} placeholder="رابط صورة الغلاف (اختياري)..." className="w-full px-3 py-2.5 border rounded-xl text-xs font-mono" />
               <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl text-xs shadow cursor-pointer">نشر المادة في المنصة</button>
-            </form>
-          </div>
-        )}
-
-        {/* 5. إعدادات VIP */}
-        {activeTab === 'vipSettings' && isAdmin && (
-          <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-xl border space-y-4 w-full">
-            <h2 className="text-xl font-black text-slate-900">إعدادات أسعار وطرق دفع VIP</h2>
-            <form onSubmit={(e) => {
-              e.preventDefault();
-              setSuccessMessage('تم حفظ إعدادات VIP بنجاح!');
-              setTimeout(() => setSuccessMessage(null), 3000);
-            }} className="space-y-3 max-w-lg">
-              <input type="text" value={vipSettings.price} onChange={(e) => setVipSettings({...vipSettings, price: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" placeholder="السعر" />
-              <input type="text" value={vipSettings.mastercard} onChange={(e) => setVipSettings({...vipSettings, mastercard: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono" placeholder="الماستر كارد" />
-              <button type="submit" className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ التغييرات</button>
-            </form>
-          </div>
-        )}
-
-        {/* 6. إعدادات كلمة المرور الموحدة سحابياً */}
-        {activeTab === 'settings' && isAdmin && (
-          <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-xl border space-y-4 w-full">
-            <h2 className="text-xl font-black text-slate-900">تغيير كلمة مرور المدير (موحدة لكل الأجهزة والمتصفحات)</h2>
-            <form onSubmit={async (e) => {
-              e.preventDefault();
-              try {
-                await setDoc(doc(db, 'settings', 'admin_config'), {
-                  password: adminPassword,
-                  username: adminUsername,
-                  name: adminName
-                });
-                setSuccessMessage('تم حفظ كلمة المرور سحابياً بنجاح، وستعمل في الموبايل والحاسبة فوراً!');
-                setTimeout(() => setSuccessMessage(null), 4000);
-              } catch(err) {
-                alert('حدث خطأ أثناء الحفظ.');
-              }
-            }} className="space-y-3 max-w-lg">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">كلمة المرور الجديدة</label>
-                <input type="text" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold" placeholder="كلمة المرور الجديدة" />
-              </div>
-              <button type="submit" className="w-full py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ وتوحيد كلمة المرور سحابياً ☁️</button>
             </form>
           </div>
         )}
