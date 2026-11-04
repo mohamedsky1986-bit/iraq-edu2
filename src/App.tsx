@@ -272,13 +272,11 @@ export function App() {
   const [editQuizDuration, setEditQuizDuration] = useState(15);
   const [editQuizQuestions, setEditQuizQuestions] = useState<any[]>([]);
 
-  // حالات تعديل الفيديو للأدمن
   const [editingVideoItem, setEditingVideoItem] = useState<{subjectId: string, video: any} | null>(null);
   const [editVideoTitle, setEditVideoTitle] = useState('');
   const [editVideoUrl, setEditVideoUrl] = useState('');
   const [editVideoVip, setEditVideoVip] = useState(false);
 
-  // حالات تعديل الملزمة PDF للأدمن
   const [editingBookletItem, setEditingBookletItem] = useState<{subjectId: string, booklet: any} | null>(null);
   const [editBookletTitle, setEditBookletTitle] = useState('');
   const [editBookletUrl, setEditBookletUrl] = useState('');
@@ -327,7 +325,6 @@ export function App() {
   const [newNoteImage, setNewNoteImage] = useState('');
   const [newNoteVip, setNewNoteVip] = useState(false);
 
-  // إدارة الأسئلة التفاعلية اليدوية ضمن الشروحات
   const [interactiveType, setInteractiveType] = useState<'mcq' | 'fill' | 'true_false'>('mcq');
   const [interactiveQText, setInteractiveQText] = useState('');
   const [interactiveOptions, setInteractiveOptions] = useState(['', '', '', '']);
@@ -338,12 +335,10 @@ export function App() {
   const [studentInteractiveAnswers, setStudentInteractiveAnswers] = useState<Record<number, string>>({});
   const [interactiveGradedStatus, setInteractiveGradedStatus] = useState<Record<number, boolean>>({});
 
-  // حالات إضافة فيديو جديد
   const [newVideoTitle, setNewVideoTitle] = useState('');
   const [newVideoUrl, setNewVideoUrl] = useState('');
   const [newVideoVip, setNewVideoVip] = useState(false);
 
-  // حالات إضافة ملزمة PDF جديدة
   const [newBookletTitle, setNewBookletTitle] = useState('');
   const [newBookletUrl, setNewBookletUrl] = useState('');
   const [newBookletVip, setNewBookletVip] = useState(false);
@@ -353,7 +348,6 @@ export function App() {
   const [uploadHtmlContent, setUploadHtmlContent] = useState('');
   const [uploadHtmlIsVip, setUploadHtmlIsVip] = useState(false);
 
-  // حالات صياغة ونشر الامتحانات الذكية الرسمية (مع الاستيراد السريع من الشروحات)
   const [quizTitle, setQuizTitle] = useState('');
   const [quizIsVip, setQuizIsVip] = useState(false);
   const [quizDurationMinutes, setQuizDurationMinutes] = useState<number>(15);
@@ -825,188 +819,6 @@ export function App() {
         </div>
       )}
 
-      {/* نافذة تعديل السؤال التفاعلي التابع للشرح */}
-      {editingInteractiveItem && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-right">
-            <button onClick={() => setEditingInteractiveItem(null)} className="absolute top-4 left-4 w-9 h-9 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
-              <X className="w-4 h-4" />
-            </button>
-            <h3 className="text-lg font-black text-slate-900 pb-2 border-b">تعديل السؤال التفاعلي السريع</h3>
-            
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">نص السؤال</label>
-                <input type="text" value={editInteractiveQText} onChange={(e) => setEditInteractiveQText(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
-              </div>
-
-              {editingInteractiveItem.questionObj.options && Array.isArray(editingInteractiveItem.questionObj.options) && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">تعديل الخيارات الأربعة</label>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    {editInteractiveOptions.map((opt, oIdx) => (
-                      <input 
-                        key={oIdx} 
-                        type="text" 
-                        value={opt} 
-                        onChange={(e) => {
-                          const newOpts = [...editInteractiveOptions];
-                          newOpts[oIdx] = e.target.value;
-                          setEditInteractiveOptions(newOpts);
-                        }} 
-                        placeholder={`خيار ${oIdx+1}`} 
-                        className="px-2 py-1 border rounded text-xs" 
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">الإجابة الصحيحة</label>
-                <input type="text" value={editInteractiveCorrect} onChange={(e) => setEditInteractiveCorrect(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold text-emerald-900 bg-emerald-50" />
-              </div>
-            </div>
-
-            <div className="flex gap-2 pt-3 border-t">
-              <button onClick={async () => {
-                const targetSub = subjects.find(s => s.id === editingInteractiveItem.subjectId);
-                if (!targetSub) return;
-                const updatedNotes = targetSub.notes.map((n: any) => {
-                  if (n.id === editingInteractiveItem.noteId) {
-                    const newIqList = [...n.interactiveQuestions];
-                    newIqList[editingInteractiveItem.questionIndex] = {
-                      ...newIqList[editingInteractiveItem.questionIndex],
-                      q: editInteractiveQText,
-                      options: editingInteractiveItem.questionObj.options ? editInteractiveOptions : newIqList[editingInteractiveItem.questionIndex].options,
-                      correct: editInteractiveCorrect
-                    };
-                    return { ...n, interactiveQuestions: newIqList };
-                  }
-                  return n;
-                });
-
-                try {
-                  await updateDoc(doc(db, 'subjects', editingInteractiveItem.subjectId), { notes: updatedNotes });
-                  const updatedSubs = subjects.map(s => s.id === editingInteractiveItem.subjectId ? {...s, notes: updatedNotes} : s);
-                  setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                  setEditingInteractiveItem(null);
-                  setSuccessMessage('تم تعديل السؤال التفاعلي بنجاح!');
-                  setTimeout(() => setSuccessMessage(null), 3000);
-                } catch(e) {}
-              }} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold">
-                حفظ التعديل
-              </button>
-              <button onClick={() => setEditingInteractiveItem(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* نافذة تعديل الفيديو للأدمن */}
-      {editingVideoItem && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-right">
-            <button onClick={() => setEditingVideoItem(null)} className="absolute top-4 left-4 w-9 h-9 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
-              <X className="w-4 h-4" />
-            </button>
-            <h3 className="text-lg font-black text-slate-900 pb-2 border-b">تعديل الدرس المرئي (الفيديو)</h3>
-            
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">عنوان الفيديو</label>
-                <input type="text" value={editVideoTitle} onChange={(e) => setEditVideoTitle(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">رابط يوتيوب</label>
-                <input type="text" value={editVideoUrl} onChange={(e) => setEditVideoUrl(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold" />
-              </div>
-              <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
-                <input type="checkbox" checked={editVideoVip} onChange={(e) => setEditVideoVip(e.target.checked)} className="w-4 h-4 text-amber-600" />
-                <span>فيديو خاص بـ VIP؟</span>
-              </label>
-            </div>
-
-            <div className="flex gap-2 pt-3 border-t">
-              <button onClick={async () => {
-                const targetSub = subjects.find(s => s.id === editingVideoItem.subjectId);
-                if (!targetSub) return;
-                const formattedUrl = formatYouTubeUrl(editVideoUrl);
-                const updatedVideos = targetSub.videos.map((v: any) => v.id === editingVideoItem.video.id ? { ...v, title: editVideoTitle, url: formattedUrl, isVip: editVideoVip } : v);
-                
-                try {
-                  await updateDoc(doc(db, 'subjects', editingVideoItem.subjectId), { videos: updatedVideos });
-                  const updatedSubs = subjects.map(s => s.id === editingVideoItem.subjectId ? {...s, videos: updatedVideos} : s);
-                  setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                  setEditingVideoItem(null);
-                  setSuccessMessage('تم تعديل الفيديو بنجاح!');
-                  setTimeout(() => setSuccessMessage(null), 3000);
-                } catch(e) {}
-              }} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold">
-                حفظ التعديل
-              </button>
-              <button onClick={() => setEditingVideoItem(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* نافذة تعديل الملزمة PDF للأدمن */}
-      {editingBookletItem && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative space-y-4 text-right">
-            <button onClick={() => setEditingBookletItem(null)} className="absolute top-4 left-4 w-9 h-9 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center font-bold">
-              <X className="w-4 h-4" />
-            </button>
-            <h3 className="text-lg font-black text-slate-900 pb-2 border-b">تعديل الملزمة (PDF)</h3>
-            
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">عنوان الملزمة</label>
-                <input type="text" value={editBookletTitle} onChange={(e) => setEditBookletTitle(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">رابط ملف PDF</label>
-                <input type="text" value={editBookletUrl} onChange={(e) => setEditBookletUrl(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-mono font-bold" />
-              </div>
-              <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
-                <input type="checkbox" checked={editBookletVip} onChange={(e) => setEditBookletVip(e.target.checked)} className="w-4 h-4 text-amber-600" />
-                <span>ملزمة خاصة بـ VIP؟</span>
-              </label>
-            </div>
-
-            <div className="flex gap-2 pt-3 border-t">
-              <button onClick={async () => {
-                const targetSub = subjects.find(s => s.id === editingBookletItem.subjectId);
-                if (!targetSub) return;
-                const updatedBooklets = targetSub.booklets.map((b: any) => b.id === editingBookletItem.booklet.id ? { ...b, title: editBookletTitle, url: editBookletUrl, isVip: editBookletVip } : b);
-                
-                try {
-                  await updateDoc(doc(db, 'subjects', editingBookletItem.subjectId), { booklets: updatedBooklets });
-                  const updatedSubs = subjects.map(s => s.id === editingBookletItem.subjectId ? {...s, booklets: updatedBooklets} : s);
-                  setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
-                  setEditingBookletItem(null);
-                  setSuccessMessage('تم تعديل الملزمة بنجاح!');
-                  setTimeout(() => setSuccessMessage(null), 3000);
-                } catch(e) {}
-              }} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold">
-                حفظ التعديل
-              </button>
-              <button onClick={() => setEditingBookletItem(null)} className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-xl text-xs font-bold">
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* رأس الصفحة */}
       <div className="w-full bg-slate-900 py-2.5 px-3 sm:px-6 shadow-md flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2.5">
@@ -1203,7 +1015,7 @@ export function App() {
                 </button>
               </div>
 
-              {/* قسم رفع اختبار تفاعلي جاهز من الحاسبة (ملف HTML) مع دعم VIP */}
+              {/* قسم رفع اختبار تفاعلي جاهز (ملف HTML من الحاسبة) مع دعم قفل VIP */}
               {isAdmin && (
                 <div className="bg-indigo-50 border-2 border-indigo-200 p-4 rounded-2xl space-y-3">
                   <h4 className="font-black text-indigo-900 text-sm flex items-center gap-2">
