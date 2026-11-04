@@ -191,7 +191,7 @@ export function App() {
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
-  const [loggedStudent, setLoggedStudent] = useState<any | null> (() => {
+  const [loggedStudent, setLoggedStudent] = useState<any | null>(() => {
     return safeGetStorage('nabough_logged_student', null);
   });
 
@@ -347,10 +347,12 @@ export function App() {
   const [newBookletUrl, setNewBookletUrl] = useState('');
   const [newBookletVip, setNewBookletVip] = useState(false);
 
-  // حالات رفع اختبار تفاعلي جاهز من الحاسبة (ملف HTML)
+  // حالات رفع اختبار تفاعلي جاهز من الحاسبة (ملف HTML) مع دعم VIP
   const [uploadHtmlTitle, setUploadHtmlTitle] = useState('');
   const [uploadHtmlContent, setUploadHtmlContent] = useState('');
+  const [uploadHtmlIsVip, setUploadHtmlIsVip] = useState(false);
 
+  // حالات صياغة ونشر الامتحانات الذكية الرسمية
   const [quizTitle, setQuizTitle] = useState('');
   const [quizIsVip, setQuizIsVip] = useState(false);
   const [quizDurationMinutes, setQuizDurationMinutes] = useState<number>(15);
@@ -932,7 +934,7 @@ export function App() {
                   >
                     <option value="all">🌟 عرض كافة المراحل الدراسية</option>
                     {allStagesList.map(st => (
-                      <option key={st.id} value={st.id}>{st.name}</option>
+                      <option key={st.id} value={st.name}>{st.name}</option>
                     ))}
                   </select>
                   <ChevronDown className="w-4 h-4 text-indigo-600 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -986,7 +988,7 @@ export function App() {
           </div>
         )}
 
-        {/* 2. إدارة وتصفح المادة الدراسية المفصلة (مع استعادة الفيديوهات، الملازم، الشروحات والأسئلة التفاعلية الكاملة) */}
+        {/* 2. إدارة وتصفح المادة الدراسية المفصلة (مع كل الأقسام القديمة + رفع HTML مع قفل VIP) */}
         {selectedSubjectId && (() => {
           const currentSub = subjects.find(s => s.id === selectedSubjectId);
           if (!currentSub) return null;
@@ -1018,18 +1020,18 @@ export function App() {
                 </button>
               </div>
 
-              {/* قسم رفع اختبار تفاعلي جاهز (ملف HTML من الحاسبة) */}
+              {/* قسم رفع اختبار تفاعلي جاهز من الحاسبة مع دعم VIP */}
               {isAdmin && (
                 <div className="bg-indigo-50 border-2 border-indigo-200 p-4 rounded-2xl space-y-3">
                   <h4 className="font-black text-indigo-900 text-sm flex items-center gap-2">
-                    <Upload className="w-4 h-4 text-indigo-600" /> رفع اختبار تفاعلي جاهز (اختر ملف HTML من حاسبتك) 🌟
+                    <Upload className="w-4 h-4 text-indigo-600" /> رفع اختبار تفاعلي جاهز (ملف HTML من الحاسبة مع دعم VIP) 🌟
                   </h4>
                   <div className="space-y-2">
                     <input 
                       type="text" 
                       value={uploadHtmlTitle}
                       onChange={(e) => setUploadHtmlTitle(e.target.value)}
-                      placeholder="عنوان الاختبار (مثال: اختبار الوحدة الأولى)..." 
+                      placeholder="عنوان الاختبار..." 
                       className="w-full px-3 py-2 bg-white border rounded-xl text-xs font-bold" 
                     />
                     <input 
@@ -1047,6 +1049,10 @@ export function App() {
                       }}
                       className="w-full text-xs font-bold bg-white border rounded-xl p-2 cursor-pointer"
                     />
+                    <label className="flex items-center gap-2 text-xs font-bold cursor-pointer">
+                      <input type="checkbox" checked={uploadHtmlIsVip} onChange={(e) => setUploadHtmlIsVip(e.target.checked)} className="w-4 h-4 text-amber-600" />
+                      <span>هل هذا الاختبار خاص باشتراك VIP فقط؟ 🔒</span>
+                    </label>
                   </div>
 
                   <button onClick={async () => {
@@ -1054,7 +1060,7 @@ export function App() {
                       alert('يرجى كتابة عنوان الاختبار واختيار ملف الـ HTML.');
                       return;
                     }
-                    const newHtmlQuiz = { id: Date.now().toString(), title: uploadHtmlTitle, content: uploadHtmlContent };
+                    const newHtmlQuiz = { id: Date.now().toString(), title: uploadHtmlTitle, content: uploadHtmlContent, isVip: uploadHtmlIsVip };
                     const updatedHtmlQuizzes = [...(currentSub.htmlQuizzes || []), newHtmlQuiz];
                     
                     try {
@@ -1064,6 +1070,7 @@ export function App() {
                       localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                       setUploadHtmlTitle('');
                       setUploadHtmlContent('');
+                      setUploadHtmlIsVip(false);
                       setSuccessMessage('تم رفع ونشر الاختبار التفاعلي بنجاح!');
                       setTimeout(() => setSuccessMessage(null), 3000);
                     } catch(err) {}
@@ -1073,7 +1080,7 @@ export function App() {
                 </div>
               )}
 
-              {/* استعراض الاختبارات التفاعلية المرفوعة */}
+              {/* استعراض الاختبارات التفاعلية المرفوعة للطلاب */}
               {currentSub.htmlQuizzes && currentSub.htmlQuizzes.length > 0 && (
                 <div className="bg-slate-50 p-4 rounded-2xl border space-y-3">
                   <h4 className="font-black text-slate-900 text-sm flex items-center gap-2">
@@ -1082,11 +1089,15 @@ export function App() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {currentSub.htmlQuizzes.map((hq: any) => (
                       <div key={hq.id} className="p-3 bg-white rounded-xl border flex items-center justify-between shadow-sm">
-                        <span className="font-black text-slate-800 text-xs">⭐ {hq.title}</span>
+                        <span className="font-black text-slate-800 text-xs">⭐ {hq.title} {hq.isVip && '• VIP 🔒'}</span>
                         <div className="flex items-center gap-2">
-                          <button onClick={() => setActiveHtmlQuizUrl(hq.content)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">
-                            فتح الاختبار 🎯
-                          </button>
+                          {hq.isVip && !isVipActive && isAdmin === false ? (
+                            <button onClick={() => setVipModalItem(hq)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
+                          ) : (
+                            <button onClick={() => setActiveHtmlQuizUrl(hq.content)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">
+                              فتح الاختبار 🎯
+                            </button>
+                          )}
                           {isAdmin && (
                             <button onClick={async () => {
                               if (window.confirm('حذف هذا الاختبار؟')) {
@@ -1103,7 +1114,7 @@ export function App() {
                 </div>
               )}
 
-              {/* أ) الشروحات والتعاليل والأسئلة التفاعلية اليدوية بكامل تفاصيلها */}
+              {/* أ) الشروحات والتعاليل والأسئلة التفاعلية اليدوية الكاملة */}
               <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
@@ -1202,7 +1213,7 @@ export function App() {
                   ))}
                 </div>
 
-                {/* إضافة شرح جديد مع الأسئلة التفاعلية اليدوية */}
+                {/* نموذج إضافة شرح جديد مع الأسئلة التفاعلية اليدوية */}
                 {isAdmin && (
                   <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
                     <h5 className="text-xs font-black text-slate-800">➕ إضافة شرح أو تعليل جديد (مع سؤال تفاعلي يدوي):</h5>
