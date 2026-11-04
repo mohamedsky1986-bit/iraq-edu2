@@ -191,7 +191,7 @@ export function App() {
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
 
-  const [loggedStudent, setLoggedStudent] = useState<any | null>(() => {
+  const [loggedStudent, setLoggedStudent] = useState<any | null> (() => {
     return safeGetStorage('nabough_logged_student', null);
   });
 
@@ -272,11 +272,13 @@ export function App() {
   const [editQuizDuration, setEditQuizDuration] = useState(15);
   const [editQuizQuestions, setEditQuizQuestions] = useState<any[]>([]);
 
+  // حالات تعديل الفيديو للأدمن
   const [editingVideoItem, setEditingVideoItem] = useState<{subjectId: string, video: any} | null>(null);
   const [editVideoTitle, setEditVideoTitle] = useState('');
   const [editVideoUrl, setEditVideoUrl] = useState('');
   const [editVideoVip, setEditVideoVip] = useState(false);
 
+  // حالات تعديل الملزمة PDF للأدمن
   const [editingBookletItem, setEditingBookletItem] = useState<{subjectId: string, booklet: any} | null>(null);
   const [editBookletTitle, setEditBookletTitle] = useState('');
   const [editBookletUrl, setEditBookletUrl] = useState('');
@@ -335,10 +337,12 @@ export function App() {
   const [studentInteractiveAnswers, setStudentInteractiveAnswers] = useState<Record<number, string>>({});
   const [interactiveGradedStatus, setInteractiveGradedStatus] = useState<Record<number, boolean>>({});
 
+  // حالات إضافة فيديو جديد
   const [newVideoTitle, setNewVideoTitle] = useState('');
   const [newVideoUrl, setNewVideoUrl] = useState('');
   const [newVideoVip, setNewVideoVip] = useState(false);
 
+  // حالات إضافة ملزمة PDF جديدة
   const [newBookletTitle, setNewBookletTitle] = useState('');
   const [newBookletUrl, setNewBookletUrl] = useState('');
   const [newBookletVip, setNewBookletVip] = useState(false);
@@ -347,7 +351,6 @@ export function App() {
   const [uploadHtmlTitle, setUploadHtmlTitle] = useState('');
   const [uploadHtmlContent, setUploadHtmlContent] = useState('');
 
-  // حالات صياغة ونشر الامتحانات الرسمية الذكية داخل المنصة
   const [quizTitle, setQuizTitle] = useState('');
   const [quizIsVip, setQuizIsVip] = useState(false);
   const [quizDurationMinutes, setQuizDurationMinutes] = useState<number>(15);
@@ -637,7 +640,7 @@ export function App() {
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-1 sm:pt-2">
       
-      {/* نافذة مشغل ملفات HTML التفاعلية المرفوعة */}
+      {/* نافذة مشغل ملفات HTML المرفوعة */}
       {activeHtmlQuizUrl && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
           <div className="bg-white rounded-3xl max-w-4xl w-full h-[90vh] p-4 shadow-2xl relative flex flex-col">
@@ -983,7 +986,7 @@ export function App() {
           </div>
         )}
 
-        {/* 2. إدارة وتصفح المادة الدراسية المفصلة (مع استعادة الامتحانات الذكية الرسمية والأسئلة التفاعلية اليدوية) */}
+        {/* 2. إدارة وتصفح المادة الدراسية المفصلة (مع استعادة الفيديوهات، الملازم، الشروحات والأسئلة التفاعلية الكاملة) */}
         {selectedSubjectId && (() => {
           const currentSub = subjects.find(s => s.id === selectedSubjectId);
           if (!currentSub) return null;
@@ -991,6 +994,14 @@ export function App() {
           const filteredNotes = (currentSub.notes || []).filter((n: any) => 
             n.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
             n.content.toLowerCase().includes(searchQuery.toLowerCase())
+          );
+
+          const filteredVideos = (currentSub.videos || []).filter((v: any) => 
+            v.title.toLowerCase().includes(searchQuery.toLowerCase())
+          );
+
+          const filteredBooklets = (currentSub.booklets || []).filter((b: any) => 
+            b.title.toLowerCase().includes(searchQuery.toLowerCase())
           );
 
           return (
@@ -1092,113 +1103,7 @@ export function App() {
                 </div>
               )}
 
-              {/* د) الامتحانات الرسمية الذكية (مع الاستيراد من الشروحات السابقة والدرجات والتصحيح التلقائي المرن) */}
-              <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
-                <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
-                  <CheckSquare className="w-4 h-4 text-indigo-600" /> الامتحانات الرسمية الذكية المتاحة ({currentSub.quizzes?.length || 0})
-                </h4>
-                <div className="space-y-2">
-                  {currentSub.quizzes?.map((quiz: any) => (
-                    <div key={quiz.id} className="p-3.5 bg-white rounded-xl border flex items-center justify-between shadow-sm flex-wrap gap-2">
-                      <span className="font-bold text-slate-800 text-xs sm:text-sm">
-                        📝 {quiz.title} ({quiz.durationMinutes || 15} دقيقة) - الأسئلة: {quiz.questions?.length || 0}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => { setActiveQuiz(quiz); setTimeLeft((quiz.durationMinutes || 15) * 60); setTimerActive(true); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">
-                          بدء الامتحان 🚀
-                        </button>
-                        {isAdmin && (
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => {
-                              setEditingQuizItem({ subjectId: currentSub.id, quiz });
-                              setEditQuizTitle(quiz.title);
-                              setEditQuizDuration(quiz.durationMinutes || 15);
-                              setEditQuizQuestions(quiz.questions || []);
-                            }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs cursor-pointer" title="تعديل"><Edit3 className="w-3.5 h-3.5" /></button>
-                            <button onClick={async () => {
-                              const updatedQuizzes = currentSub.quizzes.filter((q: any) => q.id !== quiz.id);
-                              await updateDoc(doc(db, 'subjects', currentSub.id), { quizzes: updatedQuizzes });
-                              setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, quizzes: updatedQuizzes} : s));
-                            }} className="text-rose-500 p-1 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {isAdmin && (
-                  <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
-                    <h5 className="text-xs font-black text-slate-800">🛠️ صياغة امتحان رسمي جديد (مع الاستيراد من الشروحات السابقة):</h5>
-                    <input type="text" value={quizTitle} onChange={(e) => setQuizTitle(e.target.value)} placeholder="عنوان الامتحان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
-                    
-                    {/* قائمة استيراد الأسئلة من الشروحات السابقة */}
-                    {currentSub.notes && currentSub.notes.length > 0 && (
-                      <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl space-y-2">
-                        <label className="block text-xs font-black text-indigo-900">💡 استيراد سؤال من الشروحات والتعاليل السابقة:</label>
-                        <select 
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (!val) return;
-                            const foundNote = currentSub.notes.find((n: any) => n.id === val);
-                            if (foundNote) {
-                              setCurrentQuestionsList([...currentQuestionsList, { type: 'fill', q: foundNote.title, correct: foundNote.content, isMinisterial: false }]);
-                              setSuccessMessage('تم استيراد الشرح/التعليل بنجاح إلى الامتحان!');
-                              setTimeout(() => setSuccessMessage(null), 2500);
-                            }
-                            e.target.value = '';
-                          }}
-                          className="w-full px-3 py-2 bg-white border rounded-lg text-xs font-bold text-slate-800 cursor-pointer"
-                        >
-                          <option value="">-- اختر شرحاً أو تعليلاً لإضافته كؤال في الامتحان --</option>
-                          {currentSub.notes.map((n: any) => (
-                            <option key={n.id} value={n.id}>📖 {n.title}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    <div className="p-3 bg-slate-50 rounded-xl border space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold">أضف سؤال يدوياً ({currentQuestionsList.length} مضافة)</span>
-                        <select value={questionType} onChange={(e) => setQuestionType(e.target.value as any)} className="px-2 py-1 border rounded text-xs font-bold">
-                          <option value="mcq">اختيار من متعدد</option>
-                          <option value="fill">فراغات</option>
-                          <option value="true_false">صح وخطأ</option>
-                        </select>
-                      </div>
-                      <input type="text" value={questionText} onChange={(e) => setQuestionText(e.target.value)} placeholder="نص السؤال..." className="w-full px-3 py-1.5 bg-white border rounded text-xs font-bold" />
-
-                      {questionType === 'mcq' && (
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {mcqOptions.map((opt, oIdx) => (
-                            <input key={oIdx} type="text" value={opt} onChange={(e) => {
-                              const opts = [...mcqOptions]; opts[oIdx] = e.target.value; setMcqOptions(opts);
-                            }} placeholder={`خيار ${oIdx+1}`} className="px-2 py-1 bg-white border rounded text-xs" />
-                          ))}
-                          <input type="text" value={mcqCorrect} onChange={(e) => setMcqCorrect(e.target.value)} placeholder="الخيار الصحيح..." className="col-span-2 px-2 py-1 bg-emerald-50 border rounded text-xs font-bold text-emerald-900" />
-                        </div>
-                      )}
-                      {questionType === 'fill' && (
-                        <input type="text" value={fillCorrect} onChange={(e) => setFillCorrect(e.target.value)} placeholder="الإجابة الصحيحة..." className="w-full px-2 py-1 bg-emerald-50 border rounded text-xs font-bold text-emerald-900" />
-                      )}
-                      {questionType === 'true_false' && (
-                        <div className="flex gap-4 text-xs font-bold">
-                          <label className="cursor-pointer"><input type="radio" name="stf" checked={tfCorrect === 'صح'} onChange={() => setTfCorrect('صح')} /> صح</label>
-                          <label className="cursor-pointer"><input type="radio" name="stf" checked={tfCorrect === 'خطأ'} onChange={() => setTfCorrect('خطأ')} /> خطأ</label>
-                        </div>
-                      )}
-                      <button type="button" onClick={handleAddQuestionToQuiz} className="w-full py-1.5 bg-slate-900 text-white rounded text-xs font-bold cursor-pointer">+ إضافة السؤال للامتحان</button>
-                    </div>
-
-                    <button onClick={() => handleSaveQuizToSubject(currentSub.id)} className="w-full py-2.5 bg-indigo-600 text-white font-bold rounded-xl text-xs shadow cursor-pointer">
-                      نشر الامتحان في المنصة
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* أ) الشروحات والتعاليل مع الأسئلة التفاعلية اليدوية الكاملة */}
+              {/* أ) الشروحات والتعاليل والأسئلة التفاعلية اليدوية بكامل تفاصيلها */}
               <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
@@ -1209,6 +1114,7 @@ export function App() {
                       <div className="flex items-center justify-between flex-wrap gap-2 border-b pb-2">
                         <div className="flex items-center gap-2">
                           <h5 className="font-black text-slate-900 text-xs sm:text-sm">💡 {note.title}</h5>
+                          {note.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
                         </div>
 
                         {isAdmin && (
@@ -1354,6 +1260,13 @@ export function App() {
                       </button>
                     </div>
 
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 rounded-xl border font-bold text-xs cursor-pointer">
+                        <input type="checkbox" checked={newNoteVip} onChange={(e) => setNewNoteVip(e.target.checked)} className="w-4 h-4 text-amber-600 rounded" />
+                        <span>شرح خاص بـ VIP؟</span>
+                      </label>
+                    </div>
+
                     <button onClick={async () => {
                       if (!newNoteTitle || !newNoteContent) return;
                       const newNoteObj = { 
@@ -1373,6 +1286,139 @@ export function App() {
                     }} className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold shadow cursor-pointer">
                       نشر الشرح في المادة
                     </button>
+                  </div>
+                )}
+              </div>
+
+              {/* ب) الفيديوهات الشارحة (المرئية) مع أزرار التشغيل والتعديل والحذف ودعم الـ VIP */}
+              <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
+                <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                  <Video className="w-4 h-4 text-indigo-600" /> الدروس المرئية (الفيديوهات) ({filteredVideos.length})
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {filteredVideos.map((vid: any) => (
+                    <div key={vid.id} className="p-3.5 bg-white rounded-xl border flex items-center justify-between shadow-sm flex-wrap gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs flex-shrink-0">▶</div>
+                        <div>
+                          <span className="font-bold text-slate-800 text-xs block">{vid.title}</span>
+                          <span className="text-[10px] text-slate-500">{vid.duration} {vid.isVip ? '• ⭐ VIP' : ''}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {vid.isVip && !isVipActive && isAdmin === false ? (
+                          <button onClick={() => setVipModalItem(vid)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
+                        ) : (
+                          <button onClick={() => setActiveVideoUrl(vid.url)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">تشغيل 🎬</button>
+                        )}
+                        {isAdmin && (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => {
+                              setEditingVideoItem({ subjectId: currentSub.id, video: vid });
+                              setEditVideoTitle(vid.title);
+                              setEditVideoUrl(vid.url);
+                              setEditVideoVip(vid.isVip || false);
+                            }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs cursor-pointer" title="تعديل الفيديو"><Edit3 className="w-3.5 h-3.5" /></button>
+                            <button onClick={async () => {
+                              const updatedVids = currentSub.videos.filter((v: any) => v.id !== vid.id);
+                              await updateDoc(doc(db, 'subjects', currentSub.id), { videos: updatedVids });
+                              setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s));
+                            }} className="text-rose-500 p-1 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {isAdmin && (
+                  <div className="bg-white p-3 rounded-xl border space-y-2 mt-2">
+                    <h5 className="text-xs font-black text-slate-800">➕ إضافة فيديو جديد (مع دعم VIP):</h5>
+                    <input type="text" value={newVideoTitle} onChange={(e) => setNewVideoTitle(e.target.value)} placeholder="عنوان الفيديو..." className="w-full px-3 py-1.5 border rounded-lg text-xs font-bold" />
+                    <input type="text" value={newVideoUrl} onChange={(e) => setNewVideoUrl(e.target.value)} placeholder="رابط يوتيوب..." className="w-full px-3 py-1.5 border rounded-lg text-xs font-mono" />
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-1 text-xs font-bold cursor-pointer">
+                        <input type="checkbox" checked={newVideoVip} onChange={(e) => setNewVideoVip(e.target.checked)} className="w-4 h-4" />
+                        <span>فيديو خاص بـ VIP؟</span>
+                      </label>
+                    </div>
+                    <button onClick={async () => {
+                      if (!newVideoTitle || !newVideoUrl) return;
+                      const formattedUrl = formatYouTubeUrl(newVideoUrl);
+                      const newVidObj = { id: Date.now().toString(), title: newVideoTitle, url: formattedUrl, duration: '45 دقيقة', isVip: newVideoVip };
+                      const updatedVids = [...(currentSub.videos || []), newVidObj];
+                      await updateDoc(doc(db, 'subjects', currentSub.id), { videos: updatedVids });
+                      setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, videos: updatedVids} : s));
+                      setNewVideoTitle(''); setNewVideoUrl(''); setNewVideoVip(false);
+                      setSuccessMessage('تم نشر الفيديو بنجاح!');
+                      setTimeout(() => setSuccessMessage(null), 3000);
+                    }} className="w-full py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold cursor-pointer">+ نشر الفيديو</button>
+                  </div>
+                )}
+              </div>
+
+              {/* ج) ملازم PDF (مع أزرار القراءة والتعديل والحذف والدعم للـ VIP) */}
+              <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
+                <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-emerald-600" /> ملازم الـ PDF ({filteredBooklets.length})
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {filteredBooklets.map((book: any) => (
+                    <div key={book.id} className="p-3.5 bg-white rounded-xl border flex items-center justify-between shadow-sm flex-wrap gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold text-xs flex-shrink-0">📄</div>
+                        <div>
+                          <span className="font-bold text-slate-800 text-xs block">{book.title}</span>
+                          <span className="text-[10px] text-slate-500">{book.size} {book.isVip ? '• ⭐ VIP' : ''}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {book.isVip && !isVipActive && isAdmin === false ? (
+                          <button onClick={() => setVipModalItem(book)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
+                        ) : (
+                          <button onClick={() => setActivePdfUrl(book.url)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">قراءة 👁️</button>
+                        )}
+                        {isAdmin && (
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => {
+                              setEditingBookletItem({ subjectId: currentSub.id, booklet: book });
+                              setEditBookletTitle(book.title);
+                              setEditBookletUrl(book.url);
+                              setEditBookletVip(book.isVip || false);
+                            }} className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg text-xs cursor-pointer" title="تعديل الملزمة"><Edit3 className="w-3.5 h-3.5" /></button>
+                            <button onClick={async () => {
+                              const updatedBooks = currentSub.booklets.filter((b: any) => b.id !== book.id);
+                              await updateDoc(doc(db, 'subjects', currentSub.id), { booklets: updatedBooks });
+                              setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, booklets: updatedBooks} : s));
+                            }} className="text-rose-500 p-1 cursor-pointer"><Trash2 className="w-4 h-4" /></button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {isAdmin && (
+                  <div className="bg-white p-3 rounded-xl border space-y-2 mt-2">
+                    <h5 className="text-xs font-black text-slate-800">➕ إضافة ملزمة PDF جديدة (مع دعم VIP):</h5>
+                    <input type="text" value={newBookletTitle} onChange={(e) => setNewBookletTitle(e.target.value)} placeholder="عنوان الملزمة..." className="w-full px-3 py-1.5 border rounded-lg text-xs font-bold" />
+                    <input type="text" value={newBookletUrl} onChange={(e) => setNewBookletUrl(e.target.value)} placeholder="رابط الـ PDF..." className="w-full px-3 py-1.5 border rounded-lg text-xs font-mono" />
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-1 text-xs font-bold cursor-pointer">
+                        <input type="checkbox" checked={newBookletVip} onChange={(e) => setNewBookletVip(e.target.checked)} className="w-4 h-4" />
+                        <span>ملزمة خاصة بـ VIP؟</span>
+                      </label>
+                    </div>
+                    <button onClick={async () => {
+                      if (!newBookletTitle || !newBookletUrl) return;
+                      const newBookObj = { id: Date.now().toString(), title: newBookletTitle, url: newBookletUrl, size: '15 MB', isVip: newBookletVip };
+                      const updatedBooks = [...(currentSub.booklets || []), newBookObj];
+                      await updateDoc(doc(db, 'subjects', currentSub.id), { booklets: updatedBooks });
+                      setSubjects(subjects.map(s => s.id === currentSub.id ? {...s, booklets: updatedBooks} : s));
+                      setNewBookletTitle(''); setNewBookletUrl(''); setNewBookletVip(false);
+                      setSuccessMessage('تم نشر الملزمة بنجاح!');
+                      setTimeout(() => setSuccessMessage(null), 3000);
+                    }} className="w-full py-2 bg-emerald-600 text-white rounded-lg text-xs font-bold cursor-pointer">+ نشر الملزمة</button>
                   </div>
                 )}
               </div>
