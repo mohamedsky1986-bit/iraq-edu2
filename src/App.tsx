@@ -176,17 +176,34 @@ export function App() {
       price: '25,000 دينار عراقي / شهرياً',
       mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
       transferPhone: '07701234567 (زين كاش / آسياسيل)',
+      whatsappPhone: '',
       telegram: MY_TELEGRAM_LINK
     });
   });
 
+  // تبقى نسخة محلية للعرض السريع، مع تحميل الإعدادات المشتركة من Firestore حتى تظهر على كل الأجهزة.
   useEffect(() => {
     localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
   }, [vipSettings]);
 
-  const getTelegramUrl = (usernameOrLink: string, text: string) => {
-    let clean = (usernameOrLink || MY_TELEGRAM_LINK).replace('https://t.me/', '').replace('t.me/', '').replace('@', '').trim();
-    return `https://t.me/${clean}?text=${encodeURIComponent(text)}`;
+  useEffect(() => {
+    const loadVipSettings = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'settings', 'vip_config'));
+        if (snap.exists()) setVipSettings((current: any) => ({ ...current, ...snap.data() }));
+      } catch (error) {
+        console.warn('تعذر تحميل إعدادات VIP المشتركة:', error);
+      }
+    };
+    loadVipSettings();
+  }, []);
+
+  const getWhatsAppUrl = (rawPhone: string, message: string) => {
+    let phone = (rawPhone || '').replace(/\D/g, '');
+    if (phone.startsWith('00')) phone = phone.slice(2);
+    if (phone.startsWith('07')) phone = `964${phone.slice(1)}`;
+    else if (phone.startsWith('7') && phone.length === 10) phone = `964${phone}`;
+    return phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : '';
   };
 
   const [vipModalItem, setVipModalItem] = useState<any | null>(null);
@@ -1325,12 +1342,25 @@ export function App() {
               )}
             </div>
 
-            <button 
-              onClick={() => { setVipModalItem(null); setShowPublicChatModal(true); }}
-              className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm cursor-pointer"
-            >
-              <Globe className="w-5 h-5" /> إرسال إيصال الدفع عبر الدردشة العامة 🌐
-            </button>
+            {(() => {
+              const studentMessage = `السلام عليكم، أريد تفعيل اشتراك VIP في منصة النابغة التعليمية.%0Aاسم الطالب: ${loggedStudent?.name || 'غير محدد'}%0Aاسم المستخدم: ${loggedStudent?.username || 'غير محدد'}%0Aالمرحلة: ${loggedStudent?.stage || 'غير محددة'}%0Aالمحتوى المطلوب: ${vipModalItem?.title || 'اشتراك VIP'}%0Aالسعر: ${vipSettings.price}%0Aسأرسل صورة إيصال الدفع هنا، يرجى تفعيل الاشتراك بعد التحقق.`;
+              const whatsappUrl = getWhatsAppUrl(vipSettings.whatsappPhone, decodeURIComponent(studentMessage));
+              return whatsappUrl ? (
+                <a
+                  href={whatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={() => setVipModalItem(null)}
+                  className="w-full py-3.5 bg-green-600 hover:bg-green-700 text-white font-black rounded-2xl shadow-lg flex items-center justify-center gap-2 text-sm text-center"
+                >
+                  <MessageCircle className="w-5 h-5" /> مراسلة الإدارة عبر واتساب وإرسال الإيصال
+                </a>
+              ) : (
+                <div className="w-full p-3 bg-amber-50 border border-amber-200 text-amber-800 rounded-xl text-xs font-bold text-center">
+                  لم يُضف رقم واتساب الإدارة بعد. يرجى التواصل مع إدارة المنصة.
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
@@ -2429,14 +2459,32 @@ export function App() {
         {activeTab === 'vipSettings' && isAdmin && (
           <div className="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-6 shadow-xl border space-y-4 w-full">
             <h2 className="text-xl font-black text-slate-900">إعدادات أسعار وطرق دفع VIP</h2>
-            <form onSubmit={(e) => {
+            <form onSubmit={async (e) => {
               e.preventDefault();
-              setSuccessMessage('تم حفظ إعدادات VIP بنجاح!');
-              setTimeout(() => setSuccessMessage(null), 3000);
+              try {
+                await setDoc(doc(db, 'settings', 'vip_config'), {
+                  price: vipSettings.price || '',
+                  mastercard: vipSettings.mastercard || '',
+                  transferPhone: vipSettings.transferPhone || '',
+                  whatsappPhone: (vipSettings.whatsappPhone || '').replace(/\s+/g, '')
+                }, { merge: true });
+                localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
+                setSuccessMessage('تم حفظ إعدادات VIP ورقم واتساب سحابياً، وستظهر للطلاب على الموبايل والحاسبة.');
+              } catch (error) {
+                alert('تعذر حفظ إعدادات VIP سحابياً. تحقق من اتصال الإنترنت وصلاحيات Firestore.');
+              }
+              setTimeout(() => setSuccessMessage(null), 4000);
             }} className="space-y-3 max-w-lg">
-              <input type="text" value={vipSettings.price} onChange={(e) => setVipSettings({...vipSettings, price: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" placeholder="السعر" />
-              <input type="text" value={vipSettings.mastercard} onChange={(e) => setVipSettings({...vipSettings, mastercard: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono" placeholder="الماستر كارد" />
-              <button type="submit" className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ التغييرات</button>
+              <label className="block text-xs font-bold text-slate-700">سعر الاشتراك</label>
+              <input type="text" value={vipSettings.price} onChange={(e) => setVipSettings({...vipSettings, price: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" placeholder="مثال: 10,000 دينار عراقي / سنوياً" />
+              <label className="block text-xs font-bold text-slate-700">رقم الماستر كارد / المصرف</label>
+              <input type="text" value={vipSettings.mastercard} onChange={(e) => setVipSettings({...vipSettings, mastercard: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono" placeholder="الماستر كارد / المصرف" />
+              <label className="block text-xs font-bold text-slate-700">رقم التحويل (زين كاش / آسياسيل)</label>
+              <input type="text" value={vipSettings.transferPhone || ''} onChange={(e) => setVipSettings({...vipSettings, transferPhone: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono" placeholder="رقم التحويل" />
+              <label className="block text-xs font-bold text-slate-700">رقم واتساب الإدارة لاستلام طلبات VIP</label>
+              <input type="tel" dir="ltr" inputMode="tel" value={vipSettings.whatsappPhone || ''} onChange={(e) => setVipSettings({...vipSettings, whatsappPhone: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono text-left" placeholder="9647XXXXXXXXX أو 07XXXXXXXXX" />
+              <p className="text-[11px] text-slate-500 leading-relaxed">اكتب رقمك العراقي مع مفتاح الدولة 964، أو اكتبه بصيغة 07… وسيحوّله النظام تلقائياً. لا تكتب علامة + أو مسافات عند الحاجة.</p>
+              <button type="submit" className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ إعدادات الدفع ورقم واتساب سحابياً</button>
             </form>
           </div>
         )}
