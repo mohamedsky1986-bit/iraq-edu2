@@ -10,6 +10,45 @@ import {
 
 const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
 
+// مخزن محلي IndexedDB لحفظ المناهج كاملة على الجهاز للعمل دون إنترنت
+const OFFLINE_DB_NAME = 'nabigha-offline-v1';
+const OFFLINE_STORE_NAME = 'app-cache';
+const openOfflineDB = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
+  if (typeof indexedDB === 'undefined') return reject(new Error('IndexedDB غير متاح'));
+  const request = indexedDB.open(OFFLINE_DB_NAME, 1);
+  request.onupgradeneeded = () => {
+    const database = request.result;
+    if (!database.objectStoreNames.contains(OFFLINE_STORE_NAME)) database.createObjectStore(OFFLINE_STORE_NAME);
+  };
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => reject(request.error || new Error('تعذر فتح التخزين المحلي'));
+});
+const saveSubjectsOffline = async (subjectsToSave: any[]) => {
+  try {
+    const database = await openOfflineDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = database.transaction(OFFLINE_STORE_NAME, 'readwrite');
+      tx.objectStore(OFFLINE_STORE_NAME).put(subjectsToSave, 'subjects');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+    database.close();
+  } catch (error) { console.warn('تعذر حفظ المناهج دون إنترنت:', error); }
+};
+const readSubjectsOffline = async (): Promise<any[]> => {
+  try {
+    const database = await openOfflineDB();
+    const value = await new Promise<any>((resolve, reject) => {
+      const request = database.transaction(OFFLINE_STORE_NAME, 'readonly').objectStore(OFFLINE_STORE_NAME).get('subjects');
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
+    database.close();
+    return Array.isArray(value) ? value : [];
+  } catch (error) { return []; }
+};
+
 const safeGetStorage = (key: string, fallback: any) => {
   try {
     const item = localStorage.getItem(key);
@@ -224,36 +263,51 @@ export function App() {
 
   // جلب البيانات مع دعم العمل بدون إنترنت
   useEffect(() => {
+    let cancelled = false;
     async function loadDataOfflineFirst() {
+      // اعرض آخر نسخة محفوظة فوراً، ثم حدّثها من Firebase إذا توفر الإنترنت
+      const idbSubjects = await readSubjectsOffline();
+      const localSubjects = safeGetStorage('nabough_cached_subjects', []);
+      const firstCached = idbSubjects.length ? idbSubjects : localSubjects;
+      if (!cancelled && firstCached.length) setSubjects(firstCached);
       try {
         const subsSnap = await getDocs(collection(db, 'subjects'));
         if (!subsSnap.empty) {
           const loadedSubs = subsSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (Number.isFinite(a.displayOrder) ? a.displayOrder : 999999) - (Number.isFinite(b.displayOrder) ? b.displayOrder : 999999));
-          setSubjects(loadedSubs);
-          localStorage.setItem('nabough_cached_subjects', JSON.stringify(loadedSubs));
+          if (!cancelled) setSubjects(loadedSubs);
+          try { localStorage.setItem('nabough_cached_subjects', JSON.stringify(loadedSubs)); } catch (storageError) { console.warn('Local storage quota; IndexedDB remains available:', storageError); }
+          await saveSubjectsOffline(loadedSubs);
         }
-
         const studsSnap = await getDocs(collection(db, 'students'));
         if (!studsSnap.empty) {
           const loadedStuds = studsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setStudentsList(loadedStuds);
-          localStorage.setItem('nabough_cached_students', JSON.stringify(loadedStuds));
+          if (!cancelled) setStudentsList(loadedStuds);
+          try { localStorage.setItem('nabough_cached_students', JSON.stringify(loadedStuds)); } catch (storageError) { console.warn('Students cache quota:', storageError); }
         }
       } catch (e) {
-        const cachedSubs = safeGetStorage('nabough_cached_subjects', []);
+        const cachedSubs = firstCached;
         const cachedStuds = safeGetStorage('nabough_cached_students', []);
-        if (cachedSubs.length > 0) setSubjects(cachedSubs);
-        if (cachedStuds.length > 0) setStudentsList(cachedStuds);
+        if (!cancelled && cachedSubs.length) setSubjects(cachedSubs);
+        if (!cancelled && cachedStuds.length) setStudentsList(cachedStuds);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     }
     loadDataOfflineFirst();
-
-    const safetyTimer = setTimeout(() => {
-      setIsLoading(false);
-    }, 800);
-    return () => clearTimeout(safetyTimer);
+    const refreshWhenOnline = async () => {
+      try {
+        const fresh = await getDocs(collection(db, 'subjects'));
+        if (!fresh.empty && !cancelled) {
+          const latest = fresh.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (Number.isFinite(a.displayOrder) ? a.displayOrder : 999999) - (Number.isFinite(b.displayOrder) ? b.displayOrder : 999999));
+          setSubjects(latest);
+          try { localStorage.setItem('nabough_cached_subjects', JSON.stringify(latest)); } catch (storageError) { console.warn('Local storage quota:', storageError); }
+          await saveSubjectsOffline(latest);
+        }
+      } catch (error) { console.warn('تعذر تحديث المحتوى بعد عودة الإنترنت:', error); }
+    };
+    window.addEventListener('online', refreshWhenOnline);
+    const safetyTimer = setTimeout(() => { if (!cancelled) setIsLoading(false); }, 1200);
+    return () => { cancelled = true; clearTimeout(safetyTimer); window.removeEventListener('online', refreshWhenOnline); };
   }, []);
 
   const [subjects, setSubjects] = useState<any[]>(() => {
@@ -510,7 +564,7 @@ export function App() {
       await updateDoc(doc(db, 'subjects', subjectId), { quizzes: updatedQuizzes });
       const updatedSubs = subjects.map(sub => sub.id === subjectId ? { ...sub, quizzes: updatedQuizzes } : sub);
       setSubjects(updatedSubs);
-      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
       setQuizTitle('');
       setQuizIsVip(false);
       setQuizDurationMinutes(15);
@@ -551,7 +605,7 @@ export function App() {
       await updateDoc(doc(db, 'subjects', subjectId), { quizzes: updatedQuizzes });
       const updatedSubs = subjects.map((sub: any) => sub.id === subjectId ? { ...sub, quizzes: updatedQuizzes } : sub);
       setSubjects(updatedSubs);
-      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
       setHtmlQuizTitle('');
       setHtmlQuizContent('');
       setHtmlQuizFileName('');
@@ -573,7 +627,7 @@ export function App() {
       await updateDoc(doc(db, 'subjects', subjectId), { quizzes: updatedQuizzes });
       const updatedSubs = subjects.map((sub: any) => sub.id === subjectId ? { ...sub, quizzes: updatedQuizzes } : sub);
       setSubjects(updatedSubs);
-      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
       setSuccessMessage('تم تحديث الاختبار بنجاح.');
       setTimeout(() => setSuccessMessage(null), 2500);
     } catch (error) {
@@ -672,7 +726,7 @@ export function App() {
       await updateDoc(doc(db, 'subjects', subjectId), { [listKey]: list });
       const updatedSubs = subjects.map(s => s.id === subjectId ? { ...s, [listKey]: list } : s);
       setSubjects(updatedSubs);
-      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
     } catch(e) {}
   };
 
@@ -691,7 +745,7 @@ export function App() {
     try {
       await Promise.all(orderedList.map(sub => updateDoc(doc(db, 'subjects', sub.id), { displayOrder: sub.displayOrder })));
       setSubjects(orderedList);
-      localStorage.setItem('nabough_cached_subjects', JSON.stringify(orderedList));
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(orderedList)); void saveSubjectsOffline(orderedList);
     } catch (e) {
       alert('ما تم حفظ ترتيب المواد. تأكد من الاتصال بالإنترنت ثم حاول مرة ثانية.');
     }
@@ -823,7 +877,7 @@ export function App() {
                   await updateDoc(doc(db, 'subjects', editingQuizItem.subjectId), { quizzes: updatedQuizzes });
                   const updatedSubs = subjects.map(s => s.id === editingQuizItem.subjectId ? {...s, quizzes: updatedQuizzes} : s);
                   setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
                   setEditingQuizItem(null);
                   setSuccessMessage('تم تحديث الامتحان وتعديل الأسئلة بنجاح!');
                   setTimeout(() => setSuccessMessage(null), 3000);
@@ -848,7 +902,7 @@ export function App() {
             <label className="block text-xs font-bold">نص الشرح</label><textarea value={editNoteContent} onChange={e => setEditNoteContent(e.target.value)} className="w-full border rounded-xl p-2 text-sm min-h-28" />
             <label className="block text-xs font-bold">رابط الصورة (اختياري)</label><input value={editNoteImage} onChange={e => setEditNoteImage(e.target.value)} className="w-full border rounded-xl p-2 text-sm" />
             <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editNoteVip} onChange={e => setEditNoteVip(e.target.checked)} /> شرح خاص بـ VIP</label>
-            <div className="flex gap-2 pt-2"><button onClick={async () => { const subjectId = selectedSubjectId; if (!subjectId) { alert('لم يتم تحديد المادة. أغلق النافذة وافتح التعديل من داخل المادة مرة أخرى.'); return; } try { const subjectRef = doc(db, 'subjects', subjectId); const freshSnap = await getDoc(subjectRef); if (!freshSnap.exists()) { alert('لم نعثر على المادة في قاعدة البيانات.'); return; } const freshSubject = freshSnap.data() as any; const freshNotes = Array.isArray(freshSubject.notes) ? freshSubject.notes : []; if (!freshNotes.some((n: any) => n.id === editingNoteId)) { alert('لم نعثر على الشرح المطلوب. حدّث الصفحة وافتح التعديل من جديد.'); return; } const updatedNotes = freshNotes.map((n: any) => n.id === editingNoteId ? { ...n, title: editNoteTitle, content: editNoteContent, image: editNoteImage, isVip: editNoteVip } : n); await updateDoc(subjectRef, { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === subjectId ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); setEditingNoteId(null); setSuccessMessage('تم حفظ تعديل الشرح في قاعدة البيانات بنجاح'); setTimeout(() => setSuccessMessage(null), 3000); } catch (e: any) { console.error('Note update failed:', e); alert('فشل حفظ التعديل: ' + (e?.code || e?.message || 'خطأ غير معروف')); } }} className="flex-1 bg-emerald-600 text-white rounded-xl py-2 font-bold text-sm">حفظ التعديل</button><button onClick={() => setEditingNoteId(null)} className="flex-1 bg-slate-200 rounded-xl py-2 font-bold text-sm">إلغاء</button></div>
+            <div className="flex gap-2 pt-2"><button onClick={async () => { const subjectId = selectedSubjectId; if (!subjectId) { alert('لم يتم تحديد المادة. أغلق النافذة وافتح التعديل من داخل المادة مرة أخرى.'); return; } try { const subjectRef = doc(db, 'subjects', subjectId); const freshSnap = await getDoc(subjectRef); if (!freshSnap.exists()) { alert('لم نعثر على المادة في قاعدة البيانات.'); return; } const freshSubject = freshSnap.data() as any; const freshNotes = Array.isArray(freshSubject.notes) ? freshSubject.notes : []; if (!freshNotes.some((n: any) => n.id === editingNoteId)) { alert('لم نعثر على الشرح المطلوب. حدّث الصفحة وافتح التعديل من جديد.'); return; } const updatedNotes = freshNotes.map((n: any) => n.id === editingNoteId ? { ...n, title: editNoteTitle, content: editNoteContent, image: editNoteImage, isVip: editNoteVip } : n); await updateDoc(subjectRef, { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === subjectId ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs); setEditingNoteId(null); setSuccessMessage('تم حفظ تعديل الشرح في قاعدة البيانات بنجاح'); setTimeout(() => setSuccessMessage(null), 3000); } catch (e: any) { console.error('Note update failed:', e); alert('فشل حفظ التعديل: ' + (e?.code || e?.message || 'خطأ غير معروف')); } }} className="flex-1 bg-emerald-600 text-white rounded-xl py-2 font-bold text-sm">حفظ التعديل</button><button onClick={() => setEditingNoteId(null)} className="flex-1 bg-slate-200 rounded-xl py-2 font-bold text-sm">إلغاء</button></div>
           </div>
         </div>
       )}
@@ -899,7 +953,7 @@ export function App() {
                   await updateDoc(doc(db, 'subjects', editingInteractiveItem.subjectId), { notes: updatedNotes });
                   const updatedSubs = subjects.map(s => s.id === editingInteractiveItem.subjectId ? {...s, notes: updatedNotes} : s);
                   setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
                   setEditingInteractiveItem(null);
                   setSuccessMessage('تم تعديل السؤال التفاعلي بنجاح!');
                   setTimeout(() => setSuccessMessage(null), 3000);
@@ -950,7 +1004,7 @@ export function App() {
                   await updateDoc(doc(db, 'subjects', editingVideoItem.subjectId), { videos: updatedVideos });
                   const updatedSubs = subjects.map(s => s.id === editingVideoItem.subjectId ? {...s, videos: updatedVideos} : s);
                   setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
                   setEditingVideoItem(null);
                   setSuccessMessage('تم تعديل الفيديو بنجاح!');
                   setTimeout(() => setSuccessMessage(null), 3000);
@@ -1000,7 +1054,7 @@ export function App() {
                   await updateDoc(doc(db, 'subjects', editingBookletItem.subjectId), { booklets: updatedBooklets });
                   const updatedSubs = subjects.map(s => s.id === editingBookletItem.subjectId ? {...s, booklets: updatedBooklets} : s);
                   setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
                   setEditingBookletItem(null);
                   setSuccessMessage('تم تعديل الملزمة بنجاح!');
                   setTimeout(() => setSuccessMessage(null), 3000);
@@ -1814,7 +1868,7 @@ export function App() {
                         </div>
                         {isAdmin && <div className="flex items-center gap-1">
                           <button onClick={() => { setEditingNoteId(note.id); setEditNoteTitle(note.title || ''); setEditNoteContent(note.content || ''); setEditNoteImage(note.image || ''); setEditNoteVip(!!note.isVip); }} className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-bold">✏️ تعديل الشرح</button>
-                          <button onClick={async () => { if (!window.confirm('تأكيد حذف الشرح وكل الأسئلة التفاعلية التابعة له؟')) return; const updatedNotes = (currentSub.notes || []).filter((n: any) => n.id !== note.id); try { await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === currentSub.id ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); setSuccessMessage('تم حذف الشرح بنجاح'); setTimeout(() => setSuccessMessage(null), 2500); } catch (e) { alert('تعذر حذف الشرح، حاول مرة أخرى'); } }} className="px-2 py-1 bg-rose-50 text-rose-700 rounded-lg text-[10px] font-bold">🗑 حذف</button>
+                          <button onClick={async () => { if (!window.confirm('تأكيد حذف الشرح وكل الأسئلة التفاعلية التابعة له؟')) return; const updatedNotes = (currentSub.notes || []).filter((n: any) => n.id !== note.id); try { await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === currentSub.id ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs); setSuccessMessage('تم حذف الشرح بنجاح'); setTimeout(() => setSuccessMessage(null), 2500); } catch (e) { alert('تعذر حذف الشرح، حاول مرة أخرى'); } }} className="px-2 py-1 bg-rose-50 text-rose-700 rounded-lg text-[10px] font-bold">🗑 حذف</button>
                         </div>}
                       </div>
 
@@ -2165,7 +2219,7 @@ export function App() {
                                     await updateDoc(doc(db, 'subjects', currentSub.id), { quizzes: updatedQuizzes });
                                     const updatedSubs = subjects.map((sub: any) => sub.id === currentSub.id ? { ...sub, quizzes: updatedQuizzes } : sub);
                                     setSubjects(updatedSubs);
-                                    localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                                    localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
                                   } catch (error) { alert('تعذر حذف الاختبار.'); }
                                 }} className="text-rose-500 p-1" title="حذف"><Trash2 className="w-4 h-4" /></button>
                               </>
@@ -2183,7 +2237,7 @@ export function App() {
                                   await updateDoc(doc(db, 'subjects', currentSub.id), { quizzes: updatedQuizzes });
                                   const updatedSubs = subjects.map((sub: any) => sub.id === currentSub.id ? {...sub, quizzes: updatedQuizzes} : sub);
                                   setSubjects(updatedSubs);
-                                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
                                 }} className="text-rose-500 p-1"><Trash2 className="w-4 h-4" /></button>
                               </>
                             )}
