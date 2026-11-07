@@ -228,7 +228,7 @@ export function App() {
       try {
         const subsSnap = await getDocs(collection(db, 'subjects'));
         if (!subsSnap.empty) {
-          const loadedSubs = subsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          const loadedSubs = subsSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (Number.isFinite(a.displayOrder) ? a.displayOrder : 999999) - (Number.isFinite(b.displayOrder) ? b.displayOrder : 999999));
           setSubjects(loadedSubs);
           localStorage.setItem('nabough_cached_subjects', JSON.stringify(loadedSubs));
         }
@@ -310,6 +310,7 @@ export function App() {
   const [editingInteractiveItem, setEditingInteractiveItem] = useState<{subjectId: string, noteId: string, questionIndex: number, questionObj: any} | null>(null);
   const [editInteractiveQText, setEditInteractiveQText] = useState('');
   const [editInteractiveCorrect, setEditInteractiveCorrect] = useState('');
+  const [editInteractiveOptions, setEditInteractiveOptions] = useState<string[]>(['', '', '', '']);
 
   const getEmbedPdfUrl = (url: string) => {
     if (!url) return '';
@@ -686,8 +687,14 @@ export function App() {
     list[index] = list[targetIndex];
     list[targetIndex] = temp;
 
-    setSubjects(list);
-    localStorage.setItem('nabough_cached_subjects', JSON.stringify(list));
+    const orderedList = list.map((sub, orderIndex) => ({ ...sub, displayOrder: orderIndex }));
+    try {
+      await Promise.all(orderedList.map(sub => updateDoc(doc(db, 'subjects', sub.id), { displayOrder: sub.displayOrder })));
+      setSubjects(orderedList);
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(orderedList));
+    } catch (e) {
+      alert('ما تم حفظ ترتيب المواد. تأكد من الاتصال بالإنترنت ثم حاول مرة ثانية.');
+    }
   };
 
   const filteredSubjects = subjects.filter(s => {
@@ -832,6 +839,20 @@ export function App() {
         </div>
       )}
 
+      {editingNoteId && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-5 shadow-2xl relative space-y-3 text-right">
+            <button onClick={() => setEditingNoteId(null)} className="absolute top-3 left-3 w-8 h-8 bg-slate-100 rounded-full">✕</button>
+            <h3 className="text-lg font-black border-b pb-2">تعديل الشرح أو التعليل</h3>
+            <label className="block text-xs font-bold">عنوان الشرح</label><input value={editNoteTitle} onChange={e => setEditNoteTitle(e.target.value)} className="w-full border rounded-xl p-2 text-sm" />
+            <label className="block text-xs font-bold">نص الشرح</label><textarea value={editNoteContent} onChange={e => setEditNoteContent(e.target.value)} className="w-full border rounded-xl p-2 text-sm min-h-28" />
+            <label className="block text-xs font-bold">رابط الصورة (اختياري)</label><input value={editNoteImage} onChange={e => setEditNoteImage(e.target.value)} className="w-full border rounded-xl p-2 text-sm" />
+            <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editNoteVip} onChange={e => setEditNoteVip(e.target.checked)} /> شرح خاص بـ VIP</label>
+            <div className="flex gap-2 pt-2"><button onClick={async () => { const targetSub = subjects.find(s => s.id === currentSub?.id); if (!targetSub) return; const updatedNotes = (targetSub.notes || []).map((n: any) => n.id === editingNoteId ? { ...n, title: editNoteTitle, content: editNoteContent, image: editNoteImage, isVip: editNoteVip } : n); try { await updateDoc(doc(db, 'subjects', targetSub.id), { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === targetSub.id ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); setEditingNoteId(null); setSuccessMessage('تم تعديل الشرح بنجاح'); setTimeout(() => setSuccessMessage(null), 2500); } catch (e) { alert('تعذر حفظ التعديل'); } }} className="flex-1 bg-emerald-600 text-white rounded-xl py-2 font-bold text-sm">حفظ التعديل</button><button onClick={() => setEditingNoteId(null)} className="flex-1 bg-slate-200 rounded-xl py-2 font-bold text-sm">إلغاء</button></div>
+          </div>
+        </div>
+      )}
+
       {/* نافذة تعديل السؤال التفاعلي التابع للشرح */}
       {editingInteractiveItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
@@ -846,6 +867,10 @@ export function App() {
                 <label className="block text-xs font-bold text-slate-700 mb-1">نص السؤال</label>
                 <input type="text" value={editInteractiveQText} onChange={(e) => setEditInteractiveQText(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
               </div>
+              {(editingInteractiveItem.questionObj?.type === 'mcq' || editingInteractiveItem.questionObj?.type === 'true_false') && <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700 mb-1">الاختيارات (تگدر تعدل كل اختيار)</label>
+                {editInteractiveOptions.map((opt, idx) => <input key={idx} type="text" value={opt} onChange={(e) => setEditInteractiveOptions(prev => prev.map((v, i) => i === idx ? e.target.value : v))} placeholder={`الخيار ${idx + 1}`} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />)}
+              </div>}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">الإجابة الصحيحة</label>
                 <input type="text" value={editInteractiveCorrect} onChange={(e) => setEditInteractiveCorrect(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold text-emerald-900 bg-emerald-50" />
@@ -862,7 +887,8 @@ export function App() {
                     newIqList[editingInteractiveItem.questionIndex] = {
                       ...newIqList[editingInteractiveItem.questionIndex],
                       q: editInteractiveQText,
-                      correct: editInteractiveCorrect
+                      correct: editInteractiveCorrect,
+                      ...((editingInteractiveItem.questionObj?.type === 'mcq' || editingInteractiveItem.questionObj?.type === 'true_false') ? { options: editInteractiveOptions } : {})
                     };
                     return { ...n, interactiveQuestions: newIqList };
                   }
@@ -1786,6 +1812,10 @@ export function App() {
                           <h5 className="font-black text-slate-900 text-xs sm:text-sm">💡 {note.title}</h5>
                           {note.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
                         </div>
+                        {isAdmin && <div className="flex items-center gap-1">
+                          <button onClick={() => { setEditingNoteId(note.id); setEditNoteTitle(note.title || ''); setEditNoteContent(note.content || ''); setEditNoteImage(note.image || ''); setEditNoteVip(!!note.isVip); }} className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-bold">✏️ تعديل الشرح</button>
+                          <button onClick={async () => { if (!window.confirm('تأكيد حذف الشرح وكل الأسئلة التفاعلية التابعة له؟')) return; const updatedNotes = (currentSub.notes || []).filter((n: any) => n.id !== note.id); try { await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === currentSub.id ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); setSuccessMessage('تم حذف الشرح بنجاح'); setTimeout(() => setSuccessMessage(null), 2500); } catch (e) { alert('تعذر حذف الشرح، حاول مرة أخرى'); } }} className="px-2 py-1 bg-rose-50 text-rose-700 rounded-lg text-[10px] font-bold">🗑 حذف</button>
+                        </div>}
                       </div>
 
                       <p className="text-xs text-slate-700 leading-relaxed">{note.content}</p>
@@ -1819,6 +1849,7 @@ export function App() {
                                         setEditingInteractiveItem({ subjectId: currentSub.id, noteId: note.id, questionIndex: iqIdx, questionObj: iq });
                                         setEditInteractiveQText(iq.q);
                                         setEditInteractiveCorrect(iq.correct);
+                                        setEditInteractiveOptions(Array.isArray(iq.options) ? [...iq.options] : ['', '', '', '']);
                                       }} className="p-1 bg-indigo-50 text-indigo-600 rounded text-[10px] cursor-pointer" title="تعديل السؤال"><Edit3 className="w-3 h-3" /></button>
                                       
                                       <button onClick={async () => {
