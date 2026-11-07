@@ -218,6 +218,10 @@ export function App() {
     return safeGetStorage('nabough_cached_students', []);
   });
 
+  // بحث وتصفية قائمة الطلبة في لوحة الإدارة فقط (بدون تعديل قاعدة البيانات)
+  const [studentSearchText, setStudentSearchText] = useState('');
+  const [studentStageFilter, setStudentStageFilter] = useState('all');
+
   // جلب البيانات مع دعم العمل بدون إنترنت
   useEffect(() => {
     async function loadDataOfflineFirst() {
@@ -2296,6 +2300,51 @@ export function App() {
             <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
               <Users className="w-5 h-5 text-indigo-600" /> إدارة الطلبة ودرجاتهم وتعديل بياناتهم
             </h2>
+
+            {/* أدوات البحث والتصفية: لا تغيّر بيانات الطلبة أو طريقة إدارتهم */}
+            <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_220px] gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
+              <div className="relative">
+                <input
+                  type="search"
+                  value={studentSearchText}
+                  onChange={(e) => setStudentSearchText(e.target.value)}
+                  placeholder="ابحث باسم الطالب أو اسم المستخدم..."
+                  aria-label="البحث باسم الطالب أو اسم المستخدم"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                />
+              </div>
+              <select
+                value={studentStageFilter}
+                onChange={(e) => setStudentStageFilter(e.target.value)}
+                aria-label="تصفية الطلبة حسب المرحلة"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold text-slate-800 outline-none focus:border-indigo-500"
+              >
+                <option value="all">كل المراحل الدراسية</option>
+                {allStagesList.map((stageOption) => (
+                  <option key={stageOption.id} value={stageOption.name}>{stageOption.name}</option>
+                ))}
+              </select>
+              <div className="sm:col-span-2 flex items-center justify-between gap-2 text-xs font-bold text-slate-600">
+                <span>عدد النتائج: {studentsList.filter((st) => {
+                  const q = studentSearchText.trim().toLocaleLowerCase();
+                  const matchesText = !q ||
+                    String(st.name || '').toLocaleLowerCase().includes(q) ||
+                    String(st.username || '').toLocaleLowerCase().includes(q);
+                  const matchesStage = studentStageFilter === 'all' || String(st.stage || '') === studentStageFilter;
+                  return matchesText && matchesStage;
+                }).length} من {studentsList.length}</span>
+                {(studentSearchText || studentStageFilter !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => { setStudentSearchText(''); setStudentStageFilter('all'); }}
+                    className="rounded-lg bg-white px-3 py-1.5 text-indigo-700 border border-indigo-100 hover:bg-indigo-100"
+                  >
+                    مسح البحث والتصفية
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-right border-collapse min-w-[750px]">
                 <thead>
@@ -2308,7 +2357,14 @@ export function App() {
                   </tr>
                 </thead>
                 <tbody className="divide-y text-xs font-bold text-slate-800">
-                  {studentsList.map((st) => (
+                  {studentsList.filter((st) => {
+                    const q = studentSearchText.trim().toLocaleLowerCase();
+                    const matchesText = !q ||
+                      String(st.name || '').toLocaleLowerCase().includes(q) ||
+                      String(st.username || '').toLocaleLowerCase().includes(q);
+                    const matchesStage = studentStageFilter === 'all' || String(st.stage || '') === studentStageFilter;
+                    return matchesText && matchesStage;
+                  }).map((st) => (
                     <tr key={st.id} className="hover:bg-slate-50">
                       <td className="p-3">
                         <div className="font-black text-slate-900">{st.name}</div>
@@ -2408,6 +2464,20 @@ export function App() {
                       </td>
                     </tr>
                   ))}
+                  {studentsList.filter((st) => {
+                    const q = studentSearchText.trim().toLocaleLowerCase();
+                    const matchesText = !q ||
+                      String(st.name || '').toLocaleLowerCase().includes(q) ||
+                      String(st.username || '').toLocaleLowerCase().includes(q);
+                    const matchesStage = studentStageFilter === 'all' || String(st.stage || '') === studentStageFilter;
+                    return matchesText && matchesStage;
+                  }).length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-sm font-bold text-slate-500">
+                        لا توجد نتائج مطابقة للبحث أو المرحلة المحددة.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
