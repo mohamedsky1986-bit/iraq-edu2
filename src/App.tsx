@@ -63,6 +63,19 @@ const safeGetStorage = (key: string, fallback: any) => {
 
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator === 'undefined' ? true : navigator.onLine);
+
+  // إظهار حالة الاتصال فوراً، دون التأثير على عمل المنصة أو بيانات Firebase
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // تهيئة PWA: ملف manifest ثابت + Service Worker
   useEffect(() => {
@@ -776,6 +789,14 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-1 sm:pt-2">
+      {!isOnline && (
+        <div role="status" className="sticky top-0 z-[60] w-full bg-amber-100 text-amber-900 border-b border-amber-300 px-3 py-2 text-center text-xs sm:text-sm font-bold">
+          <span className="inline-flex items-center justify-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
+            لا يوجد اتصال بالإنترنت — تعرض المنصة المحتوى المحفوظ على هذا الجهاز، وقد لا تعمل الفيديوهات والدردشة والخدمات المباشرة.
+          </span>
+        </div>
+      )}
 
       {/* نافذة تعديل الامتحان للأدمن (مع دعم تعديل السؤال، وتعديل النص والإجابة، وإضافة أسئلة جديدة) */}
       {editingQuizItem && (
