@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { db } from './firebase';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc, where } from 'firebase/firestore';
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
@@ -292,6 +292,24 @@ export function App() {
     return safeGetStorage('nabough_cached_students', []);
   });
 
+  // سجل المحاولات الامتحانية محفوظ في مجموعة مستقلة حتى لا يكبر مستند الطالب مع الوقت.
+  const [examAttempts, setExamAttempts] = useState<any[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const loadExamAttempts = async () => {
+      try {
+        const attemptsQuery = isAdmin
+          ? query(collection(db, 'exam_attempts'))
+          : loggedStudent ? query(collection(db, 'exam_attempts'), where('studentId', '==', loggedStudent.id)) : null;
+        if (!attemptsQuery) { if (!cancelled) setExamAttempts([]); return; }
+        const snap = await getDocs(attemptsQuery);
+        if (!cancelled) setExamAttempts(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || ''))));
+      } catch (error) { console.warn('تعذر تحميل سجل الامتحانات:', error); }
+    };
+    loadExamAttempts();
+    return () => { cancelled = true; };
+  }, [isAdmin, loggedStudent?.id]);
+
   // بحث وتصفية قائمة الطلبة في لوحة الإدارة فقط (بدون تعديل قاعدة البيانات)
   const [studentSearchText, setStudentSearchText] = useState('');
   const [studentStageFilter, setStudentStageFilter] = useState('all');
@@ -360,7 +378,7 @@ export function App() {
 
   const [isChangingStage, setIsChangingStage] = useState<boolean>(false);
 
-  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings' | 'communications'>('curriculum');
+  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings' | 'communications' | 'myResults'>('curriculum');
   const [selectedStage, setSelectedStage] = useState<string>('all'); 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   
@@ -708,25 +726,41 @@ export function App() {
     setQuizResult({ score: finalScore, total: 100, details });
 
     if (loggedStudent) {
-      const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
+      const now = new Date();
+      const nowFormatted = now.toLocaleDateString('ar-IQ', {year: 'numeric', month: '2-digit', day: '2-digit'}) + ' | ' + now.toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
       const device = getDeviceType();
-      const updatedStuds = studentsList.map(st => st.id === loggedStudent.id ? {
-        ...st, 
-        examScore: `${finalScore}/100`, 
-        examDetails: details,
-        lastSeen: nowFormatted,
-        deviceType: device
-      } : st);
-      setStudentsList(updatedStuds);
-      localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
+      const matchingSubject = subjects.find((sub: any) => (sub.quizzes || []).some((qz: any) => qz.id === activeQuiz.id || qz.title === activeQuiz.title));
+      const attempt = {
+        id: `attempt_${Date.now()}`,
+        quizId: activeQuiz.id || '',
+        quizTitle: activeQuiz.title || 'امتحان',
+        subjectId: matchingSubject?.id || selectedSubjectId || '',
+        subjectName: matchingSubject?.name || matchingSubject?.title || 'مادة غير محددة',
+        stage: loggedStudent.stage || '',
+        score: finalScore,
+        total: 100,
+        date: now.toISOString(),
+        dateLabel: nowFormatted,
+        details
+      };
+      const attemptRecord = { ...attempt, studentId: loggedStudent.id, studentName: loggedStudent.name || '', username: loggedStudent.username || '', createdAt: serverTimestamp() };
       try {
+        const attemptRef = await addDoc(collection(db, 'exam_attempts'), attemptRecord);
+        setExamAttempts((current: any[]) => [{ ...attemptRecord, id: attemptRef.id }, ...current]);
+        const currentStudent = studentsList.find((st: any) => st.id === loggedStudent.id) || loggedStudent;
+        const updatedStudent = { ...currentStudent, examScore: `${finalScore}/100`, examDetails: details, lastSeen: nowFormatted, deviceType: device };
+        const updatedStuds = studentsList.some((st: any) => st.id === loggedStudent.id)
+          ? studentsList.map((st: any) => st.id === loggedStudent.id ? updatedStudent : st)
+          : [updatedStudent, ...studentsList];
+        setStudentsList(updatedStuds);
+        setLoggedStudent((current: any) => current?.id === loggedStudent.id ? { ...current, examScore: `${finalScore}/100`, examDetails: details } : current);
+        try { localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds)); } catch (storageError) { console.warn('تعذر تحديث بيانات الطالب محلياً:', storageError); }
         await updateDoc(doc(db, 'students', loggedStudent.id), {
-          examScore: `${finalScore}/100`,
-          examDetails: details,
-          lastSeen: nowFormatted,
-          deviceType: device
+          examScore: `${finalScore}/100`, examDetails: details, lastSeen: nowFormatted, deviceType: device
         });
-      } catch(e) {}
+      } catch(e) {
+        setSuccessMessage('تعذر حفظ محاولة الامتحان في السجل السحابي. تحقق من اتصال الإنترنت وصلاحيات قاعدة البيانات.');
+      }
     }
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
@@ -1284,6 +1318,15 @@ export function App() {
               )}
             </div>
 
+            <div className="border-t pt-4 space-y-3">
+              <h4 className="font-black text-slate-900">السجل الكامل للامتحانات السابقة</h4>
+              {examAttempts.filter((attempt: any) => attempt.studentId === viewingStudentAnswers.id).length > 0 ? examAttempts.filter((attempt: any) => attempt.studentId === viewingStudentAnswers.id).map((attempt: any, aIdx: number) => (
+                <details key={attempt.id || aIdx} className="rounded-xl border border-slate-200 p-3" open={aIdx === 0}>
+                  <summary className="cursor-pointer flex items-center justify-between gap-2 text-xs font-black"><span>{attempt.subjectName || 'مادة غير محددة'} — {attempt.quizTitle || 'امتحان'}<small className="block text-slate-500 font-medium mt-1">{attempt.dateLabel || attempt.date || ''}</small></span><span className="text-emerald-700">{attempt.score}/{attempt.total || 100}</span></summary>
+                  <div className="space-y-2 mt-3">{(attempt.details || []).map((det: any, dIdx: number) => <div key={dIdx} className={`rounded-lg border p-3 text-xs ${det.isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}><b>س{dIdx + 1}: {det.q}</b><div>إجابة الطالب: <b>{det.userAns || 'بدون إجابة'}</b></div><div>الإجابة الصحيحة: <b>{det.correct}</b></div><div className="font-bold">{det.partialScore}/100 {det.isCorrect ? 'قوة / إجابة صحيحة' : 'نقطة تحتاج تقوية'}</div></div>)}</div>
+                </details>
+              )) : <p className="text-xs text-slate-500">لا يوجد سجل تاريخي بعد. النتائج الجديدة ستحفظ تلقائياً هنا.</p>}
+            </div>
             <button onClick={() => setViewingStudentAnswers(null)} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl text-xs">
               إغلاق النافذة
             </button>
@@ -1770,8 +1813,44 @@ export function App() {
         {!isAdmin && announcementItems.filter((a: any) => a.active !== false && (a.stage === 'all' || (loggedStudent && a.stage === loggedStudent.stage))).map((a: any) => (
           <div key={a.id} className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-right shadow-sm"><div className="flex items-start gap-2"><span className="text-lg">📢</span><p className="text-sm font-bold text-amber-900 leading-relaxed">{a.text}</p></div></div>
         ))}
+        {!isAdmin && loggedStudent && (
+          <div className="flex justify-center">
+            <button onClick={() => { setActiveTab('myResults'); setSelectedSubjectId(null); }} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black shadow ${activeTab === 'myResults' ? 'bg-emerald-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}>
+              <Award className="w-4 h-4" /> سجل امتحاناتي ودرجاتي
+            </button>
+          </div>
+        )}
+
         {!isAdmin && vipSettings.telegram && vipSettings.telegram !== 'https://t.me/YourUsername' && (
           <div className="flex justify-center"><a href={vipSettings.telegram} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-4 py-2.5 text-xs font-black shadow"><Send className="w-4 h-4" /> انضم إلى قناة التليجرام</a></div>
+        )}
+
+        {/* سجل الامتحانات والدرجات الخاص بالطالب */}
+        {activeTab === 'myResults' && !isAdmin && loggedStudent && (
+          <section className="space-y-4 text-right">
+            <div className="bg-white rounded-2xl border border-emerald-200 shadow-sm p-4">
+              <div className="flex items-center gap-2"><Award className="w-6 h-6 text-emerald-600" /><h2 className="text-lg font-black">سجل امتحاناتي ودرجاتي</h2></div>
+              <p className="text-xs text-slate-500 mt-1">جميع محاولاتك الامتحانية محفوظة ومرتبة من الأحدث إلى الأقدم.</p>
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <div className="rounded-xl bg-emerald-50 p-3"><div className="text-[11px] text-emerald-700 font-bold">عدد الامتحانات</div><div className="text-2xl font-black text-emerald-800">{examAttempts.length}</div></div>
+                <div className="rounded-xl bg-indigo-50 p-3"><div className="text-[11px] text-indigo-700 font-bold">آخر درجة</div><div className="text-2xl font-black text-indigo-800">{currentLoggedStudentData?.examScore || 'لم يتقدم'}</div></div>
+              </div>
+            </div>
+            {examAttempts.length > 0 ? examAttempts.map((attempt: any, index: number) => (
+              <article key={attempt.id || index} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div><div className="font-black text-slate-900">{attempt.subjectName || 'مادة غير محددة'}</div><div className="text-sm font-bold text-indigo-700 mt-1">{attempt.quizTitle || 'امتحان'}</div><div className="text-[11px] text-slate-500 mt-1">{attempt.dateLabel || (attempt.date ? new Date(attempt.date).toLocaleString('ar-IQ') : '')}</div></div>
+                  <div className={`shrink-0 rounded-xl px-3 py-2 text-lg font-black ${(Number(attempt.score) >= 50) ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{attempt.score}/{attempt.total || 100}</div>
+                </div>
+                <details className="border-t pt-2"><summary className="cursor-pointer text-xs font-black text-indigo-700">عرض إجاباتي والأخطاء ({(attempt.details || []).filter((d: any) => !d.isCorrect).length} خطأ)</summary>
+                  <div className="space-y-2 mt-3">{(attempt.details || []).map((det: any, dIdx: number) => <div key={dIdx} className={`rounded-xl border p-3 text-xs ${det.isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}><div className="font-black">س{dIdx + 1}: {det.q}</div><div className="mt-1">إجابتك: <b>{det.userAns || 'بدون إجابة'}</b></div><div>الإجابة النموذجية: <b>{det.correct}</b></div><div className="font-bold mt-1">{det.partialScore}/100 {det.isCorrect ? '✓ صحيحة' : '✗ تحتاج مراجعة'}</div></div>)}</div>
+                </details>
+              </article>
+            )) : (
+              <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm font-bold text-slate-500">ما عندك امتحانات محفوظة حالياً. من تؤدي أول امتحان راح يظهر هنا تلقائياً.</div>
+            )}
+            <button onClick={() => setActiveTab('curriculum')} className="w-full rounded-xl bg-slate-900 text-white py-3 text-sm font-black">العودة إلى المواد الدراسية</button>
+          </section>
         )}
 
         {/* 1. تبويب المنهج الدراسي */}
@@ -2603,9 +2682,9 @@ export function App() {
                       </td>
 
                       <td className="p-3 text-center space-y-1">
-                        {st.examDetails && (
+                        {(st.examDetails || examAttempts.some((attempt: any) => attempt.studentId === st.id)) && (
                           <button onClick={() => setViewingStudentAnswers(st)} className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer block mx-auto">
-                            🔍 عرض الأخطاء
+                            🔍 الملف الدراسي والامتحانات
                           </button>
                         )}
                         <button onClick={async () => {
