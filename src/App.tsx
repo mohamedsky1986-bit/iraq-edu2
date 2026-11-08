@@ -113,6 +113,10 @@ export function App() {
   const [adminPinInput, setAdminPinInput] = useState<string>('');
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
+  const [adminExamStudent, setAdminExamStudent] = useState<any | null>(null);
+  const [adminExamAttempts, setAdminExamAttempts] = useState<any[]>([]);
+  const [adminExamLoading, setAdminExamLoading] = useState(false);
+  const [adminExamError, setAdminExamError] = useState('');
 
   // نظام الدردشة العامة الفورية
   const [showPublicChatModal, setShowPublicChatModal] = useState<boolean>(false);
@@ -379,6 +383,25 @@ export function App() {
   const [examHistory, setExamHistory] = useState<any[]>([]);
   const [examHistoryLoading, setExamHistoryLoading] = useState(false);
   const [examHistoryError, setExamHistoryError] = useState('');
+
+  const loadAdminStudentExamHistory = async (student: any) => {
+    if (!isAdmin || !student?.id) return;
+    setAdminExamStudent(student);
+    setAdminExamLoading(true);
+    setAdminExamError('');
+    setAdminExamAttempts([]);
+    try {
+      const snap = await getDocs(collection(db, 'exam_attempts'));
+      const rows = snap.docs.map((item: any) => ({ id: item.id, ...item.data() }))
+        .filter((item: any) => item.studentId === student.id)
+        .sort((a: any, b: any) => String(b.attemptedAt || '').localeCompare(String(a.attemptedAt || '')));
+      setAdminExamAttempts(rows);
+    } catch (error) {
+      setAdminExamError('تعذر تحميل سجل هذا الطالب. تحقق من اتصال الإنترنت وصلاحيات قراءة exam_attempts في Firestore.');
+    } finally {
+      setAdminExamLoading(false);
+    }
+  };
 
   const loadStudentExamHistory = async () => {
     if (!loggedStudent?.id) return;
@@ -1333,6 +1356,35 @@ export function App() {
             <button onClick={() => setViewingStudentAnswers(null)} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl text-xs">
               إغلاق النافذة
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* سجل جميع امتحانات الطالب للأدمن */}
+      {adminExamStudent && isAdmin && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[90] flex items-center justify-center p-3">
+          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative space-y-4 text-right">
+            <button onClick={() => { setAdminExamStudent(null); setAdminExamAttempts([]); }} className="absolute top-3 left-3 w-10 h-10 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center"><X className="w-5 h-5" /></button>
+            <div className="border-b pb-3 pl-12">
+              <h3 className="text-lg font-black text-slate-900">الملف الامتحاني الكامل للطالب</h3>
+              <p className="text-xs text-indigo-700 font-bold mt-1">{adminExamStudent.name} · {adminExamStudent.stage}</p>
+              <p className="text-xs text-slate-500 mt-1">آخر درجة محفوظة بالنظام القديم: {adminExamStudent.examScore || 'لا توجد درجة'}</p>
+            </div>
+            {adminExamLoading ? <p className="py-8 text-center text-indigo-700 font-bold">جارٍ تحميل جميع المحاولات...</p> : adminExamError ? <p className="py-6 text-center text-rose-600 text-sm font-bold">{adminExamError}</p> : adminExamAttempts.length === 0 ? <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900">لا توجد محاولات في السجل الجديد لهذا الطالب حتى الآن. إذا كان قد امتحن قبل إضافة سجل المحاولات، فستبقى آخر نتيجة قديمة ظاهرة أعلاه ويمكن مراجعة تفاصيلها من زر «عرض آخر إجابات» في قائمة الطلبة.</div> : (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-indigo-50 p-3"><p className="text-xs text-indigo-700">عدد المحاولات</p><p className="text-2xl font-black text-indigo-900">{adminExamAttempts.length}</p></div>
+                  <div className="rounded-xl bg-emerald-50 p-3"><p className="text-xs text-emerald-700">معدل الدرجات</p><p className="text-2xl font-black text-emerald-900">{Math.round(adminExamAttempts.reduce((sum: number, a: any) => sum + Number(a.score || 0), 0) / adminExamAttempts.length)}%</p></div>
+                </div>
+                {adminExamAttempts.map((attempt: any) => (
+                  <article key={attempt.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2"><div><h4 className="font-black text-sm text-slate-900">{attempt.subjectName || 'مادة غير محددة'} · {attempt.quizTitle || 'امتحان'}</h4><p className="text-[11px] text-slate-500 mt-1">{attempt.attemptedAt ? new Date(attempt.attemptedAt).toLocaleString('ar-IQ') : 'التاريخ غير متوفر'}</p></div><strong className="text-lg text-indigo-700 whitespace-nowrap">{attempt.score ?? 0}/{attempt.total ?? 100}</strong></div>
+                    {Array.isArray(attempt.details) && <details className="border-t pt-2"><summary className="cursor-pointer text-xs font-black text-indigo-700">تفاصيل الإجابات ونقاط القوة والضعف ({attempt.details.length} سؤال)</summary><div className="space-y-2 mt-3">{attempt.details.map((det: any, index: number) => <div key={index} className={`rounded-lg p-2 text-xs border ${det.isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}><p className="font-bold">س{index+1}: {det.q}</p><p className="mt-1">إجابة الطالب: {det.userAns || 'بدون إجابة'}</p><p>الإجابة النموذجية: {det.correct}</p><p className="font-black mt-1">{det.partialScore ?? 0}/100 · {det.isCorrect ? 'نقطة قوة / إجابة صحيحة' : 'نقطة تحتاج إلى مراجعة'}</p></div>)}</div></details>}
+                  </article>
+                ))}
+              </div>
+            )}
+            <button onClick={() => { setAdminExamStudent(null); setAdminExamAttempts([]); }} className="w-full py-3 rounded-xl bg-slate-900 text-white text-sm font-bold">إغلاق الملف</button>
           </div>
         </div>
       )}
@@ -2690,9 +2742,12 @@ export function App() {
                       <td className="p-3 text-center space-y-1">
                         {st.examDetails && (
                           <button onClick={() => setViewingStudentAnswers(st)} className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer block mx-auto">
-                            🔍 عرض الأخطاء
+                            🔍 عرض آخر إجابات
                           </button>
                         )}
+                        <button onClick={() => loadAdminStudentExamHistory(st)} className="px-2 py-1 bg-violet-700 hover:bg-violet-800 text-white rounded text-[10px] font-bold cursor-pointer block mx-auto">
+                          📚 سجل كل الامتحانات والدرجات
+                        </button>
                         <button onClick={async () => {
                           if (window.confirm('حذف هذا الطالب نهائياً؟')) {
                             await deleteDoc(doc(db, 'students', st.id));
