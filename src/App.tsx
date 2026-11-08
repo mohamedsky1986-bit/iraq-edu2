@@ -375,6 +375,24 @@ export function App() {
   const [announcementStage, setAnnouncementStage] = useState('all');
   const [announcementSaving, setAnnouncementSaving] = useState(false);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
+  const [showExamHistory, setShowExamHistory] = useState(false);
+  const [examHistory, setExamHistory] = useState<any[]>([]);
+  const [examHistoryLoading, setExamHistoryLoading] = useState(false);
+  const [examHistoryError, setExamHistoryError] = useState('');
+
+  const loadStudentExamHistory = async () => {
+    if (!loggedStudent?.id) return;
+    setExamHistoryLoading(true); setExamHistoryError(''); setShowExamHistory(true);
+    try {
+      const snap = await getDocs(collection(db, 'exam_attempts'));
+      const rows = snap.docs.map((item: any) => ({ id: item.id, ...item.data() }))
+        .filter((item: any) => item.studentId === loggedStudent.id)
+        .sort((a: any, b: any) => String(b.attemptedAt || '').localeCompare(String(a.attemptedAt || '')));
+      setExamHistory(rows);
+    } catch (error) {
+      setExamHistoryError('تعذر تحميل سجل الامتحانات. تحقق من اتصال الإنترنت وصلاحيات قاعدة البيانات.');
+    } finally { setExamHistoryLoading(false); }
+  };
 
   // إدارة ملفات الاختبارات التفاعلية HTML داخل صفحة المادة
   const [htmlQuizTitle, setHtmlQuizTitle] = useState('');
@@ -734,7 +752,21 @@ export function App() {
           lastSeen: nowFormatted,
           deviceType: device
         });
-      } catch(e) {}
+        const subjectForAttempt = subjects.find((item: any) => item.id === selectedSubjectId);
+        await addDoc(collection(db, 'exam_attempts'), {
+          studentId: loggedStudent.id,
+          studentName: loggedStudent.name || '',
+          studentStage: loggedStudent.stage || '',
+          subjectId: selectedSubjectId || '',
+          subjectName: subjectForAttempt?.name || subjectForAttempt?.title || 'غير محدد',
+          quizId: activeQuiz.id || '',
+          quizTitle: activeQuiz.title || 'امتحان',
+          score: finalScore,
+          total: 100,
+          details,
+          attemptedAt: new Date().toISOString()
+        });
+      } catch(e) { console.warn('تعذر حفظ نسخة سجل الامتحان:', e); }
     }
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
@@ -1786,6 +1818,34 @@ export function App() {
         ))}
         {!isAdmin && vipSettings.telegram && vipSettings.telegram !== 'https://t.me/YourUsername' && (
           <div className="flex justify-center"><a href={vipSettings.telegram} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-4 py-2.5 text-xs font-black shadow"><Send className="w-4 h-4" /> انضم إلى قناة التليجرام</a></div>
+        )}
+
+        {!isAdmin && loggedStudent && (
+          <div className="flex justify-center -mt-1">
+            <button onClick={loadStudentExamHistory} className="w-full max-w-md rounded-2xl bg-gradient-to-r from-indigo-700 to-violet-700 hover:from-indigo-800 hover:to-violet-800 text-white px-5 py-4 shadow-lg flex items-center justify-center gap-3">
+              <Award className="w-6 h-6" />
+              <span className="text-right"><span className="block text-base font-black">امتحاناتي ودرجاتي</span><span className="block text-[11px] text-indigo-100 mt-0.5">عرض جميع الامتحانات والنتائج وتحليل الإجابات</span></span>
+            </button>
+          </div>
+        )}
+
+        {showExamHistory && loggedStudent && (
+          <section className="rounded-2xl border border-indigo-200 bg-white p-4 shadow-md space-y-3 text-right">
+            <div className="flex items-center justify-between gap-2 border-b pb-3">
+              <div><h3 className="font-black text-slate-900 text-base">سجل امتحاناتي ودرجاتي</h3><p className="text-xs text-slate-500 mt-1">{loggedStudent.name} · {loggedStudent.stage}</p></div>
+              <button onClick={() => setShowExamHistory(false)} className="rounded-full bg-slate-100 p-2 text-slate-600" aria-label="إغلاق سجل الامتحانات"><X className="w-4 h-4" /></button>
+            </div>
+            {examHistoryLoading ? <p className="py-6 text-center text-sm font-bold text-indigo-600">جارٍ تحميل سجل امتحاناتك...</p> : examHistoryError ? <p className="py-5 text-center text-sm font-bold text-rose-600">{examHistoryError}</p> : examHistory.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">لا توجد محاولات محفوظة في السجل بعد. ستظهر الامتحانات التي تؤديها بعد تفعيل هذه الإضافة هنا.</p> : (
+              <div className="space-y-3">
+                {examHistory.map((attempt: any) => (
+                  <article key={attempt.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2"><div><h4 className="font-black text-sm text-slate-900">{attempt.subjectName || 'المادة'} · {attempt.quizTitle || 'امتحان'}</h4><p className="text-[11px] text-slate-500 mt-1">{attempt.attemptedAt ? new Date(attempt.attemptedAt).toLocaleString('ar-IQ') : 'التاريخ غير متوفر'}</p></div><strong className="text-lg text-indigo-700 whitespace-nowrap">{attempt.score ?? 0}/{attempt.total ?? 100}</strong></div>
+                    {Array.isArray(attempt.details) && <details className="pt-2 border-t border-slate-200"><summary className="cursor-pointer text-xs font-black text-indigo-700">عرض الإجابات والتفاصيل ({attempt.details.length} سؤال)</summary><div className="space-y-2 mt-3">{attempt.details.map((det: any, index: number) => <div key={index} className={`rounded-lg p-2 text-xs border ${det.isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}><p className="font-bold">س{index+1}: {det.q}</p><p className="mt-1">إجابتك: {det.userAns || 'بدون إجابة'}</p><p>الإجابة الصحيحة: {det.correct}</p><p className="font-black mt-1">{det.partialScore ?? 0}/100 {det.isCorrect ? '✓ صحيحة' : '✕ تحتاج مراجعة'}</p></div>)}</div></details>}
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
         )}
 
         {/* 1. تبويب المنهج الدراسي */}
