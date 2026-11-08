@@ -244,6 +244,28 @@ export function App() {
     loadVipSettings();
   }, []);
 
+  // إعلانات المنصة: قراءة مستقلة لا تغيّر سجلات المواد أو الطلبة.
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'announcements'), (snapshot) => {
+      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      items.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setAnnouncementItems(items);
+    }, (error) => console.warn('تعذر تحميل الإعلانات:', error));
+    return () => unsubscribe();
+  }, []);
+
+  const handleSaveAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!announcementText.trim()) return;
+    setAnnouncementSaving(true);
+    try {
+      await addDoc(collection(db, 'announcements'), { text: announcementText.trim(), stage: announcementStage, active: true, createdAt: serverTimestamp() });
+      setAnnouncementText('');
+      setSuccessMessage('تم نشر الإعلان بنجاح.');
+    } catch (error) { alert('تعذر نشر الإعلان. تحقق من اتصال الإنترنت وصلاحيات Firestore.'); }
+    finally { setAnnouncementSaving(false); }
+  };
+
   const getWhatsAppUrl = (rawPhone: string, message: string) => {
     let phone = (rawPhone || '').replace(/\D/g, '');
     if (phone.startsWith('00')) phone = phone.slice(2);
@@ -338,7 +360,7 @@ export function App() {
 
   const [isChangingStage, setIsChangingStage] = useState<boolean>(false);
 
-  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings'>('curriculum');
+  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings' | 'communications'>('curriculum');
   const [selectedStage, setSelectedStage] = useState<string>('all'); 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   
@@ -346,6 +368,12 @@ export function App() {
 
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfLoadFailed, setPdfLoadFailed] = useState(false);
+  const [announcementItems, setAnnouncementItems] = useState<any[]>([]);
+  const [announcementText, setAnnouncementText] = useState('');
+  const [announcementStage, setAnnouncementStage] = useState('all');
+  const [announcementSaving, setAnnouncementSaving] = useState(false);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
 
   // إدارة ملفات الاختبارات التفاعلية HTML داخل صفحة المادة
@@ -386,6 +414,12 @@ export function App() {
     }
     return url;
   };
+
+  useEffect(() => {
+    if (!activePdfUrl || !pdfLoading) return;
+    const timer = window.setTimeout(() => { setPdfLoading(false); setPdfLoadFailed(true); }, 45000);
+    return () => window.clearTimeout(timer);
+  }, [activePdfUrl, pdfLoading]);
 
   const [quizAnswers, setQuizAnswers] = useState<Record<number, string>>({});
   const [quizResult, setQuizResult] = useState<{score: number, total: number, details: any[]} | null>(null);
@@ -1493,13 +1527,15 @@ export function App() {
                 >
                   <ExternalLink className="w-3.5 h-3.5" /> فتح / تحميل خارجي 📥
                 </a>
-                <button onClick={() => setActivePdfUrl(null)} className="w-9 h-9 bg-rose-600 text-white rounded-full flex items-center justify-center font-bold">
+                <button onClick={() => { setActivePdfUrl(null); setPdfLoading(false); setPdfLoadFailed(false); }} className="w-9 h-9 bg-rose-600 text-white rounded-full flex items-center justify-center font-bold">
                   <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
-            <div className="flex-1 w-full rounded-2xl overflow-hidden bg-slate-100 mt-3">
-              <iframe src={getEmbedPdfUrl(activePdfUrl)} className="w-full h-full border-0"></iframe>
+            <div className="flex-1 w-full rounded-2xl overflow-hidden bg-slate-100 mt-3 relative">
+              {pdfLoading && !pdfLoadFailed && <div className="absolute inset-0 z-10 bg-white/95 flex flex-col items-center justify-center gap-3 text-center p-5"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-700 to-violet-500 text-white flex items-center justify-center text-3xl font-black shadow-lg animate-pulse">ن</div><p className="font-black text-slate-800">يرجى الانتظار، جارٍ تحميل الكتاب</p><p className="text-xs text-slate-500">قد يستغرق فتح الملف بعض الوقت حسب حجمه وسرعة الإنترنت.</p><div className="w-40 h-1.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full w-1/2 bg-indigo-600 animate-pulse rounded-full" /></div></div>}
+              {pdfLoadFailed && <div className="absolute inset-0 z-10 bg-white flex flex-col items-center justify-center gap-3 text-center p-5"><p className="font-bold text-rose-700">تعذر عرض الكتاب داخل المنصة.</p><p className="text-xs text-slate-500">جرّب إعادة التحميل أو افتحه خارج المنصة.</p><button onClick={() => { setPdfLoadFailed(false); setPdfLoading(true); }} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold">إعادة المحاولة</button></div>}
+              <iframe key={activePdfUrl} src={getEmbedPdfUrl(activePdfUrl)} onLoad={() => { setPdfLoading(false); setPdfLoadFailed(false); }} onError={() => { setPdfLoading(false); setPdfLoadFailed(true); }} className="w-full h-full border-0" title="عارض ملف PDF"></iframe>
             </div>
           </div>
         </div>
@@ -1658,6 +1694,9 @@ export function App() {
               <button onClick={() => { setActiveTab('vipSettings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'vipSettings' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800'}`}>
                 <Crown className="w-3.5 h-3.5" /> إعدادات VIP
               </button>
+              <button onClick={() => { setActiveTab('communications'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'communications' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700'}`}>
+                <MessageSquare className="w-3.5 h-3.5" /> الإعلانات والتواصل
+              </button>
               <button onClick={() => { setActiveTab('settings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'settings' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}>
                 <Key className="w-3.5 h-3.5" /> كلمة المرور
               </button>
@@ -1726,6 +1765,14 @@ export function App() {
             )}
           </div>
         </div>
+
+        {/* الإعلانات الموجهة لجميع الطلبة أو لمرحلتهم */}
+        {!isAdmin && announcementItems.filter((a: any) => a.active !== false && (a.stage === 'all' || (loggedStudent && a.stage === loggedStudent.stage))).map((a: any) => (
+          <div key={a.id} className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-right shadow-sm"><div className="flex items-start gap-2"><span className="text-lg">📢</span><p className="text-sm font-bold text-amber-900 leading-relaxed">{a.text}</p></div></div>
+        ))}
+        {!isAdmin && vipSettings.telegram && vipSettings.telegram !== 'https://t.me/YourUsername' && (
+          <div className="flex justify-center"><a href={vipSettings.telegram} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-4 py-2.5 text-xs font-black shadow"><Send className="w-4 h-4" /> انضم إلى قناة التليجرام</a></div>
+        )}
 
         {/* 1. تبويب المنهج الدراسي */}
         {activeTab === 'curriculum' && !selectedSubjectId && (
@@ -2150,7 +2197,7 @@ export function App() {
                         {book.isVip && !isVipActive && isAdmin === false ? (
                           <button onClick={() => setVipModalItem(book)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
                         ) : (
-                          <button onClick={() => setActivePdfUrl(book.url)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">قراءة 👁️</button>
+                          <button onClick={() => { setPdfLoading(true); setPdfLoadFailed(false); setActivePdfUrl(book.url); }} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">قراءة 👁️</button>
                         )}
                         {isAdmin && (
                           <div className="flex items-center gap-1">
@@ -2636,7 +2683,8 @@ export function App() {
                   price: vipSettings.price || '',
                   mastercard: vipSettings.mastercard || '',
                   transferPhone: vipSettings.transferPhone || '',
-                  whatsappPhone: (vipSettings.whatsappPhone || '').replace(/\s+/g, '')
+                  whatsappPhone: (vipSettings.whatsappPhone || '').replace(/\s+/g, ''),
+                  telegram: vipSettings.telegram || ''
                 }, { merge: true });
                 localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
                 setSuccessMessage('تم حفظ إعدادات VIP ورقم واتساب سحابياً، وستظهر للطلاب على الموبايل والحاسبة.');
@@ -2651,11 +2699,31 @@ export function App() {
               <input type="text" value={vipSettings.mastercard} onChange={(e) => setVipSettings({...vipSettings, mastercard: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono" placeholder="الماستر كارد / المصرف" />
               <label className="block text-xs font-bold text-slate-700">رقم التحويل (زين كاش / آسياسيل)</label>
               <input type="text" value={vipSettings.transferPhone || ''} onChange={(e) => setVipSettings({...vipSettings, transferPhone: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono" placeholder="رقم التحويل" />
+              <label className="block text-xs font-bold text-slate-700">رابط قناة التليجرام (يمكن إضافته لاحقاً)</label>
+              <input type="url" dir="ltr" value={vipSettings.telegram || ''} onChange={(e) => setVipSettings({...vipSettings, telegram: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono text-left" placeholder="https://t.me/اسم_القناة" />
               <label className="block text-xs font-bold text-slate-700">رقم واتساب الإدارة لاستلام طلبات VIP</label>
               <input type="tel" dir="ltr" inputMode="tel" value={vipSettings.whatsappPhone || ''} onChange={(e) => setVipSettings({...vipSettings, whatsappPhone: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono text-left" placeholder="9647XXXXXXXXX أو 07XXXXXXXXX" />
               <p className="text-[11px] text-slate-500 leading-relaxed">اكتب رقمك العراقي مع مفتاح الدولة 964، أو اكتبه بصيغة 07… وسيحوّله النظام تلقائياً. لا تكتب علامة + أو مسافات عند الحاجة.</p>
               <button type="submit" className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ إعدادات الدفع ورقم واتساب سحابياً</button>
             </form>
+          </div>
+        )}
+
+        {/* إدارة الإعلانات والتواصل */}
+        {activeTab === 'communications' && isAdmin && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xl border space-y-3">
+              <h2 className="text-xl font-black text-slate-900">إضافة إعلان للطلاب</h2>
+              <form onSubmit={handleSaveAnnouncement} className="space-y-3">
+                <textarea value={announcementText} onChange={e => setAnnouncementText(e.target.value)} rows={3} maxLength={500} placeholder="اكتب الإعلان أو التنبيه هنا..." className="w-full border rounded-xl p-3 text-sm" />
+                <select value={announcementStage} onChange={e => setAnnouncementStage(e.target.value)} className="w-full border rounded-xl p-2 text-sm font-bold"><option value="all">جميع المراحل</option>{allStagesList.map(st => <option key={st.id} value={st.name}>{st.name}</option>)}</select>
+                <button disabled={announcementSaving || !announcementText.trim()} className="w-full rounded-xl bg-sky-600 text-white py-2.5 text-sm font-black disabled:opacity-50">{announcementSaving ? 'جارٍ النشر...' : 'نشر الإعلان'}</button>
+              </form>
+            </div>
+            <div className="bg-white rounded-2xl p-4 shadow-xl border space-y-3"><h3 className="font-black">الإعلانات المنشورة</h3>
+              {announcementItems.length === 0 ? <p className="text-xs text-slate-500">لا توجد إعلانات حالياً.</p> : announcementItems.map((a: any) => <div key={a.id} className="border rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2"><div><p className="text-sm font-bold">{a.text}</p><p className="text-[11px] text-slate-500 mt-1">{a.stage === 'all' ? 'جميع المراحل' : a.stage}</p></div><div className="flex gap-2"><button onClick={async () => { const next = prompt('تعديل نص الإعلان:', a.text); if (next === null || !next.trim()) return; try { await updateDoc(doc(db, 'announcements', a.id), { text: next.trim() }); } catch(e) { alert('تعذر تعديل الإعلان.'); } }} className="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold">تعديل</button><button onClick={async () => { if (!confirm('هل تريد حذف هذا الإعلان؟')) return; try { await deleteDoc(doc(db, 'announcements', a.id)); } catch(e) { alert('تعذر حذف الإعلان.'); } }} className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 text-xs font-bold">حذف</button></div></div>)}
+            </div>
+            <div className="bg-white rounded-2xl p-4 shadow-xl border space-y-2"><h3 className="font-black">زر قناة التليجرام</h3><p className="text-xs text-slate-600">أضف رابط القناة من تبويب إعدادات VIP؛ سيظهر زر الانضمام للطلاب تلقائياً بعد حفظ الرابط.</p><button onClick={() => setActiveTab('vipSettings')} className="px-4 py-2 rounded-xl bg-amber-500 text-white text-xs font-bold">فتح إعدادات الرابط</button></div>
           </div>
         )}
 
