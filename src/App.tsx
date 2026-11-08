@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { db } from './firebase';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc, increment } from 'firebase/firestore';
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
@@ -64,6 +64,85 @@ const safeGetStorage = (key: string, fallback: any) => {
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator === 'undefined' ? true : navigator.onLine);
+
+  // إحصائيات الزوار: معرف عشوائي محلي لا يجمع الاسم أو رقم الهاتف أو بيانات شخصية.
+  const [visitorId] = useState<string>(() => {
+    try {
+      let id = localStorage.getItem('nabough_visitor_id');
+      if (!id) {
+        id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `v_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        localStorage.setItem('nabough_visitor_id', id);
+      }
+      return id;
+    } catch {
+      return `v_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    }
+  });
+  const [visitorStats, setVisitorStats] = useState({ uniqueDevices: 0, totalVisits: 0, activeNow: 0 });
+  const [visitorStatsError, setVisitorStatsError] = useState('');
+  const [platformAnnouncement, setPlatformAnnouncement] = useState({ message: '', active: false });
+  const [announcementDraft, setAnnouncementDraft] = useState('');
+  const [announcementSaving, setAnnouncementSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const recordVisit = async () => {
+      try {
+        const sessionRef = doc(db, 'visitor_sessions', visitorId);
+        const oldSession = await getDoc(sessionRef);
+        await setDoc(sessionRef, {
+          lastSeen: serverTimestamp(),
+          visitCount: increment(1),
+          ...(oldSession.exists() ? {} : { firstSeen: serverTimestamp() })
+        }, { merge: true });
+      } catch (error) {
+        console.warn('تعذر تسجيل زيارة الزائر:', error);
+      }
+    };
+    void recordVisit();
+    const heartbeat = window.setInterval(() => {
+      void setDoc(doc(db, 'visitor_sessions', visitorId), { lastSeen: serverTimestamp() }, { merge: true }).catch(() => {});
+    }, 60_000);
+    return () => { cancelled = true; window.clearInterval(heartbeat); };
+  }, [visitorId]);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const unsubscribe = onSnapshot(collection(db, 'visitor_sessions'), (snapshot) => {
+      const now = Date.now();
+      let visits = 0;
+      let active = 0;
+      snapshot.docs.forEach((item) => {
+        const data = item.data() as any;
+        visits += Number(data.visitCount || 0);
+        const lastSeenMs = data.lastSeen?.toMillis ? data.lastSeen.toMillis() : 0;
+        if (lastSeenMs && now - lastSeenMs <= 5 * 60 * 1000) active += 1;
+      });
+      setVisitorStats({ uniqueDevices: snapshot.size, totalVisits: visits, activeNow: active });
+      setVisitorStatsError('');
+    }, (error) => {
+      console.warn('تعذر تحميل إحصائيات الزوار:', error);
+      setVisitorStatsError('تعذر تحميل الإحصائيات. تحقق من صلاحيات قراءة مجموعة visitor_sessions في Firestore.');
+    });
+    return () => unsubscribe();
+  }, [isAdmin]);
+
+  useEffect(() => {
+    const ref = doc(db, 'settings', 'platform_announcement');
+    const unsubscribe = onSnapshot(ref, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data() as any;
+        setPlatformAnnouncement({ message: String(data.message || ''), active: !!data.active });
+        setAnnouncementDraft(String(data.message || ''));
+      } else {
+        setPlatformAnnouncement({ message: '', active: false });
+        setAnnouncementDraft('');
+      }
+    }, (error) => console.warn('تعذر تحميل إعلان المنصة:', error));
+    return () => unsubscribe();
+  }, []);
 
   // إظهار حالة الاتصال فوراً، دون التأثير على عمل المنصة أو بيانات Firebase
   useEffect(() => {
@@ -338,7 +417,7 @@ export function App() {
 
   const [isChangingStage, setIsChangingStage] = useState<boolean>(false);
 
-  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings'>('curriculum');
+  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings' | 'accessSettings' | 'visitorStats' | 'announcements'>('curriculum');
   // إعدادات مستقلة لصلاحيات الزوار؛ لا تغيّر سجلات المواد أو الطلبة الحالية.
   type GuestAccessSettings = { mode: 'open' | 'login' | 'closed'; lessons: boolean; exams: boolean; grades: boolean; vip: boolean };
   const DEFAULT_GUEST_ACCESS: GuestAccessSettings = { mode: 'open', lessons: true, exams: false, grades: false, vip: false };
@@ -1689,6 +1768,12 @@ export function App() {
               <button onClick={() => { setActiveTab('accessSettings' as any); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === ('accessSettings' as any) ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 border border-sky-200'}`}>
                 <ShieldCheck className="w-3.5 h-3.5" /> صلاحيات الزوار
               </button>
+              <button onClick={() => { setActiveTab('visitorStats'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'visitorStats' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 border border-violet-200'}`}>
+                <Users className="w-3.5 h-3.5" /> إحصائيات الزوار
+              </button>
+              <button onClick={() => { setActiveTab('announcements'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'announcements' ? 'bg-orange-600 text-white' : 'bg-orange-50 text-orange-700 border border-orange-200'}`}>
+                <MessageSquare className="w-3.5 h-3.5" /> الإعلانات والتنبيهات
+              </button>
               <button onClick={() => { setActiveTab('vipSettings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'vipSettings' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800'}`}>
                 <Crown className="w-3.5 h-3.5" /> إعدادات VIP
               </button>
@@ -1705,6 +1790,18 @@ export function App() {
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-2 rounded-xl flex items-center gap-2 text-xs font-bold shadow-sm">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
             <span>{successMessage}</span>
+          </div>
+        </div>
+      )}
+
+      {platformAnnouncement.active && platformAnnouncement.message.trim() && (
+        <div className="w-full px-2 sm:px-4 mt-3">
+          <div className="max-w-7xl mx-auto bg-amber-50 border border-amber-300 text-amber-950 px-4 py-3 rounded-xl flex items-start gap-3 shadow-sm" role="status">
+            <span className="text-xl flex-shrink-0">📢</span>
+            <div className="min-w-0">
+              <div className="text-xs font-black mb-1">إعلان من إدارة منصة النابغة</div>
+              <p className="text-sm font-bold leading-6 whitespace-pre-wrap break-words">{platformAnnouncement.message}</p>
+            </div>
           </div>
         </div>
       )}
@@ -2627,6 +2724,86 @@ export function App() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* إحصائيات الزوار - لوحة مستقلة */}
+        {activeTab === 'visitorStats' && isAdmin && (
+          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl border border-violet-200 space-y-5 w-full">
+            <div>
+              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2"><Users className="w-5 h-5 text-violet-600" /> إحصائيات زوار المنصة</h2>
+              <p className="text-xs text-slate-500 mt-2 leading-6">الأرقام تتحدث تلقائياً. الزائر النشط هو متصفح/جهاز أرسل إشارة خلال آخر 5 دقائق.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-2xl border bg-violet-50 p-4">
+                <div className="text-xs font-bold text-violet-700">الموجودون الآن تقريباً</div>
+                <div className="text-3xl font-black text-violet-900 mt-2 tabular-nums">{visitorStats.activeNow}</div>
+                <div className="text-[11px] text-violet-700 mt-1">زائر نشط خلال آخر 5 دقائق</div>
+              </div>
+              <div className="rounded-2xl border bg-sky-50 p-4">
+                <div className="text-xs font-bold text-sky-700">إجمالي الأجهزة/المتصفحات</div>
+                <div className="text-3xl font-black text-sky-900 mt-2 tabular-nums">{visitorStats.uniqueDevices}</div>
+                <div className="text-[11px] text-sky-700 mt-1">معرّفات متصفح مميزة</div>
+              </div>
+              <div className="rounded-2xl border bg-emerald-50 p-4">
+                <div className="text-xs font-bold text-emerald-700">إجمالي الزيارات</div>
+                <div className="text-3xl font-black text-emerald-900 mt-2 tabular-nums">{visitorStats.totalVisits}</div>
+                <div className="text-[11px] text-emerald-700 mt-1">عدد مرات فتح المنصة المسجلة</div>
+              </div>
+            </div>
+            {visitorStatsError && <p className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl p-3">{visitorStatsError}</p>}
+            <p className="text-[11px] text-slate-500 bg-slate-50 border rounded-xl p-3 leading-6">ملاحظة: هذه أرقام تقريبية للأجهزة والمتصفحات وليست أسماء أشخاص. قد يُحسب الشخص أكثر من مرة إذا استخدم أكثر من جهاز أو حذف بيانات المتصفح. لا يتم جمع الاسم أو رقم الهاتف للزائر غير المسجل.</p>
+          </div>
+        )}
+
+        {/* إدارة إعلانات وتنبيهات المنصة - مستقلة عن صلاحيات الزوار */}
+        {activeTab === 'announcements' && isAdmin && (
+          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl border border-orange-200 space-y-4 w-full">
+            <div>
+              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-orange-600" /> إضافة إعلان أو تنبيه</h2>
+              <p className="text-xs text-slate-500 mt-2">اكتب الإعلان وسيظهر للزوار والطلبة في واجهة المنصة عند تفعيله.</p>
+            </div>
+            <textarea value={announcementDraft} onChange={(e) => setAnnouncementDraft(e.target.value)} rows={4} maxLength={1200} placeholder="اكتب الإعلان أو الملاحظة أو التنبيه هنا..." className="w-full border rounded-xl p-3 text-sm font-bold leading-6" />
+            <div className="flex items-center justify-between text-[11px] text-slate-500">
+              <span>{announcementDraft.length}/1200 حرف</span>
+              <span>{platformAnnouncement.active ? 'الإعلان منشور حالياً' : 'الإعلان غير منشور'}</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button disabled={announcementSaving || !announcementDraft.trim()} onClick={async () => {
+                setAnnouncementSaving(true);
+                try {
+                  await setDoc(doc(db, 'settings', 'platform_announcement'), { message: announcementDraft.trim(), active: true, updatedAt: serverTimestamp() }, { merge: true });
+                  setSuccessMessage('تم نشر الإعلان على المنصة.');
+                } catch (error) {
+                  console.error('Announcement save failed:', error);
+                  alert('تعذر نشر الإعلان. تحقق من اتصال الإنترنت وصلاحيات Firestore.');
+                } finally { setAnnouncementSaving(false); setTimeout(() => setSuccessMessage(null), 3500); }
+              }} className="flex-1 min-w-[140px] py-3 bg-orange-600 text-white rounded-xl text-xs font-black disabled:opacity-50">{announcementSaving ? 'جارٍ النشر...' : 'نشر الإعلان'}</button>
+              <button disabled={announcementSaving} onClick={async () => {
+                setAnnouncementSaving(true);
+                try {
+                  await setDoc(doc(db, 'settings', 'platform_announcement'), { message: announcementDraft.trim(), active: false, updatedAt: serverTimestamp() }, { merge: true });
+                  setSuccessMessage('تم إيقاف عرض الإعلان.');
+                } catch (error) { alert('تعذر إيقاف الإعلان. تحقق من الاتصال وصلاحيات Firestore.'); }
+                finally { setAnnouncementSaving(false); setTimeout(() => setSuccessMessage(null), 3500); }
+              }} className="px-4 py-3 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">إيقاف الإعلان</button>
+              <button disabled={announcementSaving} onClick={async () => {
+                if (!window.confirm('هل تريد حذف نص الإعلان نهائياً؟')) return;
+                setAnnouncementSaving(true);
+                try {
+                  await setDoc(doc(db, 'settings', 'platform_announcement'), { message: '', active: false, updatedAt: serverTimestamp() }, { merge: true });
+                  setAnnouncementDraft('');
+                  setSuccessMessage('تم حذف الإعلان.');
+                } catch (error) { alert('تعذر حذف الإعلان.'); }
+                finally { setAnnouncementSaving(false); setTimeout(() => setSuccessMessage(null), 3500); }
+              }} className="px-4 py-3 bg-rose-50 text-rose-700 rounded-xl text-xs font-bold">حذف الإعلان</button>
+            </div>
+            {platformAnnouncement.active && platformAnnouncement.message.trim() && (
+              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
+                <div className="text-xs font-black text-amber-900 mb-1">معاينة الإعلان المنشور</div>
+                <p className="text-sm font-bold leading-6 whitespace-pre-wrap">{platformAnnouncement.message}</p>
+              </div>
+            )}
           </div>
         )}
 
