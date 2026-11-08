@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { db } from './firebase';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc, where } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc } from 'firebase/firestore';
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
@@ -292,24 +292,6 @@ export function App() {
     return safeGetStorage('nabough_cached_students', []);
   });
 
-  // سجل المحاولات الامتحانية محفوظ في مجموعة مستقلة حتى لا يكبر مستند الطالب مع الوقت.
-  const [examAttempts, setExamAttempts] = useState<any[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    const loadExamAttempts = async () => {
-      try {
-        const attemptsQuery = isAdmin
-          ? query(collection(db, 'exam_attempts'))
-          : loggedStudent ? query(collection(db, 'exam_attempts'), where('studentId', '==', loggedStudent.id)) : null;
-        if (!attemptsQuery) { if (!cancelled) setExamAttempts([]); return; }
-        const snap = await getDocs(attemptsQuery);
-        if (!cancelled) setExamAttempts(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || ''))));
-      } catch (error) { console.warn('تعذر تحميل سجل الامتحانات:', error); }
-    };
-    loadExamAttempts();
-    return () => { cancelled = true; };
-  }, [isAdmin, loggedStudent?.id]);
-
   // بحث وتصفية قائمة الطلبة في لوحة الإدارة فقط (بدون تعديل قاعدة البيانات)
   const [studentSearchText, setStudentSearchText] = useState('');
   const [studentStageFilter, setStudentStageFilter] = useState('all');
@@ -378,7 +360,7 @@ export function App() {
 
   const [isChangingStage, setIsChangingStage] = useState<boolean>(false);
 
-  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings' | 'communications' | 'myResults'>('curriculum');
+  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings' | 'communications'>('curriculum');
   const [selectedStage, setSelectedStage] = useState<string>('all'); 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   
@@ -435,7 +417,7 @@ export function App() {
 
   useEffect(() => {
     if (!activePdfUrl || !pdfLoading) return;
-    const timer = window.setTimeout(() => { setPdfLoading(false); setPdfLoadFailed(true); }, 45000);
+    const timer = window.setTimeout(() => { setPdfLoading(false); setPdfLoadFailed(true); }, 12000);
     return () => window.clearTimeout(timer);
   }, [activePdfUrl, pdfLoading]);
 
@@ -455,6 +437,14 @@ export function App() {
   const [editNoteContent, setEditNoteContent] = useState('');
   const [editNoteImage, setEditNoteImage] = useState('');
   const [editNoteVip, setEditNoteVip] = useState(false);
+  // إعدادات تنسيق الشروحات والأسئلة والأجوبة الجديدة
+  const [noteFontSize, setNoteFontSize] = useState('17');
+  const [noteTextColor, setNoteTextColor] = useState('#334155');
+  const [noteTitleColor, setNoteTitleColor] = useState('#0f172a');
+  const [questionFontSize, setQuestionFontSize] = useState('16');
+  const [questionTextColor, setQuestionTextColor] = useState('#1e293b');
+  const [answerTextColor, setAnswerTextColor] = useState('#047857');
+  const [contentBold, setContentBold] = useState(false);
 
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editStudentName, setEditStudentName] = useState('');
@@ -726,41 +716,25 @@ export function App() {
     setQuizResult({ score: finalScore, total: 100, details });
 
     if (loggedStudent) {
-      const now = new Date();
-      const nowFormatted = now.toLocaleDateString('ar-IQ', {year: 'numeric', month: '2-digit', day: '2-digit'}) + ' | ' + now.toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
+      const nowFormatted = new Date().toLocaleDateString('ar-IQ', {month: 'numeric', day: 'numeric'}) + ' | ' + new Date().toLocaleTimeString('ar-IQ', {hour: '2-digit', minute:'2-digit'});
       const device = getDeviceType();
-      const matchingSubject = subjects.find((sub: any) => (sub.quizzes || []).some((qz: any) => qz.id === activeQuiz.id || qz.title === activeQuiz.title));
-      const attempt = {
-        id: `attempt_${Date.now()}`,
-        quizId: activeQuiz.id || '',
-        quizTitle: activeQuiz.title || 'امتحان',
-        subjectId: matchingSubject?.id || selectedSubjectId || '',
-        subjectName: matchingSubject?.name || matchingSubject?.title || 'مادة غير محددة',
-        stage: loggedStudent.stage || '',
-        score: finalScore,
-        total: 100,
-        date: now.toISOString(),
-        dateLabel: nowFormatted,
-        details
-      };
-      const attemptRecord = { ...attempt, studentId: loggedStudent.id, studentName: loggedStudent.name || '', username: loggedStudent.username || '', createdAt: serverTimestamp() };
+      const updatedStuds = studentsList.map(st => st.id === loggedStudent.id ? {
+        ...st, 
+        examScore: `${finalScore}/100`, 
+        examDetails: details,
+        lastSeen: nowFormatted,
+        deviceType: device
+      } : st);
+      setStudentsList(updatedStuds);
+      localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds));
       try {
-        const attemptRef = await addDoc(collection(db, 'exam_attempts'), attemptRecord);
-        setExamAttempts((current: any[]) => [{ ...attemptRecord, id: attemptRef.id }, ...current]);
-        const currentStudent = studentsList.find((st: any) => st.id === loggedStudent.id) || loggedStudent;
-        const updatedStudent = { ...currentStudent, examScore: `${finalScore}/100`, examDetails: details, lastSeen: nowFormatted, deviceType: device };
-        const updatedStuds = studentsList.some((st: any) => st.id === loggedStudent.id)
-          ? studentsList.map((st: any) => st.id === loggedStudent.id ? updatedStudent : st)
-          : [updatedStudent, ...studentsList];
-        setStudentsList(updatedStuds);
-        setLoggedStudent((current: any) => current?.id === loggedStudent.id ? { ...current, examScore: `${finalScore}/100`, examDetails: details } : current);
-        try { localStorage.setItem('nabough_cached_students', JSON.stringify(updatedStuds)); } catch (storageError) { console.warn('تعذر تحديث بيانات الطالب محلياً:', storageError); }
         await updateDoc(doc(db, 'students', loggedStudent.id), {
-          examScore: `${finalScore}/100`, examDetails: details, lastSeen: nowFormatted, deviceType: device
+          examScore: `${finalScore}/100`,
+          examDetails: details,
+          lastSeen: nowFormatted,
+          deviceType: device
         });
-      } catch(e) {
-        setSuccessMessage('تعذر حفظ محاولة الامتحان في السجل السحابي. تحقق من اتصال الإنترنت وصلاحيات قاعدة البيانات.');
-      }
+      } catch(e) {}
     }
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
@@ -989,9 +963,15 @@ export function App() {
             <h3 className="text-lg font-black border-b pb-2">تعديل الشرح أو التعليل</h3>
             <label className="block text-xs font-bold">عنوان الشرح</label><input value={editNoteTitle} onChange={e => setEditNoteTitle(e.target.value)} className="w-full border rounded-xl p-2 text-sm" />
             <label className="block text-xs font-bold">نص الشرح</label><textarea value={editNoteContent} onChange={e => setEditNoteContent(e.target.value)} className="w-full border rounded-xl p-2 text-sm min-h-28" />
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-xl bg-slate-50 border p-3">
+              <label className="text-xs font-bold">حجم النص<select value={noteFontSize} onChange={e => setNoteFontSize(e.target.value)} className="mt-1 w-full border rounded-lg p-2"><option value="15">صغير</option><option value="17">متوسط</option><option value="19">كبير</option><option value="22">كبير جداً</option><option value="25">ضخم</option></select></label>
+              <label className="text-xs font-bold">لون النص<input type="color" value={noteTextColor} onChange={e => setNoteTextColor(e.target.value)} className="mt-1 w-full h-9" /></label>
+              <label className="text-xs font-bold">لون العنوان<input type="color" value={noteTitleColor} onChange={e => setNoteTitleColor(e.target.value)} className="mt-1 w-full h-9" /></label>
+              <label className="col-span-2 sm:col-span-3 flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={contentBold} onChange={e => setContentBold(e.target.checked)} /> نص عريض</label>
+            </div>
             <label className="block text-xs font-bold">رابط الصورة (اختياري)</label><input value={editNoteImage} onChange={e => setEditNoteImage(e.target.value)} className="w-full border rounded-xl p-2 text-sm" />
             <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editNoteVip} onChange={e => setEditNoteVip(e.target.checked)} /> شرح خاص بـ VIP</label>
-            <div className="flex gap-2 pt-2"><button onClick={async () => { const subjectId = selectedSubjectId; if (!subjectId) { alert('لم يتم تحديد المادة. أغلق النافذة وافتح التعديل من داخل المادة مرة أخرى.'); return; } try { const subjectRef = doc(db, 'subjects', subjectId); const freshSnap = await getDoc(subjectRef); if (!freshSnap.exists()) { alert('لم نعثر على المادة في قاعدة البيانات.'); return; } const freshSubject = freshSnap.data() as any; const freshNotes = Array.isArray(freshSubject.notes) ? freshSubject.notes : []; if (!freshNotes.some((n: any) => n.id === editingNoteId)) { alert('لم نعثر على الشرح المطلوب. حدّث الصفحة وافتح التعديل من جديد.'); return; } const updatedNotes = freshNotes.map((n: any) => n.id === editingNoteId ? { ...n, title: editNoteTitle, content: editNoteContent, image: editNoteImage, isVip: editNoteVip } : n); await updateDoc(subjectRef, { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === subjectId ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs); setEditingNoteId(null); setSuccessMessage('تم حفظ تعديل الشرح في قاعدة البيانات بنجاح'); setTimeout(() => setSuccessMessage(null), 3000); } catch (e: any) { console.error('Note update failed:', e); alert('فشل حفظ التعديل: ' + (e?.code || e?.message || 'خطأ غير معروف')); } }} className="flex-1 bg-emerald-600 text-white rounded-xl py-2 font-bold text-sm">حفظ التعديل</button><button onClick={() => setEditingNoteId(null)} className="flex-1 bg-slate-200 rounded-xl py-2 font-bold text-sm">إلغاء</button></div>
+            <div className="flex gap-2 pt-2"><button onClick={async () => { const subjectId = selectedSubjectId; if (!subjectId) { alert('لم يتم تحديد المادة. أغلق النافذة وافتح التعديل من داخل المادة مرة أخرى.'); return; } try { const subjectRef = doc(db, 'subjects', subjectId); const freshSnap = await getDoc(subjectRef); if (!freshSnap.exists()) { alert('لم نعثر على المادة في قاعدة البيانات.'); return; } const freshSubject = freshSnap.data() as any; const freshNotes = Array.isArray(freshSubject.notes) ? freshSubject.notes : []; if (!freshNotes.some((n: any) => n.id === editingNoteId)) { alert('لم نعثر على الشرح المطلوب. حدّث الصفحة وافتح التعديل من جديد.'); return; } const updatedNotes = freshNotes.map((n: any) => n.id === editingNoteId ? { ...n, title: editNoteTitle, content: editNoteContent, image: editNoteImage, isVip: editNoteVip, fontSize: `${noteFontSize}px`, textColor: noteTextColor, titleColor: noteTitleColor, contentBold } : n); await updateDoc(subjectRef, { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === subjectId ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs); setEditingNoteId(null); setSuccessMessage('تم حفظ تعديل الشرح في قاعدة البيانات بنجاح'); setTimeout(() => setSuccessMessage(null), 3000); } catch (e: any) { console.error('Note update failed:', e); alert('فشل حفظ التعديل: ' + (e?.code || e?.message || 'خطأ غير معروف')); } }} className="flex-1 bg-emerald-600 text-white rounded-xl py-2 font-bold text-sm">حفظ التعديل</button><button onClick={() => setEditingNoteId(null)} className="flex-1 bg-slate-200 rounded-xl py-2 font-bold text-sm">إلغاء</button></div>
           </div>
         </div>
       )}
@@ -1318,15 +1298,6 @@ export function App() {
               )}
             </div>
 
-            <div className="border-t pt-4 space-y-3">
-              <h4 className="font-black text-slate-900">السجل الكامل للامتحانات السابقة</h4>
-              {examAttempts.filter((attempt: any) => attempt.studentId === viewingStudentAnswers.id).length > 0 ? examAttempts.filter((attempt: any) => attempt.studentId === viewingStudentAnswers.id).map((attempt: any, aIdx: number) => (
-                <details key={attempt.id || aIdx} className="rounded-xl border border-slate-200 p-3" open={aIdx === 0}>
-                  <summary className="cursor-pointer flex items-center justify-between gap-2 text-xs font-black"><span>{attempt.subjectName || 'مادة غير محددة'} — {attempt.quizTitle || 'امتحان'}<small className="block text-slate-500 font-medium mt-1">{attempt.dateLabel || attempt.date || ''}</small></span><span className="text-emerald-700">{attempt.score}/{attempt.total || 100}</span></summary>
-                  <div className="space-y-2 mt-3">{(attempt.details || []).map((det: any, dIdx: number) => <div key={dIdx} className={`rounded-lg border p-3 text-xs ${det.isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}><b>س{dIdx + 1}: {det.q}</b><div>إجابة الطالب: <b>{det.userAns || 'بدون إجابة'}</b></div><div>الإجابة الصحيحة: <b>{det.correct}</b></div><div className="font-bold">{det.partialScore}/100 {det.isCorrect ? 'قوة / إجابة صحيحة' : 'نقطة تحتاج تقوية'}</div></div>)}</div>
-                </details>
-              )) : <p className="text-xs text-slate-500">لا يوجد سجل تاريخي بعد. النتائج الجديدة ستحفظ تلقائياً هنا.</p>}
-            </div>
             <button onClick={() => setViewingStudentAnswers(null)} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl text-xs">
               إغلاق النافذة
             </button>
@@ -1577,8 +1548,8 @@ export function App() {
             </div>
             <div className="flex-1 w-full rounded-2xl overflow-hidden bg-slate-100 mt-3 relative">
               {pdfLoading && !pdfLoadFailed && <div className="absolute inset-0 z-10 bg-white/95 flex flex-col items-center justify-center gap-3 text-center p-5"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-700 to-violet-500 text-white flex items-center justify-center text-3xl font-black shadow-lg animate-pulse">ن</div><p className="font-black text-slate-800">يرجى الانتظار، جارٍ تحميل الكتاب</p><p className="text-xs text-slate-500">قد يستغرق فتح الملف بعض الوقت حسب حجمه وسرعة الإنترنت.</p><div className="w-40 h-1.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full w-1/2 bg-indigo-600 animate-pulse rounded-full" /></div></div>}
-              {pdfLoadFailed && <div className="absolute inset-0 z-10 bg-white flex flex-col items-center justify-center gap-3 text-center p-5"><p className="font-bold text-rose-700">تعذر عرض الكتاب داخل المنصة.</p><p className="text-xs text-slate-500">جرّب إعادة التحميل أو افتحه خارج المنصة.</p><button onClick={() => { setPdfLoadFailed(false); setPdfLoading(true); }} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold">إعادة المحاولة</button></div>}
-              <iframe key={activePdfUrl} src={getEmbedPdfUrl(activePdfUrl)} onLoad={() => { setPdfLoading(false); setPdfLoadFailed(false); }} onError={() => { setPdfLoading(false); setPdfLoadFailed(true); }} className="w-full h-full border-0" title="عارض ملف PDF"></iframe>
+              {pdfLoadFailed && <div className="absolute inset-0 z-10 bg-white flex flex-col items-center justify-center gap-3 text-center p-5"><p className="font-bold text-rose-700">تعذر عرض الكتاب داخل المنصة.</p><p className="text-sm text-slate-600 max-w-md">مصدر هذا الكتاب قد يمنع عرضه داخل المنصة. تگدر تفتحه من الرابط الخارجي أو تحاول مرة ثانية. المشكلة من استضافة الملف وليست من حسابك.</p><div className="flex flex-wrap justify-center gap-2"><a href={activePdfUrl} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold">فتح الكتاب خارج المنصة</a><button onClick={() => { setPdfLoadFailed(false); setPdfLoading(true); }} className="px-4 py-2 rounded-xl bg-slate-200 text-slate-800 text-xs font-bold">إعادة المحاولة</button></div></div>}
+              {!pdfLoadFailed && <iframe key={activePdfUrl} src={getEmbedPdfUrl(activePdfUrl)} onLoad={() => { setPdfLoading(false); setPdfLoadFailed(false); }} onError={() => { setPdfLoading(false); setPdfLoadFailed(true); }} className="w-full h-full border-0" title="عارض ملف PDF"></iframe>}
             </div>
           </div>
         </div>
@@ -1813,44 +1784,8 @@ export function App() {
         {!isAdmin && announcementItems.filter((a: any) => a.active !== false && (a.stage === 'all' || (loggedStudent && a.stage === loggedStudent.stage))).map((a: any) => (
           <div key={a.id} className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-right shadow-sm"><div className="flex items-start gap-2"><span className="text-lg">📢</span><p className="text-sm font-bold text-amber-900 leading-relaxed">{a.text}</p></div></div>
         ))}
-        {!isAdmin && loggedStudent && (
-          <div className="flex justify-center">
-            <button onClick={() => { setActiveTab('myResults'); setSelectedSubjectId(null); }} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black shadow ${activeTab === 'myResults' ? 'bg-emerald-700 text-white' : 'bg-emerald-600 hover:bg-emerald-700 text-white'}`}>
-              <Award className="w-4 h-4" /> سجل امتحاناتي ودرجاتي
-            </button>
-          </div>
-        )}
-
         {!isAdmin && vipSettings.telegram && vipSettings.telegram !== 'https://t.me/YourUsername' && (
           <div className="flex justify-center"><a href={vipSettings.telegram} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-4 py-2.5 text-xs font-black shadow"><Send className="w-4 h-4" /> انضم إلى قناة التليجرام</a></div>
-        )}
-
-        {/* سجل الامتحانات والدرجات الخاص بالطالب */}
-        {activeTab === 'myResults' && !isAdmin && loggedStudent && (
-          <section className="space-y-4 text-right">
-            <div className="bg-white rounded-2xl border border-emerald-200 shadow-sm p-4">
-              <div className="flex items-center gap-2"><Award className="w-6 h-6 text-emerald-600" /><h2 className="text-lg font-black">سجل امتحاناتي ودرجاتي</h2></div>
-              <p className="text-xs text-slate-500 mt-1">جميع محاولاتك الامتحانية محفوظة ومرتبة من الأحدث إلى الأقدم.</p>
-              <div className="grid grid-cols-2 gap-2 mt-3">
-                <div className="rounded-xl bg-emerald-50 p-3"><div className="text-[11px] text-emerald-700 font-bold">عدد الامتحانات</div><div className="text-2xl font-black text-emerald-800">{examAttempts.length}</div></div>
-                <div className="rounded-xl bg-indigo-50 p-3"><div className="text-[11px] text-indigo-700 font-bold">آخر درجة</div><div className="text-2xl font-black text-indigo-800">{currentLoggedStudentData?.examScore || 'لم يتقدم'}</div></div>
-              </div>
-            </div>
-            {examAttempts.length > 0 ? examAttempts.map((attempt: any, index: number) => (
-              <article key={attempt.id || index} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div><div className="font-black text-slate-900">{attempt.subjectName || 'مادة غير محددة'}</div><div className="text-sm font-bold text-indigo-700 mt-1">{attempt.quizTitle || 'امتحان'}</div><div className="text-[11px] text-slate-500 mt-1">{attempt.dateLabel || (attempt.date ? new Date(attempt.date).toLocaleString('ar-IQ') : '')}</div></div>
-                  <div className={`shrink-0 rounded-xl px-3 py-2 text-lg font-black ${(Number(attempt.score) >= 50) ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{attempt.score}/{attempt.total || 100}</div>
-                </div>
-                <details className="border-t pt-2"><summary className="cursor-pointer text-xs font-black text-indigo-700">عرض إجاباتي والأخطاء ({(attempt.details || []).filter((d: any) => !d.isCorrect).length} خطأ)</summary>
-                  <div className="space-y-2 mt-3">{(attempt.details || []).map((det: any, dIdx: number) => <div key={dIdx} className={`rounded-xl border p-3 text-xs ${det.isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}><div className="font-black">س{dIdx + 1}: {det.q}</div><div className="mt-1">إجابتك: <b>{det.userAns || 'بدون إجابة'}</b></div><div>الإجابة النموذجية: <b>{det.correct}</b></div><div className="font-bold mt-1">{det.partialScore}/100 {det.isCorrect ? '✓ صحيحة' : '✗ تحتاج مراجعة'}</div></div>)}</div>
-                </details>
-              </article>
-            )) : (
-              <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm font-bold text-slate-500">ما عندك امتحانات محفوظة حالياً. من تؤدي أول امتحان راح يظهر هنا تلقائياً.</div>
-            )}
-            <button onClick={() => setActiveTab('curriculum')} className="w-full rounded-xl bg-slate-900 text-white py-3 text-sm font-black">العودة إلى المواد الدراسية</button>
-          </section>
         )}
 
         {/* 1. تبويب المنهج الدراسي */}
@@ -2010,16 +1945,16 @@ export function App() {
                     <div key={note.id} className="p-4 bg-white rounded-2xl border shadow-sm space-y-3 relative">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
-                          <h5 className="font-black text-slate-900 text-xs sm:text-sm">💡 {note.title}</h5>
+                          <h5 className="font-black text-xs sm:text-base" style={{ color: note.titleColor || '#0f172a', fontSize: note.titleFontSize || '18px' }}>💡 {note.title}</h5>
                           {note.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
                         </div>
                         {isAdmin && <div className="flex items-center gap-1">
-                          <button onClick={() => { setEditingNoteId(note.id); setEditNoteTitle(note.title || ''); setEditNoteContent(note.content || ''); setEditNoteImage(note.image || ''); setEditNoteVip(!!note.isVip); }} className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-bold">✏️ تعديل الشرح</button>
+                          <button onClick={() => { setEditingNoteId(note.id); setEditNoteTitle(note.title || ''); setEditNoteContent(note.content || ''); setEditNoteImage(note.image || ''); setEditNoteVip(!!note.isVip); setNoteFontSize(String(parseInt(note.fontSize || '17', 10))); setNoteTextColor(note.textColor || '#334155'); setNoteTitleColor(note.titleColor || '#0f172a'); setContentBold(!!note.contentBold); }} className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-bold">✏️ تعديل الشرح</button>
                           <button onClick={async () => { if (!window.confirm('تأكيد حذف الشرح وكل الأسئلة التفاعلية التابعة له؟')) return; const updatedNotes = (currentSub.notes || []).filter((n: any) => n.id !== note.id); try { await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === currentSub.id ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs); setSuccessMessage('تم حذف الشرح بنجاح'); setTimeout(() => setSuccessMessage(null), 2500); } catch (e) { alert('تعذر حذف الشرح، حاول مرة أخرى'); } }} className="px-2 py-1 bg-rose-50 text-rose-700 rounded-lg text-[10px] font-bold">🗑 حذف</button>
                         </div>}
                       </div>
 
-                      <p className="text-xs text-slate-700 leading-relaxed">{note.content}</p>
+                      <p className="leading-relaxed whitespace-pre-wrap" style={{ color: note.textColor || '#334155', fontSize: note.fontSize || '17px', fontWeight: note.contentBold ? 700 : 400, lineHeight: 1.9 }}>{note.content}</p>
 
                       {note.image && (
                         <div className="mt-2 h-48 w-full rounded-xl overflow-hidden border shadow-sm">
@@ -2043,7 +1978,7 @@ export function App() {
                             return (
                               <div key={iqIdx} className="bg-white p-3 rounded-lg border space-y-2 relative">
                                 <div className="flex items-center justify-between">
-                                  <div className="text-xs font-bold text-slate-900">س: {iq.q}</div>
+                                  <div className="font-bold" style={{ color: iq.questionColor || '#1e293b', fontSize: iq.questionFontSize || '16px', lineHeight: 1.8 }}>س: {iq.q}</div>
                                   {isAdmin && (
                                     <div className="flex items-center gap-1">
                                       <button onClick={() => {
@@ -2070,7 +2005,7 @@ export function App() {
                                     {iq.options.map((opt: string, oIdx: number) => (
                                       <label key={oIdx} className={`flex items-center gap-2 p-2 rounded border cursor-pointer text-xs font-bold transition-all ${userAns === opt ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50'}`}>
                                         <input type="radio" name={`iq_${ansKey}`} checked={userAns === opt} onChange={() => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: opt})} className="hidden" />
-                                        <span>{opt}</span>
+                                        <span style={{ fontSize: iq.questionFontSize || '16px' }}>{opt}</span>
                                       </label>
                                     ))}
                                   </div>
@@ -2090,7 +2025,7 @@ export function App() {
                                   </button>
                                   {isGraded && (
                                     <span className={`text-[10px] font-black ${isCorrect ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                      {isCorrect ? '✅ صحيحة بطل!' : `❌ خطأ (العبارة الصحيحة: ${iq.correct})`}
+                                      {isCorrect ? '✅ صحيحة بطل!' : <span>❌ خطأ (العبارة الصحيحة: <b style={{ color: iq.answerColor || '#047857', fontSize: iq.questionFontSize || '16px' }}>{iq.correct}</b>)</span>}
                                     </span>
                                   )}
                                 </div>
@@ -2107,7 +2042,16 @@ export function App() {
                   <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
                     <h5 className="text-xs font-black text-slate-800">➕ إضافة شرح أو تعليل جديد (مع صورة توضيحية وسؤال تفاعلي):</h5>
                     <input type="text" value={newNoteTitle} onChange={(e) => setNewNoteTitle(e.target.value)} placeholder="العنوان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
-                    <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="النص التفصيلي..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold h-20" />
+                    <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="النص التفصيلي..." className="w-full px-3 py-2 border rounded-xl text-sm font-bold min-h-28" />
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-xl border bg-slate-50 p-3">
+                      <label className="text-xs font-bold">حجم نص الشرح<select value={noteFontSize} onChange={e => setNoteFontSize(e.target.value)} className="mt-1 w-full border rounded-lg p-2 bg-white"><option value="15">صغير</option><option value="17">متوسط</option><option value="19">كبير</option><option value="22">كبير جداً</option><option value="25">ضخم</option></select></label>
+                      <label className="text-xs font-bold">لون نص الشرح<input type="color" value={noteTextColor} onChange={e => setNoteTextColor(e.target.value)} className="mt-1 w-full h-10 border rounded-lg bg-white" /></label>
+                      <label className="text-xs font-bold">لون العنوان<input type="color" value={noteTitleColor} onChange={e => setNoteTitleColor(e.target.value)} className="mt-1 w-full h-10 border rounded-lg bg-white" /></label>
+                      <label className="text-xs font-bold">حجم السؤال والاختيارات<select value={questionFontSize} onChange={e => setQuestionFontSize(e.target.value)} className="mt-1 w-full border rounded-lg p-2 bg-white"><option value="14">صغير</option><option value="16">متوسط</option><option value="18">كبير</option><option value="21">كبير جداً</option></select></label>
+                      <label className="text-xs font-bold">لون السؤال<input type="color" value={questionTextColor} onChange={e => setQuestionTextColor(e.target.value)} className="mt-1 w-full h-10 border rounded-lg bg-white" /></label>
+                      <label className="text-xs font-bold">لون الإجابة الصحيحة<input type="color" value={answerTextColor} onChange={e => setAnswerTextColor(e.target.value)} className="mt-1 w-full h-10 border rounded-lg bg-white" /></label>
+                      <label className="col-span-2 sm:col-span-3 flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={contentBold} onChange={e => setContentBold(e.target.checked)} /> جعل نص الشرح عريضاً</label>
+                    </div>
                     <input type="text" value={newNoteImage} onChange={(e) => setNewNoteImage(e.target.value)} placeholder="رابط صورة توضيحية للشرح (اختياري)..." className="w-full px-3 py-2 border rounded-xl text-xs font-mono" />
                     
                     <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-2">
@@ -2150,7 +2094,8 @@ export function App() {
                           type: interactiveType,
                           q: interactiveQText,
                           options: interactiveType === 'mcq' ? interactiveOptions : (interactiveType === 'true_false' ? ['صح', 'خطأ'] : []),
-                          correct: interactiveType === 'mcq' ? interactiveCorrect : (interactiveType === 'fill' ? interactiveFill : interactiveTf)
+                          correct: interactiveType === 'mcq' ? interactiveCorrect : (interactiveType === 'fill' ? interactiveFill : interactiveTf),
+                          questionFontSize, questionColor: questionTextColor, answerColor: answerTextColor
                         };
                         setInteractiveList([...interactiveList, qObj]);
                         setInteractiveQText(''); setInteractiveCorrect(''); setInteractiveFill('');
@@ -2173,6 +2118,7 @@ export function App() {
                         id: Date.now().toString(), 
                         title: newNoteTitle, 
                         content: newNoteContent, 
+                        fontSize: `${noteFontSize}px`, textColor: noteTextColor, titleColor: noteTitleColor, titleFontSize: '18px', contentBold,
                         image: newNoteImage, 
                         isVip: newNoteVip,
                         interactiveQuestions: interactiveList
@@ -2682,9 +2628,9 @@ export function App() {
                       </td>
 
                       <td className="p-3 text-center space-y-1">
-                        {(st.examDetails || examAttempts.some((attempt: any) => attempt.studentId === st.id)) && (
+                        {st.examDetails && (
                           <button onClick={() => setViewingStudentAnswers(st)} className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer block mx-auto">
-                            🔍 الملف الدراسي والامتحانات
+                            🔍 عرض الأخطاء
                           </button>
                         )}
                         <button onClick={async () => {
