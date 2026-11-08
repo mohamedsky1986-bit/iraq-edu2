@@ -87,42 +87,44 @@ export function App() {
   const [announcementSaving, setAnnouncementSaving] = useState(false);
 
   useEffect(() => {
-    let cancelled = false;
-    const recordVisit = async () => {
+    // تسجيل زيارة واحدة دون قراءة المستند أولاً؛ يقلل طلبات Firebase عند فتح المنصة.
+    let stopped = false;
+    const sessionRef = doc(db, 'visitor_sessions', visitorId);
+    const ping = async (countVisit: boolean) => {
+      if (stopped || document.visibilityState === 'hidden') return;
       try {
-        const sessionRef = doc(db, 'visitor_sessions', visitorId);
-        const oldSession = await getDoc(sessionRef);
         await setDoc(sessionRef, {
           lastSeen: serverTimestamp(),
-          visitCount: increment(1),
-          ...(oldSession.exists() ? {} : { firstSeen: serverTimestamp() })
+          ...(countVisit ? { visitCount: increment(1), firstSeen: serverTimestamp() } : {})
         }, { merge: true });
       } catch (error) {
         console.warn('تعذر تسجيل زيارة الزائر:', error);
       }
     };
-    void recordVisit();
-    const heartbeat = window.setInterval(() => {
-      void setDoc(doc(db, 'visitor_sessions', visitorId), { lastSeen: serverTimestamp() }, { merge: true }).catch(() => {});
-    }, 60_000);
-    return () => { cancelled = true; window.clearInterval(heartbeat); };
+    const startTimer = window.setTimeout(() => { void ping(true); }, 2500);
+    const heartbeat = window.setInterval(() => { void ping(false); }, 300000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void ping(false); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      stopped = true;
+      window.clearTimeout(startTimer);
+      window.clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [visitorId]);
 
 
-
   useEffect(() => {
-    const ref = doc(db, 'settings', 'platform_announcement');
-    const unsubscribe = onSnapshot(ref, (snap) => {
+    let cancelled = false;
+    getDoc(doc(db, 'settings', 'platform_announcement')).then((snap) => {
+      if (cancelled) return;
       if (snap.exists()) {
         const data = snap.data() as any;
         setPlatformAnnouncement({ message: String(data.message || ''), active: !!data.active });
         setAnnouncementDraft(String(data.message || ''));
-      } else {
-        setPlatformAnnouncement({ message: '', active: false });
-        setAnnouncementDraft('');
       }
-    }, (error) => console.warn('تعذر تحميل إعلان المنصة:', error));
-    return () => unsubscribe();
+    }).catch((error) => console.warn('تعذر تحميل إعلان المنصة:', error));
+    return () => { cancelled = true; };
   }, []);
 
   // إظهار حالة الاتصال فوراً، دون التأثير على عمل المنصة أو بيانات Firebase
@@ -164,27 +166,6 @@ export function App() {
   const [isAdmin, setIsAdmin] = useState<boolean> (() => {
     return localStorage.getItem('nabough_is_admin') === 'true';
   });
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    const unsubscribe = onSnapshot(collection(db, 'visitor_sessions'), (snapshot) => {
-      const now = Date.now();
-      let visits = 0;
-      let active = 0;
-      snapshot.docs.forEach((item) => {
-        const data = item.data() as any;
-        visits += Number(data.visitCount || 0);
-        const lastSeenMs = data.lastSeen?.toMillis ? data.lastSeen.toMillis() : 0;
-        if (lastSeenMs && now - lastSeenMs <= 5 * 60 * 1000) active += 1;
-      });
-      setVisitorStats({ uniqueDevices: snapshot.size, totalVisits: visits, activeNow: active });
-      setVisitorStatsError('');
-    }, (error) => {
-      console.warn('تعذر تحميل إحصائيات الزوار:', error);
-      setVisitorStatsError('تعذر تحميل الإحصائيات. تحقق من صلاحيات قراءة مجموعة visitor_sessions في Firestore.');
-    });
-    return () => unsubscribe();
-  }, [isAdmin]);
 
   useEffect(() => {
     localStorage.setItem('nabough_is_admin', isAdmin ? 'true' : 'false');
@@ -317,7 +298,7 @@ export function App() {
     const loadVipSettings = async () => {
       try {
         const snap = await getDoc(doc(db, 'settings', 'vip_config'));
-        if (snap.exists()) setVipSettings((current: any) => ({ ...current, ...snap.data() }));
+        if (snap.exists()) setVipSettings((current: any) => ({ ...current, ...snap.data(), telegram: String(snap.data().telegram || current.telegram || MY_TELEGRAM_LINK) }));
       } catch (error) {
         console.warn('تعذر تحميل إعدادات VIP المشتركة:', error);
       }
@@ -420,6 +401,33 @@ export function App() {
   const [isChangingStage, setIsChangingStage] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings' | 'accessSettings' | 'visitorStats' | 'announcements'>('curriculum');
+  const [visitorStatsRefresh, setVisitorStatsRefresh] = useState(0);
+
+  // تحميل الإحصائيات عند فتح تبويبها فقط، بدلاً من مراقبة كل الزوار طوال وقت تشغيل المنصة.
+  useEffect(() => {
+    if (!isAdmin || activeTab !== 'visitorStats') return;
+    let cancelled = false;
+    const loadVisitorStats = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'visitor_sessions'));
+        const now = Date.now();
+        let visits = 0;
+        let active = 0;
+        snapshot.docs.forEach((item) => {
+          const data = item.data() as any;
+          visits += Number(data.visitCount || 0);
+          const lastSeenMs = data.lastSeen?.toMillis ? data.lastSeen.toMillis() : 0;
+          if (lastSeenMs && now - lastSeenMs <= 5 * 60 * 1000) active += 1;
+        });
+        if (!cancelled) { setVisitorStats({ uniqueDevices: snapshot.size, totalVisits: visits, activeNow: active }); setVisitorStatsError(''); }
+      } catch (error) {
+        console.warn('تعذر تحميل إحصائيات الزوار:', error);
+        if (!cancelled) setVisitorStatsError('تعذر تحميل الإحصائيات. تحقق من صلاحيات قراءة مجموعة visitor_sessions في Firestore.');
+      }
+    };
+    void loadVisitorStats();
+    return () => { cancelled = true; };
+  }, [isAdmin, activeTab, visitorStatsRefresh]);
   // إعدادات مستقلة لصلاحيات الزوار؛ لا تغيّر سجلات المواد أو الطلبة الحالية.
   type GuestAccessSettings = { mode: 'open' | 'login' | 'closed'; lessons: boolean; exams: boolean; grades: boolean; vip: boolean };
   const DEFAULT_GUEST_ACCESS: GuestAccessSettings = { mode: 'open', lessons: true, exams: false, grades: false, vip: false };
@@ -1358,7 +1366,7 @@ export function App() {
                   </div>
                 ))
               ) : (
-                <p className="text-center text-slate-500 py-6 text-sm font-bold">لم يتقدم هذا الطالب لأي امتحان تفاعلي بعد.</p>
+                <p className="text-center text-slate-500 py-6 text-sm font-bold">لا توجد نتيجة امتحان محفوظة لهذا الحساب حتى الآن.</p>
               )}
             </div>
 
@@ -1859,6 +1867,38 @@ export function App() {
             )}
           </div>
         </div>
+
+        {!isAdmin && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {loggedStudent && (
+              <button
+                type="button"
+                onClick={() => setViewingStudentAnswers(currentLoggedStudentData || loggedStudent)}
+                className="w-full flex items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-white p-4 text-right shadow-sm hover:shadow-md"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center text-xl">📝</span>
+                  <span><b className="block text-sm text-slate-900">امتحاناتي ودرجاتي</b><small className="text-xs text-slate-500">عرض آخر درجة ونتائج إجاباتك</small></span>
+                </span>
+                <span className="text-indigo-600 font-black">←</span>
+              </button>
+            )}
+            {(vipSettings.telegram || '').trim() && !(vipSettings.telegram || '').includes('YourUsername') && (
+              <a
+                href={vipSettings.telegram}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-white p-4 text-right shadow-sm hover:shadow-md"
+              >
+                <span className="flex items-center gap-3">
+                  <span className="w-11 h-11 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center text-xl">✈️</span>
+                  <span><b className="block text-sm text-slate-900">قناة تليجرام المنصة</b><small className="text-xs text-slate-500">تابع الإعلانات والتنبيهات</small></span>
+                </span>
+                <span className="text-sky-600 font-black">↗</span>
+              </a>
+            )}
+          </div>
+        )}
 
         {/* 1. تبويب المنهج الدراسي */}
         {activeTab === 'curriculum' && !selectedSubjectId && (
@@ -2695,10 +2735,12 @@ export function App() {
                       </td>
 
                       <td className="p-3 text-center space-y-1">
-                        {st.examDetails && (
+                        {Array.isArray(st.examDetails) && st.examDetails.length > 0 ? (
                           <button onClick={() => setViewingStudentAnswers(st)} className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer block mx-auto">
-                            🔍 عرض الأخطاء
+                            🔍 عرض تفاصيل الامتحان والأخطاء
                           </button>
+                        ) : (
+                          <span className="block text-[10px] text-slate-400 font-bold">لا توجد تفاصيل امتحان محفوظة حالياً</span>
                         )}
                         <button onClick={async () => {
                           if (window.confirm('حذف هذا الطالب نهائياً؟')) {
@@ -2734,7 +2776,8 @@ export function App() {
           <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl border border-violet-200 space-y-5 w-full">
             <div>
               <h2 className="text-xl font-black text-slate-900 flex items-center gap-2"><Users className="w-5 h-5 text-violet-600" /> إحصائيات زوار المنصة</h2>
-              <p className="text-xs text-slate-500 mt-2 leading-6">الأرقام تتحدث تلقائياً. الزائر النشط هو متصفح/جهاز أرسل إشارة خلال آخر 5 دقائق.</p>
+              <p className="text-xs text-slate-500 mt-2 leading-6">يتم تحميل الأرقام عند فتح هذه الصفحة لتخفيف الحمل على المنصة. الزائر النشط هو متصفح/جهاز أرسل إشارة خلال آخر 5 دقائق.</p>
+              <button type="button" onClick={() => setVisitorStatsRefresh((v) => v + 1)} className="mt-2 px-3 py-2 rounded-lg bg-violet-600 text-white text-xs font-bold">تحديث الإحصائيات الآن</button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="rounded-2xl border bg-violet-50 p-4">
@@ -2901,7 +2944,8 @@ export function App() {
                   price: vipSettings.price || '',
                   mastercard: vipSettings.mastercard || '',
                   transferPhone: vipSettings.transferPhone || '',
-                  whatsappPhone: (vipSettings.whatsappPhone || '').replace(/\s+/g, '')
+                  whatsappPhone: (vipSettings.whatsappPhone || '').replace(/\s+/g, ''),
+                  telegram: (vipSettings.telegram || '').trim()
                 }, { merge: true });
                 localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
                 setSuccessMessage('تم حفظ إعدادات VIP ورقم واتساب سحابياً، وستظهر للطلاب على الموبايل والحاسبة.');
@@ -2919,7 +2963,10 @@ export function App() {
               <label className="block text-xs font-bold text-slate-700">رقم واتساب الإدارة لاستلام طلبات VIP</label>
               <input type="tel" dir="ltr" inputMode="tel" value={vipSettings.whatsappPhone || ''} onChange={(e) => setVipSettings({...vipSettings, whatsappPhone: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono text-left" placeholder="9647XXXXXXXXX أو 07XXXXXXXXX" />
               <p className="text-[11px] text-slate-500 leading-relaxed">اكتب رقمك العراقي مع مفتاح الدولة 964، أو اكتبه بصيغة 07… وسيحوّله النظام تلقائياً. لا تكتب علامة + أو مسافات عند الحاجة.</p>
-              <button type="submit" className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ إعدادات الدفع ورقم واتساب سحابياً</button>
+              <label className="block text-xs font-bold text-slate-700">رابط قناة تليجرام المنصة</label>
+              <input type="url" dir="ltr" value={vipSettings.telegram || ''} onChange={(e) => setVipSettings({...vipSettings, telegram: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono text-left" placeholder="https://t.me/اسم_القناة" />
+              <p className="text-[11px] text-slate-500 leading-relaxed">ضع رابط القناة الكامل، ثم احفظ الإعدادات. سيُحفظ الرابط ضمن إعدادات المنصة.</p>
+              <button type="submit" className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ إعدادات VIP والتليجرام وواتساب سحابياً</button>
             </form>
           </div>
         )}
