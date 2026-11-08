@@ -113,10 +113,6 @@ export function App() {
   const [adminPinInput, setAdminPinInput] = useState<string>('');
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
-  const [adminExamStudent, setAdminExamStudent] = useState<any | null>(null);
-  const [adminExamAttempts, setAdminExamAttempts] = useState<any[]>([]);
-  const [adminExamLoading, setAdminExamLoading] = useState(false);
-  const [adminExamError, setAdminExamError] = useState('');
 
   // نظام الدردشة العامة الفورية
   const [showPublicChatModal, setShowPublicChatModal] = useState<boolean>(false);
@@ -248,28 +244,6 @@ export function App() {
     loadVipSettings();
   }, []);
 
-  // إعلانات المنصة: قراءة مستقلة لا تغيّر سجلات المواد أو الطلبة.
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'announcements'), (snapshot) => {
-      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      items.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-      setAnnouncementItems(items);
-    }, (error) => console.warn('تعذر تحميل الإعلانات:', error));
-    return () => unsubscribe();
-  }, []);
-
-  const handleSaveAnnouncement = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!announcementText.trim()) return;
-    setAnnouncementSaving(true);
-    try {
-      await addDoc(collection(db, 'announcements'), { text: announcementText.trim(), stage: announcementStage, active: true, createdAt: serverTimestamp() });
-      setAnnouncementText('');
-      setSuccessMessage('تم نشر الإعلان بنجاح.');
-    } catch (error) { alert('تعذر نشر الإعلان. تحقق من اتصال الإنترنت وصلاحيات Firestore.'); }
-    finally { setAnnouncementSaving(false); }
-  };
-
   const getWhatsAppUrl = (rawPhone: string, message: string) => {
     let phone = (rawPhone || '').replace(/\D/g, '');
     if (phone.startsWith('00')) phone = phone.slice(2);
@@ -364,7 +338,38 @@ export function App() {
 
   const [isChangingStage, setIsChangingStage] = useState<boolean>(false);
 
-  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings' | 'communications'>('curriculum');
+  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings'>('curriculum');
+  // إعدادات مستقلة لصلاحيات الزوار؛ لا تغيّر سجلات المواد أو الطلبة الحالية.
+  type GuestAccessSettings = { mode: 'open' | 'login' | 'closed'; lessons: boolean; exams: boolean; grades: boolean; vip: boolean };
+  const DEFAULT_GUEST_ACCESS: GuestAccessSettings = { mode: 'open', lessons: true, exams: false, grades: false, vip: false };
+  const [guestAccess, setGuestAccess] = useState<GuestAccessSettings>(() => safeGetStorage('nabough_guest_access', DEFAULT_GUEST_ACCESS));
+  const [guestAccessSaving, setGuestAccessSaving] = useState(false);
+  const [guestAccessLoaded, setGuestAccessLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await getDoc(doc(db, 'settings', 'guest_access'));
+        if (!cancelled && snap.exists()) setGuestAccess((current) => ({ ...DEFAULT_GUEST_ACCESS, ...snap.data() } as GuestAccessSettings));
+      } catch (error) { console.warn('تعذر تحميل صلاحيات الزوار؛ ستستخدم الإعدادات المحفوظة محلياً:', error); }
+      finally { if (!cancelled) setGuestAccessLoaded(true); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem('nabough_guest_access', JSON.stringify(guestAccess)); } catch (error) { console.warn('تعذر حفظ نسخة صلاحيات الزوار محلياً:', error); }
+  }, [guestAccess]);
+
+  const guestNeedsLogin = (section: 'lessons' | 'exams' | 'grades' | 'vip') => {
+    if (isAdmin || loggedStudent) return false;
+    if (guestAccess.mode === 'closed') return true;
+    if (guestAccess.mode === 'login') return true;
+    return !guestAccess[section];
+  };
+  const requestStudentLogin = () => setShowStudentAuthModal(true);
+
   const [selectedStage, setSelectedStage] = useState<string>('all'); 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   
@@ -372,50 +377,7 @@ export function App() {
 
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
-  const [pdfLoading, setPdfLoading] = useState(false);
-  const [pdfLoadFailed, setPdfLoadFailed] = useState(false);
-  const [announcementItems, setAnnouncementItems] = useState<any[]>([]);
-  const [announcementText, setAnnouncementText] = useState('');
-  const [announcementStage, setAnnouncementStage] = useState('all');
-  const [announcementSaving, setAnnouncementSaving] = useState(false);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
-  const [showExamHistory, setShowExamHistory] = useState(false);
-  const [examHistory, setExamHistory] = useState<any[]>([]);
-  const [examHistoryLoading, setExamHistoryLoading] = useState(false);
-  const [examHistoryError, setExamHistoryError] = useState('');
-
-  const loadAdminStudentExamHistory = async (student: any) => {
-    if (!isAdmin || !student?.id) return;
-    setAdminExamStudent(student);
-    setAdminExamLoading(true);
-    setAdminExamError('');
-    setAdminExamAttempts([]);
-    try {
-      const snap = await getDocs(collection(db, 'exam_attempts'));
-      const rows = snap.docs.map((item: any) => ({ id: item.id, ...item.data() }))
-        .filter((item: any) => item.studentId === student.id)
-        .sort((a: any, b: any) => String(b.attemptedAt || '').localeCompare(String(a.attemptedAt || '')));
-      setAdminExamAttempts(rows);
-    } catch (error) {
-      setAdminExamError('تعذر تحميل سجل هذا الطالب. تحقق من اتصال الإنترنت وصلاحيات قراءة exam_attempts في Firestore.');
-    } finally {
-      setAdminExamLoading(false);
-    }
-  };
-
-  const loadStudentExamHistory = async () => {
-    if (!loggedStudent?.id) return;
-    setExamHistoryLoading(true); setExamHistoryError(''); setShowExamHistory(true);
-    try {
-      const snap = await getDocs(collection(db, 'exam_attempts'));
-      const rows = snap.docs.map((item: any) => ({ id: item.id, ...item.data() }))
-        .filter((item: any) => item.studentId === loggedStudent.id)
-        .sort((a: any, b: any) => String(b.attemptedAt || '').localeCompare(String(a.attemptedAt || '')));
-      setExamHistory(rows);
-    } catch (error) {
-      setExamHistoryError('تعذر تحميل سجل الامتحانات. تحقق من اتصال الإنترنت وصلاحيات قاعدة البيانات.');
-    } finally { setExamHistoryLoading(false); }
-  };
 
   // إدارة ملفات الاختبارات التفاعلية HTML داخل صفحة المادة
   const [htmlQuizTitle, setHtmlQuizTitle] = useState('');
@@ -456,12 +418,6 @@ export function App() {
     return url;
   };
 
-  useEffect(() => {
-    if (!activePdfUrl || !pdfLoading) return;
-    const timer = window.setTimeout(() => { setPdfLoading(false); setPdfLoadFailed(true); }, 12000);
-    return () => window.clearTimeout(timer);
-  }, [activePdfUrl, pdfLoading]);
-
   const [quizAnswers, setQuizAnswers] = useState<Record<number, string>>({});
   const [quizResult, setQuizResult] = useState<{score: number, total: number, details: any[]} | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(900);
@@ -478,14 +434,6 @@ export function App() {
   const [editNoteContent, setEditNoteContent] = useState('');
   const [editNoteImage, setEditNoteImage] = useState('');
   const [editNoteVip, setEditNoteVip] = useState(false);
-  // إعدادات تنسيق الشروحات والأسئلة والأجوبة الجديدة
-  const [noteFontSize, setNoteFontSize] = useState('17');
-  const [noteTextColor, setNoteTextColor] = useState('#334155');
-  const [noteTitleColor, setNoteTitleColor] = useState('#0f172a');
-  const [questionFontSize, setQuestionFontSize] = useState('16');
-  const [questionTextColor, setQuestionTextColor] = useState('#1e293b');
-  const [answerTextColor, setAnswerTextColor] = useState('#047857');
-  const [contentBold, setContentBold] = useState(false);
 
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editStudentName, setEditStudentName] = useState('');
@@ -775,21 +723,7 @@ export function App() {
           lastSeen: nowFormatted,
           deviceType: device
         });
-        const subjectForAttempt = subjects.find((item: any) => item.id === selectedSubjectId);
-        await addDoc(collection(db, 'exam_attempts'), {
-          studentId: loggedStudent.id,
-          studentName: loggedStudent.name || '',
-          studentStage: loggedStudent.stage || '',
-          subjectId: selectedSubjectId || '',
-          subjectName: subjectForAttempt?.name || subjectForAttempt?.title || 'غير محدد',
-          quizId: activeQuiz.id || '',
-          quizTitle: activeQuiz.title || 'امتحان',
-          score: finalScore,
-          total: 100,
-          details,
-          attemptedAt: new Date().toISOString()
-        });
-      } catch(e) { console.warn('تعذر حفظ نسخة سجل الامتحان:', e); }
+      } catch(e) {}
     }
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
@@ -1018,15 +952,9 @@ export function App() {
             <h3 className="text-lg font-black border-b pb-2">تعديل الشرح أو التعليل</h3>
             <label className="block text-xs font-bold">عنوان الشرح</label><input value={editNoteTitle} onChange={e => setEditNoteTitle(e.target.value)} className="w-full border rounded-xl p-2 text-sm" />
             <label className="block text-xs font-bold">نص الشرح</label><textarea value={editNoteContent} onChange={e => setEditNoteContent(e.target.value)} className="w-full border rounded-xl p-2 text-sm min-h-28" />
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-xl bg-slate-50 border p-3">
-              <label className="text-xs font-bold">حجم النص<select value={noteFontSize} onChange={e => setNoteFontSize(e.target.value)} className="mt-1 w-full border rounded-lg p-2"><option value="15">صغير</option><option value="17">متوسط</option><option value="19">كبير</option><option value="22">كبير جداً</option><option value="25">ضخم</option></select></label>
-              <label className="text-xs font-bold">لون النص<input type="color" value={noteTextColor} onChange={e => setNoteTextColor(e.target.value)} className="mt-1 w-full h-9" /></label>
-              <label className="text-xs font-bold">لون العنوان<input type="color" value={noteTitleColor} onChange={e => setNoteTitleColor(e.target.value)} className="mt-1 w-full h-9" /></label>
-              <label className="col-span-2 sm:col-span-3 flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={contentBold} onChange={e => setContentBold(e.target.checked)} /> نص عريض</label>
-            </div>
             <label className="block text-xs font-bold">رابط الصورة (اختياري)</label><input value={editNoteImage} onChange={e => setEditNoteImage(e.target.value)} className="w-full border rounded-xl p-2 text-sm" />
             <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editNoteVip} onChange={e => setEditNoteVip(e.target.checked)} /> شرح خاص بـ VIP</label>
-            <div className="flex gap-2 pt-2"><button onClick={async () => { const subjectId = selectedSubjectId; if (!subjectId) { alert('لم يتم تحديد المادة. أغلق النافذة وافتح التعديل من داخل المادة مرة أخرى.'); return; } try { const subjectRef = doc(db, 'subjects', subjectId); const freshSnap = await getDoc(subjectRef); if (!freshSnap.exists()) { alert('لم نعثر على المادة في قاعدة البيانات.'); return; } const freshSubject = freshSnap.data() as any; const freshNotes = Array.isArray(freshSubject.notes) ? freshSubject.notes : []; if (!freshNotes.some((n: any) => n.id === editingNoteId)) { alert('لم نعثر على الشرح المطلوب. حدّث الصفحة وافتح التعديل من جديد.'); return; } const updatedNotes = freshNotes.map((n: any) => n.id === editingNoteId ? { ...n, title: editNoteTitle, content: editNoteContent, image: editNoteImage, isVip: editNoteVip, fontSize: `${noteFontSize}px`, textColor: noteTextColor, titleColor: noteTitleColor, contentBold } : n); await updateDoc(subjectRef, { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === subjectId ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs); setEditingNoteId(null); setSuccessMessage('تم حفظ تعديل الشرح في قاعدة البيانات بنجاح'); setTimeout(() => setSuccessMessage(null), 3000); } catch (e: any) { console.error('Note update failed:', e); alert('فشل حفظ التعديل: ' + (e?.code || e?.message || 'خطأ غير معروف')); } }} className="flex-1 bg-emerald-600 text-white rounded-xl py-2 font-bold text-sm">حفظ التعديل</button><button onClick={() => setEditingNoteId(null)} className="flex-1 bg-slate-200 rounded-xl py-2 font-bold text-sm">إلغاء</button></div>
+            <div className="flex gap-2 pt-2"><button onClick={async () => { const subjectId = selectedSubjectId; if (!subjectId) { alert('لم يتم تحديد المادة. أغلق النافذة وافتح التعديل من داخل المادة مرة أخرى.'); return; } try { const subjectRef = doc(db, 'subjects', subjectId); const freshSnap = await getDoc(subjectRef); if (!freshSnap.exists()) { alert('لم نعثر على المادة في قاعدة البيانات.'); return; } const freshSubject = freshSnap.data() as any; const freshNotes = Array.isArray(freshSubject.notes) ? freshSubject.notes : []; if (!freshNotes.some((n: any) => n.id === editingNoteId)) { alert('لم نعثر على الشرح المطلوب. حدّث الصفحة وافتح التعديل من جديد.'); return; } const updatedNotes = freshNotes.map((n: any) => n.id === editingNoteId ? { ...n, title: editNoteTitle, content: editNoteContent, image: editNoteImage, isVip: editNoteVip } : n); await updateDoc(subjectRef, { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === subjectId ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs); setEditingNoteId(null); setSuccessMessage('تم حفظ تعديل الشرح في قاعدة البيانات بنجاح'); setTimeout(() => setSuccessMessage(null), 3000); } catch (e: any) { console.error('Note update failed:', e); alert('فشل حفظ التعديل: ' + (e?.code || e?.message || 'خطأ غير معروف')); } }} className="flex-1 bg-emerald-600 text-white rounded-xl py-2 font-bold text-sm">حفظ التعديل</button><button onClick={() => setEditingNoteId(null)} className="flex-1 bg-slate-200 rounded-xl py-2 font-bold text-sm">إلغاء</button></div>
           </div>
         </div>
       )}
@@ -1360,35 +1288,6 @@ export function App() {
         </div>
       )}
 
-      {/* سجل جميع امتحانات الطالب للأدمن */}
-      {adminExamStudent && isAdmin && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[90] flex items-center justify-center p-3">
-          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative space-y-4 text-right">
-            <button onClick={() => { setAdminExamStudent(null); setAdminExamAttempts([]); }} className="absolute top-3 left-3 w-10 h-10 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center"><X className="w-5 h-5" /></button>
-            <div className="border-b pb-3 pl-12">
-              <h3 className="text-lg font-black text-slate-900">الملف الامتحاني الكامل للطالب</h3>
-              <p className="text-xs text-indigo-700 font-bold mt-1">{adminExamStudent.name} · {adminExamStudent.stage}</p>
-              <p className="text-xs text-slate-500 mt-1">آخر درجة محفوظة بالنظام القديم: {adminExamStudent.examScore || 'لا توجد درجة'}</p>
-            </div>
-            {adminExamLoading ? <p className="py-8 text-center text-indigo-700 font-bold">جارٍ تحميل جميع المحاولات...</p> : adminExamError ? <p className="py-6 text-center text-rose-600 text-sm font-bold">{adminExamError}</p> : adminExamAttempts.length === 0 ? <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900">لا توجد محاولات في السجل الجديد لهذا الطالب حتى الآن. إذا كان قد امتحن قبل إضافة سجل المحاولات، فستبقى آخر نتيجة قديمة ظاهرة أعلاه ويمكن مراجعة تفاصيلها من زر «عرض آخر إجابات» في قائمة الطلبة.</div> : (
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-xl bg-indigo-50 p-3"><p className="text-xs text-indigo-700">عدد المحاولات</p><p className="text-2xl font-black text-indigo-900">{adminExamAttempts.length}</p></div>
-                  <div className="rounded-xl bg-emerald-50 p-3"><p className="text-xs text-emerald-700">معدل الدرجات</p><p className="text-2xl font-black text-emerald-900">{Math.round(adminExamAttempts.reduce((sum: number, a: any) => sum + Number(a.score || 0), 0) / adminExamAttempts.length)}%</p></div>
-                </div>
-                {adminExamAttempts.map((attempt: any) => (
-                  <article key={attempt.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2"><div><h4 className="font-black text-sm text-slate-900">{attempt.subjectName || 'مادة غير محددة'} · {attempt.quizTitle || 'امتحان'}</h4><p className="text-[11px] text-slate-500 mt-1">{attempt.attemptedAt ? new Date(attempt.attemptedAt).toLocaleString('ar-IQ') : 'التاريخ غير متوفر'}</p></div><strong className="text-lg text-indigo-700 whitespace-nowrap">{attempt.score ?? 0}/{attempt.total ?? 100}</strong></div>
-                    {Array.isArray(attempt.details) && <details className="border-t pt-2"><summary className="cursor-pointer text-xs font-black text-indigo-700">تفاصيل الإجابات ونقاط القوة والضعف ({attempt.details.length} سؤال)</summary><div className="space-y-2 mt-3">{attempt.details.map((det: any, index: number) => <div key={index} className={`rounded-lg p-2 text-xs border ${det.isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}><p className="font-bold">س{index+1}: {det.q}</p><p className="mt-1">إجابة الطالب: {det.userAns || 'بدون إجابة'}</p><p>الإجابة النموذجية: {det.correct}</p><p className="font-black mt-1">{det.partialScore ?? 0}/100 · {det.isCorrect ? 'نقطة قوة / إجابة صحيحة' : 'نقطة تحتاج إلى مراجعة'}</p></div>)}</div></details>}
-                  </article>
-                ))}
-              </div>
-            )}
-            <button onClick={() => { setAdminExamStudent(null); setAdminExamAttempts([]); }} className="w-full py-3 rounded-xl bg-slate-900 text-white text-sm font-bold">إغلاق الملف</button>
-          </div>
-        </div>
-      )}
-
       {/* نافذة تسجيل دخول أو إنشاء حساب طالب */}
       {showStudentAuthModal && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
@@ -1625,15 +1524,13 @@ export function App() {
                 >
                   <ExternalLink className="w-3.5 h-3.5" /> فتح / تحميل خارجي 📥
                 </a>
-                <button onClick={() => { setActivePdfUrl(null); setPdfLoading(false); setPdfLoadFailed(false); }} className="w-9 h-9 bg-rose-600 text-white rounded-full flex items-center justify-center font-bold">
+                <button onClick={() => setActivePdfUrl(null)} className="w-9 h-9 bg-rose-600 text-white rounded-full flex items-center justify-center font-bold">
                   <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
-            <div className="flex-1 w-full rounded-2xl overflow-hidden bg-slate-100 mt-3 relative">
-              {pdfLoading && !pdfLoadFailed && <div className="absolute inset-0 z-10 bg-white/95 flex flex-col items-center justify-center gap-3 text-center p-5"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-700 to-violet-500 text-white flex items-center justify-center text-3xl font-black shadow-lg animate-pulse">ن</div><p className="font-black text-slate-800">يرجى الانتظار، جارٍ تحميل الكتاب</p><p className="text-xs text-slate-500">قد يستغرق فتح الملف بعض الوقت حسب حجمه وسرعة الإنترنت.</p><div className="w-40 h-1.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full w-1/2 bg-indigo-600 animate-pulse rounded-full" /></div></div>}
-              {pdfLoadFailed && <div className="absolute inset-0 z-10 bg-white flex flex-col items-center justify-center gap-3 text-center p-5"><p className="font-bold text-rose-700">تعذر عرض الكتاب داخل المنصة.</p><p className="text-sm text-slate-600 max-w-md">مصدر هذا الكتاب قد يمنع عرضه داخل المنصة. تگدر تفتحه من الرابط الخارجي أو تحاول مرة ثانية. المشكلة من استضافة الملف وليست من حسابك.</p><div className="flex flex-wrap justify-center gap-2"><a href={activePdfUrl} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold">فتح الكتاب خارج المنصة</a><button onClick={() => { setPdfLoadFailed(false); setPdfLoading(true); }} className="px-4 py-2 rounded-xl bg-slate-200 text-slate-800 text-xs font-bold">إعادة المحاولة</button></div></div>}
-              {!pdfLoadFailed && <iframe key={activePdfUrl} src={getEmbedPdfUrl(activePdfUrl)} onLoad={() => { setPdfLoading(false); setPdfLoadFailed(false); }} onError={() => { setPdfLoading(false); setPdfLoadFailed(true); }} className="w-full h-full border-0" title="عارض ملف PDF"></iframe>}
+            <div className="flex-1 w-full rounded-2xl overflow-hidden bg-slate-100 mt-3">
+              <iframe src={getEmbedPdfUrl(activePdfUrl)} className="w-full h-full border-0"></iframe>
             </div>
           </div>
         </div>
@@ -1789,11 +1686,11 @@ export function App() {
               <button onClick={() => { setActiveTab('adminPanel'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'adminPanel' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
                 <PlusCircle className="w-3.5 h-3.5" /> إضافة المواد
               </button>
+              <button onClick={() => { setActiveTab('accessSettings' as any); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === ('accessSettings' as any) ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 border border-sky-200'}`}>
+                <ShieldCheck className="w-3.5 h-3.5" /> صلاحيات الزوار
+              </button>
               <button onClick={() => { setActiveTab('vipSettings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'vipSettings' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800'}`}>
                 <Crown className="w-3.5 h-3.5" /> إعدادات VIP
-              </button>
-              <button onClick={() => { setActiveTab('communications'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'communications' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700'}`}>
-                <MessageSquare className="w-3.5 h-3.5" /> الإعلانات والتواصل
               </button>
               <button onClick={() => { setActiveTab('settings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'settings' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}>
                 <Key className="w-3.5 h-3.5" /> كلمة المرور
@@ -1864,42 +1761,6 @@ export function App() {
           </div>
         </div>
 
-        {/* الإعلانات الموجهة لجميع الطلبة أو لمرحلتهم */}
-        {!isAdmin && announcementItems.filter((a: any) => a.active !== false && (a.stage === 'all' || (loggedStudent && a.stage === loggedStudent.stage))).map((a: any) => (
-          <div key={a.id} className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-right shadow-sm"><div className="flex items-start gap-2"><span className="text-lg">📢</span><p className="text-sm font-bold text-amber-900 leading-relaxed">{a.text}</p></div></div>
-        ))}
-        {!isAdmin && vipSettings.telegram && vipSettings.telegram !== 'https://t.me/YourUsername' && (
-          <div className="flex justify-center"><a href={vipSettings.telegram} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-4 py-2.5 text-xs font-black shadow"><Send className="w-4 h-4" /> انضم إلى قناة التليجرام</a></div>
-        )}
-
-        {!isAdmin && loggedStudent && (
-          <div className="flex justify-center -mt-1">
-            <button onClick={loadStudentExamHistory} className="w-full max-w-md rounded-2xl bg-gradient-to-r from-indigo-700 to-violet-700 hover:from-indigo-800 hover:to-violet-800 text-white px-5 py-4 shadow-lg flex items-center justify-center gap-3">
-              <Award className="w-6 h-6" />
-              <span className="text-right"><span className="block text-base font-black">امتحاناتي ودرجاتي</span><span className="block text-[11px] text-indigo-100 mt-0.5">عرض جميع الامتحانات والنتائج وتحليل الإجابات</span></span>
-            </button>
-          </div>
-        )}
-
-        {showExamHistory && loggedStudent && (
-          <section className="rounded-2xl border border-indigo-200 bg-white p-4 shadow-md space-y-3 text-right">
-            <div className="flex items-center justify-between gap-2 border-b pb-3">
-              <div><h3 className="font-black text-slate-900 text-base">سجل امتحاناتي ودرجاتي</h3><p className="text-xs text-slate-500 mt-1">{loggedStudent.name} · {loggedStudent.stage}</p></div>
-              <button onClick={() => setShowExamHistory(false)} className="rounded-full bg-slate-100 p-2 text-slate-600" aria-label="إغلاق سجل الامتحانات"><X className="w-4 h-4" /></button>
-            </div>
-            {examHistoryLoading ? <p className="py-6 text-center text-sm font-bold text-indigo-600">جارٍ تحميل سجل امتحاناتك...</p> : examHistoryError ? <p className="py-5 text-center text-sm font-bold text-rose-600">{examHistoryError}</p> : examHistory.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">لا توجد محاولات محفوظة في السجل بعد. ستظهر الامتحانات التي تؤديها بعد تفعيل هذه الإضافة هنا.</p> : (
-              <div className="space-y-3">
-                {examHistory.map((attempt: any) => (
-                  <article key={attempt.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
-                    <div className="flex items-start justify-between gap-2"><div><h4 className="font-black text-sm text-slate-900">{attempt.subjectName || 'المادة'} · {attempt.quizTitle || 'امتحان'}</h4><p className="text-[11px] text-slate-500 mt-1">{attempt.attemptedAt ? new Date(attempt.attemptedAt).toLocaleString('ar-IQ') : 'التاريخ غير متوفر'}</p></div><strong className="text-lg text-indigo-700 whitespace-nowrap">{attempt.score ?? 0}/{attempt.total ?? 100}</strong></div>
-                    {Array.isArray(attempt.details) && <details className="pt-2 border-t border-slate-200"><summary className="cursor-pointer text-xs font-black text-indigo-700">عرض الإجابات والتفاصيل ({attempt.details.length} سؤال)</summary><div className="space-y-2 mt-3">{attempt.details.map((det: any, index: number) => <div key={index} className={`rounded-lg p-2 text-xs border ${det.isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}><p className="font-bold">س{index+1}: {det.q}</p><p className="mt-1">إجابتك: {det.userAns || 'بدون إجابة'}</p><p>الإجابة الصحيحة: {det.correct}</p><p className="font-black mt-1">{det.partialScore ?? 0}/100 {det.isCorrect ? '✓ صحيحة' : '✕ تحتاج مراجعة'}</p></div>)}</div></details>}
-                  </article>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-
         {/* 1. تبويب المنهج الدراسي */}
         {activeTab === 'curriculum' && !selectedSubjectId && (
           <div className="space-y-4">
@@ -1936,8 +1797,8 @@ export function App() {
                 <div 
                   key={sub.id}
                   onClick={() => {
-                    if (!loggedStudent && !isAdmin) {
-                      setShowStudentAuthModal(true);
+                    if (!isAdmin && !loggedStudent && guestAccess.mode !== 'open') {
+                      requestStudentLogin();
                     } else {
                       setSelectedSubjectId(sub.id);
                       setSearchQuery('');
@@ -2005,13 +1866,16 @@ export function App() {
 
         {/* 2. إدارة وتصفح المادة الدراسية المفصلة */}
         {selectedSubjectId && (() => {
+          if (!isAdmin && !loggedStudent && guestAccess.mode !== 'open') return <div className="bg-white rounded-2xl p-8 text-center border"><h3 className="font-black text-slate-900">يتطلب هذا المحتوى تسجيل الدخول</h3><button onClick={requestStudentLogin} className="mt-3 px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold">دخول / إنشاء حساب</button></div>;
           const currentSub = subjects.find(s => s.id === selectedSubjectId);
           if (!currentSub) return null;
 
-          const filteredNotes = (currentSub.notes || []).filter((n: any) => 
-            n.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-            n.content.toLowerCase().includes(searchQuery.toLowerCase())
-          );
+          const filteredNotes = (currentSub.notes || []).filter((n: any) => {
+            if (!isAdmin && guestNeedsLogin('lessons')) return false;
+            if (!isAdmin && n.isVip && guestNeedsLogin('vip')) return false;
+            return n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              n.content.toLowerCase().includes(searchQuery.toLowerCase());
+          });
 
           const filteredVideos = (currentSub.videos || []).filter((v: any) => 
             v.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -2052,21 +1916,22 @@ export function App() {
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
                 </h4>
+                {!isAdmin && guestNeedsLogin('lessons') && <div className="p-4 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-bold">قراءة الدروس تتطلب تسجيل الدخول حسب إعدادات المنصة. <button onClick={requestStudentLogin} className="underline mr-1">سجّل دخولك</button></div>}
                 <div className="space-y-4">
                   {filteredNotes.map((note: any, nIdx: number) => (
                     <div key={note.id} className="p-4 bg-white rounded-2xl border shadow-sm space-y-3 relative">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
-                          <h5 className="font-black text-xs sm:text-base" style={{ color: note.titleColor || '#0f172a', fontSize: note.titleFontSize || '18px' }}>💡 {note.title}</h5>
+                          <h5 className="font-black text-slate-900 text-xs sm:text-sm">💡 {note.title}</h5>
                           {note.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
                         </div>
                         {isAdmin && <div className="flex items-center gap-1">
-                          <button onClick={() => { setEditingNoteId(note.id); setEditNoteTitle(note.title || ''); setEditNoteContent(note.content || ''); setEditNoteImage(note.image || ''); setEditNoteVip(!!note.isVip); setNoteFontSize(String(parseInt(note.fontSize || '17', 10))); setNoteTextColor(note.textColor || '#334155'); setNoteTitleColor(note.titleColor || '#0f172a'); setContentBold(!!note.contentBold); }} className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-bold">✏️ تعديل الشرح</button>
+                          <button onClick={() => { setEditingNoteId(note.id); setEditNoteTitle(note.title || ''); setEditNoteContent(note.content || ''); setEditNoteImage(note.image || ''); setEditNoteVip(!!note.isVip); }} className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-bold">✏️ تعديل الشرح</button>
                           <button onClick={async () => { if (!window.confirm('تأكيد حذف الشرح وكل الأسئلة التفاعلية التابعة له؟')) return; const updatedNotes = (currentSub.notes || []).filter((n: any) => n.id !== note.id); try { await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === currentSub.id ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs); setSuccessMessage('تم حذف الشرح بنجاح'); setTimeout(() => setSuccessMessage(null), 2500); } catch (e) { alert('تعذر حذف الشرح، حاول مرة أخرى'); } }} className="px-2 py-1 bg-rose-50 text-rose-700 rounded-lg text-[10px] font-bold">🗑 حذف</button>
                         </div>}
                       </div>
 
-                      <p className="leading-relaxed whitespace-pre-wrap" style={{ color: note.textColor || '#334155', fontSize: note.fontSize || '17px', fontWeight: note.contentBold ? 700 : 400, lineHeight: 1.9 }}>{note.content}</p>
+                      <p className="text-xs text-slate-700 leading-relaxed">{note.content}</p>
 
                       {note.image && (
                         <div className="mt-2 h-48 w-full rounded-xl overflow-hidden border shadow-sm">
@@ -2090,7 +1955,7 @@ export function App() {
                             return (
                               <div key={iqIdx} className="bg-white p-3 rounded-lg border space-y-2 relative">
                                 <div className="flex items-center justify-between">
-                                  <div className="font-bold" style={{ color: iq.questionColor || '#1e293b', fontSize: iq.questionFontSize || '16px', lineHeight: 1.8 }}>س: {iq.q}</div>
+                                  <div className="text-xs font-bold text-slate-900">س: {iq.q}</div>
                                   {isAdmin && (
                                     <div className="flex items-center gap-1">
                                       <button onClick={() => {
@@ -2117,7 +1982,7 @@ export function App() {
                                     {iq.options.map((opt: string, oIdx: number) => (
                                       <label key={oIdx} className={`flex items-center gap-2 p-2 rounded border cursor-pointer text-xs font-bold transition-all ${userAns === opt ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50'}`}>
                                         <input type="radio" name={`iq_${ansKey}`} checked={userAns === opt} onChange={() => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: opt})} className="hidden" />
-                                        <span style={{ fontSize: iq.questionFontSize || '16px' }}>{opt}</span>
+                                        <span>{opt}</span>
                                       </label>
                                     ))}
                                   </div>
@@ -2137,7 +2002,7 @@ export function App() {
                                   </button>
                                   {isGraded && (
                                     <span className={`text-[10px] font-black ${isCorrect ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                      {isCorrect ? '✅ صحيحة بطل!' : <span>❌ خطأ (العبارة الصحيحة: <b style={{ color: iq.answerColor || '#047857', fontSize: iq.questionFontSize || '16px' }}>{iq.correct}</b>)</span>}
+                                      {isCorrect ? '✅ صحيحة بطل!' : `❌ خطأ (العبارة الصحيحة: ${iq.correct})`}
                                     </span>
                                   )}
                                 </div>
@@ -2154,16 +2019,7 @@ export function App() {
                   <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
                     <h5 className="text-xs font-black text-slate-800">➕ إضافة شرح أو تعليل جديد (مع صورة توضيحية وسؤال تفاعلي):</h5>
                     <input type="text" value={newNoteTitle} onChange={(e) => setNewNoteTitle(e.target.value)} placeholder="العنوان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
-                    <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="النص التفصيلي..." className="w-full px-3 py-2 border rounded-xl text-sm font-bold min-h-28" />
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-xl border bg-slate-50 p-3">
-                      <label className="text-xs font-bold">حجم نص الشرح<select value={noteFontSize} onChange={e => setNoteFontSize(e.target.value)} className="mt-1 w-full border rounded-lg p-2 bg-white"><option value="15">صغير</option><option value="17">متوسط</option><option value="19">كبير</option><option value="22">كبير جداً</option><option value="25">ضخم</option></select></label>
-                      <label className="text-xs font-bold">لون نص الشرح<input type="color" value={noteTextColor} onChange={e => setNoteTextColor(e.target.value)} className="mt-1 w-full h-10 border rounded-lg bg-white" /></label>
-                      <label className="text-xs font-bold">لون العنوان<input type="color" value={noteTitleColor} onChange={e => setNoteTitleColor(e.target.value)} className="mt-1 w-full h-10 border rounded-lg bg-white" /></label>
-                      <label className="text-xs font-bold">حجم السؤال والاختيارات<select value={questionFontSize} onChange={e => setQuestionFontSize(e.target.value)} className="mt-1 w-full border rounded-lg p-2 bg-white"><option value="14">صغير</option><option value="16">متوسط</option><option value="18">كبير</option><option value="21">كبير جداً</option></select></label>
-                      <label className="text-xs font-bold">لون السؤال<input type="color" value={questionTextColor} onChange={e => setQuestionTextColor(e.target.value)} className="mt-1 w-full h-10 border rounded-lg bg-white" /></label>
-                      <label className="text-xs font-bold">لون الإجابة الصحيحة<input type="color" value={answerTextColor} onChange={e => setAnswerTextColor(e.target.value)} className="mt-1 w-full h-10 border rounded-lg bg-white" /></label>
-                      <label className="col-span-2 sm:col-span-3 flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={contentBold} onChange={e => setContentBold(e.target.checked)} /> جعل نص الشرح عريضاً</label>
-                    </div>
+                    <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="النص التفصيلي..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold h-20" />
                     <input type="text" value={newNoteImage} onChange={(e) => setNewNoteImage(e.target.value)} placeholder="رابط صورة توضيحية للشرح (اختياري)..." className="w-full px-3 py-2 border rounded-xl text-xs font-mono" />
                     
                     <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-2">
@@ -2206,8 +2062,7 @@ export function App() {
                           type: interactiveType,
                           q: interactiveQText,
                           options: interactiveType === 'mcq' ? interactiveOptions : (interactiveType === 'true_false' ? ['صح', 'خطأ'] : []),
-                          correct: interactiveType === 'mcq' ? interactiveCorrect : (interactiveType === 'fill' ? interactiveFill : interactiveTf),
-                          questionFontSize, questionColor: questionTextColor, answerColor: answerTextColor
+                          correct: interactiveType === 'mcq' ? interactiveCorrect : (interactiveType === 'fill' ? interactiveFill : interactiveTf)
                         };
                         setInteractiveList([...interactiveList, qObj]);
                         setInteractiveQText(''); setInteractiveCorrect(''); setInteractiveFill('');
@@ -2230,7 +2085,6 @@ export function App() {
                         id: Date.now().toString(), 
                         title: newNoteTitle, 
                         content: newNoteContent, 
-                        fontSize: `${noteFontSize}px`, textColor: noteTextColor, titleColor: noteTitleColor, titleFontSize: '18px', contentBold,
                         image: newNoteImage, 
                         isVip: newNoteVip,
                         interactiveQuestions: interactiveList
@@ -2265,7 +2119,7 @@ export function App() {
                       </div>
                       <div className="flex items-center gap-2">
                         {vid.isVip && !isVipActive && isAdmin === false ? (
-                          <button onClick={() => setVipModalItem(vid)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
+                          <button onClick={() => { if (guestNeedsLogin('vip')) requestStudentLogin(); else setVipModalItem(vid); }} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
                         ) : (
                           <button onClick={() => setActiveVideoUrl(vid.url)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">تشغيل</button>
                         )}
@@ -2332,9 +2186,9 @@ export function App() {
                       </div>
                       <div className="flex items-center gap-2">
                         {book.isVip && !isVipActive && isAdmin === false ? (
-                          <button onClick={() => setVipModalItem(book)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
+                          <button onClick={() => { if (guestNeedsLogin('vip')) requestStudentLogin(); else setVipModalItem(book); }} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
                         ) : (
-                          <button onClick={() => { setPdfLoading(true); setPdfLoadFailed(false); setActivePdfUrl(book.url); }} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">قراءة 👁️</button>
+                          <button onClick={() => setActivePdfUrl(book.url)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">قراءة 👁️</button>
                         )}
                         {isAdmin && (
                           <div className="flex items-center gap-1">
@@ -2397,6 +2251,8 @@ export function App() {
                           <button onClick={() => setVipModalItem(quiz)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
                         ) : (
                           <button onClick={() => {
+                            if (guestNeedsLogin('exams')) { requestStudentLogin(); return; }
+                            if (quiz.isVip && guestNeedsLogin('vip')) { requestStudentLogin(); return; }
                             if (quiz.type === 'html' || quiz.htmlContent) setActiveQuiz(quiz);
                             else { setActiveQuiz(quiz); setTimeLeft((quiz.durationMinutes || 15) * 60); setTimerActive(true); }
                           }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">
@@ -2742,12 +2598,9 @@ export function App() {
                       <td className="p-3 text-center space-y-1">
                         {st.examDetails && (
                           <button onClick={() => setViewingStudentAnswers(st)} className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer block mx-auto">
-                            🔍 عرض آخر إجابات
+                            🔍 عرض الأخطاء
                           </button>
                         )}
-                        <button onClick={() => loadAdminStudentExamHistory(st)} className="px-2 py-1 bg-violet-700 hover:bg-violet-800 text-white rounded text-[10px] font-bold cursor-pointer block mx-auto">
-                          📚 سجل كل الامتحانات والدرجات
-                        </button>
                         <button onClick={async () => {
                           if (window.confirm('حذف هذا الطالب نهائياً؟')) {
                             await deleteDoc(doc(db, 'students', st.id));
@@ -2774,6 +2627,52 @@ export function App() {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* إعدادات صلاحيات الزوار - قسم مستقل لا يغيّر محتوى المواد */}
+        {activeTab === ('accessSettings' as any) && isAdmin && (
+          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl border border-sky-200 space-y-5 w-full">
+            <div>
+              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-sky-600" /> إدارة صلاحيات الوصول</h2>
+              <p className="text-xs text-slate-500 mt-2 leading-6">تحكم بما يستطيع الزائر مشاهدته قبل إنشاء حساب. هذه الإعدادات محفوظة في مستند مستقل باسم settings/guest_access ولا تعدّل بيانات المناهج أو الطلبة.</p>
+            </div>
+            <div className="p-3 rounded-xl bg-sky-50 border border-sky-100 space-y-2">
+              <label className="block text-xs font-black text-slate-800">وضع المنصة للزوار</label>
+              <select value={guestAccess.mode} onChange={(e) => setGuestAccess(v => ({ ...v, mode: e.target.value as GuestAccessSettings['mode'] }))} className="w-full p-3 rounded-xl border bg-white text-sm font-bold">
+                <option value="open">مفتوحة للتعريف والتصفح حسب الصلاحيات أدناه</option>
+                <option value="login">تتطلب تسجيل الدخول لكل المحتوى</option>
+                <option value="closed">مغلقة عن الزوار بالكامل</option>
+              </select>
+              <p className="text-[11px] text-slate-500">وضع «مفتوحة» يسمح بتطبيق مفاتيح الأقسام أدناه، أما «تسجيل الدخول» و«مغلقة» فيمنعان الزائر من فتح المواد.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {([
+                ['lessons', 'قراءة الدروس والشروحات', 'السماح للزائر بقراءة الشروحات'],
+                ['exams', 'حل الامتحانات', 'السماح للزائر ببدء الامتحانات'],
+                ['grades', 'عرض الدرجات والسجل', 'السماح للزائر بمشاهدة الدرجات'],
+                ['vip', 'محتوى VIP', 'السماح للزائر بمحتوى VIP (مع بقاء فحص الاشتراك الحالي)']
+              ] as const).map(([key, title, desc]) => (
+                <label key={key} className="flex items-start gap-3 p-3 rounded-xl border bg-slate-50 cursor-pointer">
+                  <input type="checkbox" checked={guestAccess[key]} onChange={(e) => setGuestAccess(v => ({ ...v, [key]: e.target.checked }))} className="mt-1 w-4 h-4" />
+                  <span><b className="block text-xs text-slate-800">{title}</b><small className="text-[11px] text-slate-500">{desc}</small></span>
+                </label>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button disabled={guestAccessSaving} onClick={async () => {
+                setGuestAccessSaving(true);
+                try {
+                  await setDoc(doc(db, 'settings', 'guest_access'), { ...guestAccess, updatedAt: serverTimestamp() }, { merge: true });
+                  setSuccessMessage('تم حفظ صلاحيات الزوار سحابياً بنجاح.');
+                } catch (error: any) {
+                  console.error('Guest access save failed:', error);
+                  alert('تعذر حفظ الصلاحيات. تحقق من اتصال الإنترنت وقواعد Firestore. بقيت الإعدادات المحلية محفوظة على هذا الجهاز.');
+                } finally { setGuestAccessSaving(false); setTimeout(() => setSuccessMessage(null), 3500); }
+              }} className="flex-1 min-w-[150px] py-3 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-xl text-xs font-black">{guestAccessSaving ? 'جارٍ الحفظ...' : 'حفظ الصلاحيات سحابياً'}</button>
+              <button onClick={() => setGuestAccess(DEFAULT_GUEST_ACCESS)} className="px-4 py-3 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">إرجاع الإعدادات الافتراضية</button>
+            </div>
+            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 leading-6">تنبيه تقني: هذه الإضافة تتحكم بواجهة المنصة. الحماية الكاملة للبيانات والروابط المباشرة تحتاج أيضاً تحديث قواعد أمان Firestore وتخزين الملفات بما يتوافق مع هذه الصلاحيات؛ لا تعتبر إخفاء الأزرار وحده حماية للملفات.</p>
           </div>
         )}
 
@@ -2823,8 +2722,7 @@ export function App() {
                   price: vipSettings.price || '',
                   mastercard: vipSettings.mastercard || '',
                   transferPhone: vipSettings.transferPhone || '',
-                  whatsappPhone: (vipSettings.whatsappPhone || '').replace(/\s+/g, ''),
-                  telegram: vipSettings.telegram || ''
+                  whatsappPhone: (vipSettings.whatsappPhone || '').replace(/\s+/g, '')
                 }, { merge: true });
                 localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
                 setSuccessMessage('تم حفظ إعدادات VIP ورقم واتساب سحابياً، وستظهر للطلاب على الموبايل والحاسبة.');
@@ -2839,31 +2737,11 @@ export function App() {
               <input type="text" value={vipSettings.mastercard} onChange={(e) => setVipSettings({...vipSettings, mastercard: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono" placeholder="الماستر كارد / المصرف" />
               <label className="block text-xs font-bold text-slate-700">رقم التحويل (زين كاش / آسياسيل)</label>
               <input type="text" value={vipSettings.transferPhone || ''} onChange={(e) => setVipSettings({...vipSettings, transferPhone: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono" placeholder="رقم التحويل" />
-              <label className="block text-xs font-bold text-slate-700">رابط قناة التليجرام (يمكن إضافته لاحقاً)</label>
-              <input type="url" dir="ltr" value={vipSettings.telegram || ''} onChange={(e) => setVipSettings({...vipSettings, telegram: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono text-left" placeholder="https://t.me/اسم_القناة" />
               <label className="block text-xs font-bold text-slate-700">رقم واتساب الإدارة لاستلام طلبات VIP</label>
               <input type="tel" dir="ltr" inputMode="tel" value={vipSettings.whatsappPhone || ''} onChange={(e) => setVipSettings({...vipSettings, whatsappPhone: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono text-left" placeholder="9647XXXXXXXXX أو 07XXXXXXXXX" />
               <p className="text-[11px] text-slate-500 leading-relaxed">اكتب رقمك العراقي مع مفتاح الدولة 964، أو اكتبه بصيغة 07… وسيحوّله النظام تلقائياً. لا تكتب علامة + أو مسافات عند الحاجة.</p>
               <button type="submit" className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ إعدادات الدفع ورقم واتساب سحابياً</button>
             </form>
-          </div>
-        )}
-
-        {/* إدارة الإعلانات والتواصل */}
-        {activeTab === 'communications' && isAdmin && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xl border space-y-3">
-              <h2 className="text-xl font-black text-slate-900">إضافة إعلان للطلاب</h2>
-              <form onSubmit={handleSaveAnnouncement} className="space-y-3">
-                <textarea value={announcementText} onChange={e => setAnnouncementText(e.target.value)} rows={3} maxLength={500} placeholder="اكتب الإعلان أو التنبيه هنا..." className="w-full border rounded-xl p-3 text-sm" />
-                <select value={announcementStage} onChange={e => setAnnouncementStage(e.target.value)} className="w-full border rounded-xl p-2 text-sm font-bold"><option value="all">جميع المراحل</option>{allStagesList.map(st => <option key={st.id} value={st.name}>{st.name}</option>)}</select>
-                <button disabled={announcementSaving || !announcementText.trim()} className="w-full rounded-xl bg-sky-600 text-white py-2.5 text-sm font-black disabled:opacity-50">{announcementSaving ? 'جارٍ النشر...' : 'نشر الإعلان'}</button>
-              </form>
-            </div>
-            <div className="bg-white rounded-2xl p-4 shadow-xl border space-y-3"><h3 className="font-black">الإعلانات المنشورة</h3>
-              {announcementItems.length === 0 ? <p className="text-xs text-slate-500">لا توجد إعلانات حالياً.</p> : announcementItems.map((a: any) => <div key={a.id} className="border rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2"><div><p className="text-sm font-bold">{a.text}</p><p className="text-[11px] text-slate-500 mt-1">{a.stage === 'all' ? 'جميع المراحل' : a.stage}</p></div><div className="flex gap-2"><button onClick={async () => { const next = prompt('تعديل نص الإعلان:', a.text); if (next === null || !next.trim()) return; try { await updateDoc(doc(db, 'announcements', a.id), { text: next.trim() }); } catch(e) { alert('تعذر تعديل الإعلان.'); } }} className="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold">تعديل</button><button onClick={async () => { if (!confirm('هل تريد حذف هذا الإعلان؟')) return; try { await deleteDoc(doc(db, 'announcements', a.id)); } catch(e) { alert('تعذر حذف الإعلان.'); } }} className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 text-xs font-bold">حذف</button></div></div>)}
-            </div>
-            <div className="bg-white rounded-2xl p-4 shadow-xl border space-y-2"><h3 className="font-black">زر قناة التليجرام</h3><p className="text-xs text-slate-600">أضف رابط القناة من تبويب إعدادات VIP؛ سيظهر زر الانضمام للطلاب تلقائياً بعد حفظ الرابط.</p><button onClick={() => setActiveTab('vipSettings')} className="px-4 py-2 rounded-xl bg-amber-500 text-white text-xs font-bold">فتح إعدادات الرابط</button></div>
           </div>
         )}
 
