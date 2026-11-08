@@ -108,26 +108,7 @@ export function App() {
     return () => { cancelled = true; window.clearInterval(heartbeat); };
   }, [visitorId]);
 
-  useEffect(() => {
-    if (!isAdmin) return;
-    const unsubscribe = onSnapshot(collection(db, 'visitor_sessions'), (snapshot) => {
-      const now = Date.now();
-      let visits = 0;
-      let active = 0;
-      snapshot.docs.forEach((item) => {
-        const data = item.data() as any;
-        visits += Number(data.visitCount || 0);
-        const lastSeenMs = data.lastSeen?.toMillis ? data.lastSeen.toMillis() : 0;
-        if (lastSeenMs && now - lastSeenMs <= 5 * 60 * 1000) active += 1;
-      });
-      setVisitorStats({ uniqueDevices: snapshot.size, totalVisits: visits, activeNow: active });
-      setVisitorStatsError('');
-    }, (error) => {
-      console.warn('تعذر تحميل إحصائيات الزوار:', error);
-      setVisitorStatsError('تعذر تحميل الإحصائيات. تحقق من صلاحيات قراءة مجموعة visitor_sessions في Firestore.');
-    });
-    return () => unsubscribe();
-  }, [isAdmin]);
+
 
   useEffect(() => {
     const ref = doc(db, 'settings', 'platform_announcement');
@@ -183,6 +164,27 @@ export function App() {
   const [isAdmin, setIsAdmin] = useState<boolean> (() => {
     return localStorage.getItem('nabough_is_admin') === 'true';
   });
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    const unsubscribe = onSnapshot(collection(db, 'visitor_sessions'), (snapshot) => {
+      const now = Date.now();
+      let visits = 0;
+      let active = 0;
+      snapshot.docs.forEach((item) => {
+        const data = item.data() as any;
+        visits += Number(data.visitCount || 0);
+        const lastSeenMs = data.lastSeen?.toMillis ? data.lastSeen.toMillis() : 0;
+        if (lastSeenMs && now - lastSeenMs <= 5 * 60 * 1000) active += 1;
+      });
+      setVisitorStats({ uniqueDevices: snapshot.size, totalVisits: visits, activeNow: active });
+      setVisitorStatsError('');
+    }, (error) => {
+      console.warn('تعذر تحميل إحصائيات الزوار:', error);
+      setVisitorStatsError('تعذر تحميل الإحصائيات. تحقق من صلاحيات قراءة مجموعة visitor_sessions في Firestore.');
+    });
+    return () => unsubscribe();
+  }, [isAdmin]);
 
   useEffect(() => {
     localStorage.setItem('nabough_is_admin', isAdmin ? 'true' : 'false');
