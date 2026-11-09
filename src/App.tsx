@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { db } from './firebase';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc, Timestamp, where } from 'firebase/firestore';
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
@@ -9,6 +9,45 @@ import {
 } from 'lucide-react';
 
 const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
+
+// مخزن محلي IndexedDB لحفظ المناهج كاملة على الجهاز للعمل دون إنترنت
+const OFFLINE_DB_NAME = 'nabigha-offline-v1';
+const OFFLINE_STORE_NAME = 'app-cache';
+const openOfflineDB = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
+  if (typeof indexedDB === 'undefined') return reject(new Error('IndexedDB غير متاح'));
+  const request = indexedDB.open(OFFLINE_DB_NAME, 1);
+  request.onupgradeneeded = () => {
+    const database = request.result;
+    if (!database.objectStoreNames.contains(OFFLINE_STORE_NAME)) database.createObjectStore(OFFLINE_STORE_NAME);
+  };
+  request.onsuccess = () => resolve(request.result);
+  request.onerror = () => reject(request.error || new Error('تعذر فتح التخزين المحلي'));
+});
+const saveSubjectsOffline = async (subjectsToSave: any[]) => {
+  try {
+    const database = await openOfflineDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = database.transaction(OFFLINE_STORE_NAME, 'readwrite');
+      tx.objectStore(OFFLINE_STORE_NAME).put(subjectsToSave, 'subjects');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error);
+    });
+    database.close();
+  } catch (error) { console.warn('تعذر حفظ المناهج دون إنترنت:', error); }
+};
+const readSubjectsOffline = async (): Promise<any[]> => {
+  try {
+    const database = await openOfflineDB();
+    const value = await new Promise<any>((resolve, reject) => {
+      const request = database.transaction(OFFLINE_STORE_NAME, 'readonly').objectStore(OFFLINE_STORE_NAME).get('subjects');
+      request.onsuccess = () => resolve(request.result || []);
+      request.onerror = () => reject(request.error);
+    });
+    database.close();
+    return Array.isArray(value) ? value : [];
+  } catch (error) { return []; }
+};
 
 const safeGetStorage = (key: string, fallback: any) => {
   try {
@@ -24,35 +63,42 @@ const safeGetStorage = (key: string, fallback: any) => {
 
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator === 'undefined' ? true : navigator.onLine);
 
+  // إظهار حالة الاتصال فوراً، دون التأثير على عمل المنصة أو بيانات Firebase
   useEffect(() => {
-    const manifest = {
-      name: "منصة النابغة التعليمية",
-      short_name: "النابغة",
-      start_url: "/",
-      display: "standalone",
-      background_color: "#0f172a",
-      theme_color: "#0f172a",
-      icons: [
-        {
-          src: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=512&h=512&q=80",
-          sizes: "512x512",
-          type: "image/png",
-          purpose: "any maskable"
-        }
-      ]
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
-    const stringManifest = JSON.stringify(manifest);
-    const blob = new Blob([stringManifest], { type: 'application/json' });
-    const manifestURL = URL.createObjectURL(blob);
-    
-    let link = document.querySelector('link[rel="manifest"]');
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'manifest';
-      document.head.appendChild(link);
+  }, []);
+
+  // تهيئة PWA: ملف manifest ثابت + Service Worker
+  useEffect(() => {
+    let manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null;
+    if (!manifestLink) {
+      manifestLink = document.createElement('link');
+      manifestLink.rel = 'manifest';
+      document.head.appendChild(manifestLink);
     }
-    link.setAttribute('href', manifestURL);
+    manifestLink.href = '/manifest.webmanifest';
+
+    let iconLink = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
+    if (!iconLink) {
+      iconLink = document.createElement('link');
+      iconLink.rel = 'icon';
+      document.head.appendChild(iconLink);
+    }
+    iconLink.href = '/icons/icon-192.png';
+
+    // Service Worker يعمل على HTTPS أو localhost فقط
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+      navigator.serviceWorker.register('/sw.js').catch((err) => console.error('PWA service worker:', err));
+    }
   }, []);
 
   const [isAdmin, setIsAdmin] = useState<boolean> (() => {
@@ -67,6 +113,10 @@ export function App() {
   const [adminPinInput, setAdminPinInput] = useState<string>('');
   const [showStudentAuthModal, setShowStudentAuthModal] = useState<boolean>(false);
   const [viewingStudentAnswers, setViewingStudentAnswers] = useState<any | null>(null);
+  const [adminExamStudent, setAdminExamStudent] = useState<any | null>(null);
+  const [adminExamAttempts, setAdminExamAttempts] = useState<any[]>([]);
+  const [adminExamLoading, setAdminExamLoading] = useState(false);
+  const [adminExamError, setAdminExamError] = useState('');
 
   // نظام الدردشة العامة الفورية
   const [showPublicChatModal, setShowPublicChatModal] = useState<boolean>(false);
@@ -198,6 +248,28 @@ export function App() {
     loadVipSettings();
   }, []);
 
+  // إعلانات المنصة: قراءة مستقلة لا تغيّر سجلات المواد أو الطلبة.
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'announcements'), (snapshot) => {
+      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      items.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setAnnouncementItems(items);
+    }, (error) => console.warn('تعذر تحميل الإعلانات:', error));
+    return () => unsubscribe();
+  }, []);
+
+  const handleSaveAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!announcementText.trim()) return;
+    setAnnouncementSaving(true);
+    try {
+      await addDoc(collection(db, 'announcements'), { text: announcementText.trim(), stage: announcementStage, active: true, createdAt: serverTimestamp() });
+      setAnnouncementText('');
+      setSuccessMessage('تم نشر الإعلان بنجاح.');
+    } catch (error) { alert('تعذر نشر الإعلان. تحقق من اتصال الإنترنت وصلاحيات Firestore.'); }
+    finally { setAnnouncementSaving(false); }
+  };
+
   const getWhatsAppUrl = (rawPhone: string, message: string) => {
     let phone = (rawPhone || '').replace(/\D/g, '');
     if (phone.startsWith('00')) phone = phone.slice(2);
@@ -220,42 +292,92 @@ export function App() {
     }
   }, [loggedStudent]);
 
+  // تسجيل وجود المتصفح: لا يجمع اسماً للزائر المجهول، ويحدّث نفس الوثيقة بدلاً من إنشاء زيارات متكررة.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isOnline) return;
+    let sessionId = '';
+    try {
+      sessionId = localStorage.getItem('nabough_visitor_session_id') || '';
+      if (!sessionId) {
+        sessionId = (window.crypto?.randomUUID?.() || `v_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+        localStorage.setItem('nabough_visitor_session_id', sessionId);
+      }
+    } catch {
+      sessionId = `v_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    }
+    const visitorRef = doc(db, 'visitor_sessions', sessionId);
+    const publishPresence = () => {
+      const visitorType = isAdmin ? 'admin' : loggedStudent?.id ? 'student' : 'guest';
+      void setDoc(visitorRef, {
+        visitorType,
+        studentId: loggedStudent?.id || null,
+        studentName: loggedStudent?.name || null,
+        deviceType: getDeviceType(),
+        lastSeen: serverTimestamp()
+      }, { merge: true }).catch((error) => console.warn('تعذر تحديث تواجد الزائر:', error));
+    };
+    publishPresence();
+    const heartbeat = window.setInterval(publishPresence, 45000);
+    return () => window.clearInterval(heartbeat);
+  }, [isOnline, isAdmin, loggedStudent?.id, loggedStudent?.name]);
+
+
+
   const [studentsList, setStudentsList] = useState<any[]>(() => {
     return safeGetStorage('nabough_cached_students', []);
   });
 
+  // بحث وتصفية قائمة الطلبة في لوحة الإدارة فقط (بدون تعديل قاعدة البيانات)
+  const [studentSearchText, setStudentSearchText] = useState('');
+  const [studentStageFilter, setStudentStageFilter] = useState('all');
+
   // جلب البيانات مع دعم العمل بدون إنترنت
   useEffect(() => {
+    let cancelled = false;
     async function loadDataOfflineFirst() {
+      // اعرض آخر نسخة محفوظة فوراً، ثم حدّثها من Firebase إذا توفر الإنترنت
+      const idbSubjects = await readSubjectsOffline();
+      const localSubjects = safeGetStorage('nabough_cached_subjects', []);
+      const firstCached = idbSubjects.length ? idbSubjects : localSubjects;
+      if (!cancelled && firstCached.length) setSubjects(firstCached);
       try {
         const subsSnap = await getDocs(collection(db, 'subjects'));
         if (!subsSnap.empty) {
-          const loadedSubs = subsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setSubjects(loadedSubs);
-          localStorage.setItem('nabough_cached_subjects', JSON.stringify(loadedSubs));
+          const loadedSubs = subsSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (Number.isFinite(a.displayOrder) ? a.displayOrder : 999999) - (Number.isFinite(b.displayOrder) ? b.displayOrder : 999999));
+          if (!cancelled) setSubjects(loadedSubs);
+          try { localStorage.setItem('nabough_cached_subjects', JSON.stringify(loadedSubs)); } catch (storageError) { console.warn('Local storage quota; IndexedDB remains available:', storageError); }
+          await saveSubjectsOffline(loadedSubs);
         }
-
         const studsSnap = await getDocs(collection(db, 'students'));
         if (!studsSnap.empty) {
           const loadedStuds = studsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setStudentsList(loadedStuds);
-          localStorage.setItem('nabough_cached_students', JSON.stringify(loadedStuds));
+          if (!cancelled) setStudentsList(loadedStuds);
+          try { localStorage.setItem('nabough_cached_students', JSON.stringify(loadedStuds)); } catch (storageError) { console.warn('Students cache quota:', storageError); }
         }
       } catch (e) {
-        const cachedSubs = safeGetStorage('nabough_cached_subjects', []);
+        const cachedSubs = firstCached;
         const cachedStuds = safeGetStorage('nabough_cached_students', []);
-        if (cachedSubs.length > 0) setSubjects(cachedSubs);
-        if (cachedStuds.length > 0) setStudentsList(cachedStuds);
+        if (!cancelled && cachedSubs.length) setSubjects(cachedSubs);
+        if (!cancelled && cachedStuds.length) setStudentsList(cachedStuds);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) setIsLoading(false);
       }
     }
     loadDataOfflineFirst();
-
-    const safetyTimer = setTimeout(() => {
-      setIsLoading(false);
-    }, 800);
-    return () => clearTimeout(safetyTimer);
+    const refreshWhenOnline = async () => {
+      try {
+        const fresh = await getDocs(collection(db, 'subjects'));
+        if (!fresh.empty && !cancelled) {
+          const latest = fresh.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (Number.isFinite(a.displayOrder) ? a.displayOrder : 999999) - (Number.isFinite(b.displayOrder) ? b.displayOrder : 999999));
+          setSubjects(latest);
+          try { localStorage.setItem('nabough_cached_subjects', JSON.stringify(latest)); } catch (storageError) { console.warn('Local storage quota:', storageError); }
+          await saveSubjectsOffline(latest);
+        }
+      } catch (error) { console.warn('تعذر تحديث المحتوى بعد عودة الإنترنت:', error); }
+    };
+    window.addEventListener('online', refreshWhenOnline);
+    const safetyTimer = setTimeout(() => { if (!cancelled) setIsLoading(false); }, 1200);
+    return () => { cancelled = true; clearTimeout(safetyTimer); window.removeEventListener('online', refreshWhenOnline); };
   }, []);
 
   const [subjects, setSubjects] = useState<any[]>(() => {
@@ -273,7 +395,30 @@ export function App() {
 
   const [isChangingStage, setIsChangingStage] = useState<boolean>(false);
 
-  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings'>('curriculum');
+  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings' | 'communications' | 'visitors'>('curriculum');
+
+  // لوحة الإحصائيات فقط هي التي تشترك مع الجلسات النشطة؛ يعاد تحديث نافذة الدقيقتين كل دقيقة.
+  useEffect(() => {
+    if (!isAdmin || activeTab !== 'visitors') return;
+    let unsubscribe: (() => void) | null = null;
+    const subscribeToActive = () => {
+      if (unsubscribe) unsubscribe();
+      const cutoff = Timestamp.fromMillis(Date.now() - 120000);
+      const activeQuery = query(collection(db, 'visitor_sessions'), where('lastSeen', '>=', cutoff));
+      unsubscribe = onSnapshot(activeQuery, (snapshot) => {
+        const sessions = snapshot.docs.map((item) => ({ id: item.id, ...item.data() }));
+        setActiveVisitorSessions(sessions);
+        setVisitorStatsUpdatedAt(new Date());
+        setVisitorStatsError('');
+      }, (error) => {
+        console.warn('تعذر تحميل إحصائيات الزوار:', error);
+        setVisitorStatsError('تعذر قراءة إحصائيات الزوار. تحقق من صلاحيات Firestore لمجموعة visitor_sessions.');
+      });
+    };
+    subscribeToActive();
+    const refresh = window.setInterval(subscribeToActive, 60000);
+    return () => { window.clearInterval(refresh); if (unsubscribe) unsubscribe(); };
+  }, [isAdmin, activeTab]);
   const [selectedStage, setSelectedStage] = useState<string>('all'); 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   
@@ -281,7 +426,54 @@ export function App() {
 
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfLoadFailed, setPdfLoadFailed] = useState(false);
+  const [announcementItems, setAnnouncementItems] = useState<any[]>([]);
+  const [announcementText, setAnnouncementText] = useState('');
+  const [announcementStage, setAnnouncementStage] = useState('all');
+  const [announcementSaving, setAnnouncementSaving] = useState(false);
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
+  const [showExamHistory, setShowExamHistory] = useState(false);
+  const [examHistory, setExamHistory] = useState<any[]>([]);
+  const [examHistoryLoading, setExamHistoryLoading] = useState(false);
+  const [examHistoryError, setExamHistoryError] = useState('');
+  // إحصائيات التواجد: جلسة واحدة لكل متصفح، مع نبضة كل 45 ثانية.
+  const [activeVisitorSessions, setActiveVisitorSessions] = useState<any[]>([]);
+  const [visitorStatsError, setVisitorStatsError] = useState('');
+  const [visitorStatsUpdatedAt, setVisitorStatsUpdatedAt] = useState<Date | null>(null);
+
+  const loadAdminStudentExamHistory = async (student: any) => {
+    if (!isAdmin || !student?.id) return;
+    setAdminExamStudent(student);
+    setAdminExamLoading(true);
+    setAdminExamError('');
+    setAdminExamAttempts([]);
+    try {
+      const snap = await getDocs(collection(db, 'exam_attempts'));
+      const rows = snap.docs.map((item: any) => ({ id: item.id, ...item.data() }))
+        .filter((item: any) => item.studentId === student.id)
+        .sort((a: any, b: any) => String(b.attemptedAt || '').localeCompare(String(a.attemptedAt || '')));
+      setAdminExamAttempts(rows);
+    } catch (error) {
+      setAdminExamError('تعذر تحميل سجل هذا الطالب. تحقق من اتصال الإنترنت وصلاحيات قراءة exam_attempts في Firestore.');
+    } finally {
+      setAdminExamLoading(false);
+    }
+  };
+
+  const loadStudentExamHistory = async () => {
+    if (!loggedStudent?.id) return;
+    setExamHistoryLoading(true); setExamHistoryError(''); setShowExamHistory(true);
+    try {
+      const snap = await getDocs(collection(db, 'exam_attempts'));
+      const rows = snap.docs.map((item: any) => ({ id: item.id, ...item.data() }))
+        .filter((item: any) => item.studentId === loggedStudent.id)
+        .sort((a: any, b: any) => String(b.attemptedAt || '').localeCompare(String(a.attemptedAt || '')));
+      setExamHistory(rows);
+    } catch (error) {
+      setExamHistoryError('تعذر تحميل سجل الامتحانات. تحقق من اتصال الإنترنت وصلاحيات قاعدة البيانات.');
+    } finally { setExamHistoryLoading(false); }
+  };
 
   // إدارة ملفات الاختبارات التفاعلية HTML داخل صفحة المادة
   const [htmlQuizTitle, setHtmlQuizTitle] = useState('');
@@ -312,6 +504,7 @@ export function App() {
   const [editingInteractiveItem, setEditingInteractiveItem] = useState<{subjectId: string, noteId: string, questionIndex: number, questionObj: any} | null>(null);
   const [editInteractiveQText, setEditInteractiveQText] = useState('');
   const [editInteractiveCorrect, setEditInteractiveCorrect] = useState('');
+  const [editInteractiveOptions, setEditInteractiveOptions] = useState<string[]>(['', '', '', '']);
 
   const getEmbedPdfUrl = (url: string) => {
     if (!url) return '';
@@ -320,6 +513,12 @@ export function App() {
     }
     return url;
   };
+
+  useEffect(() => {
+    if (!activePdfUrl || !pdfLoading) return;
+    const timer = window.setTimeout(() => { setPdfLoading(false); setPdfLoadFailed(true); }, 12000);
+    return () => window.clearTimeout(timer);
+  }, [activePdfUrl, pdfLoading]);
 
   const [quizAnswers, setQuizAnswers] = useState<Record<number, string>>({});
   const [quizResult, setQuizResult] = useState<{score: number, total: number, details: any[]} | null>(null);
@@ -337,6 +536,14 @@ export function App() {
   const [editNoteContent, setEditNoteContent] = useState('');
   const [editNoteImage, setEditNoteImage] = useState('');
   const [editNoteVip, setEditNoteVip] = useState(false);
+  // إعدادات تنسيق الشروحات والأسئلة والأجوبة الجديدة
+  const [noteFontSize, setNoteFontSize] = useState('17');
+  const [noteTextColor, setNoteTextColor] = useState('#334155');
+  const [noteTitleColor, setNoteTitleColor] = useState('#0f172a');
+  const [questionFontSize, setQuestionFontSize] = useState('16');
+  const [questionTextColor, setQuestionTextColor] = useState('#1e293b');
+  const [answerTextColor, setAnswerTextColor] = useState('#047857');
+  const [contentBold, setContentBold] = useState(false);
 
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editStudentName, setEditStudentName] = useState('');
@@ -511,7 +718,7 @@ export function App() {
       await updateDoc(doc(db, 'subjects', subjectId), { quizzes: updatedQuizzes });
       const updatedSubs = subjects.map(sub => sub.id === subjectId ? { ...sub, quizzes: updatedQuizzes } : sub);
       setSubjects(updatedSubs);
-      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
       setQuizTitle('');
       setQuizIsVip(false);
       setQuizDurationMinutes(15);
@@ -552,7 +759,7 @@ export function App() {
       await updateDoc(doc(db, 'subjects', subjectId), { quizzes: updatedQuizzes });
       const updatedSubs = subjects.map((sub: any) => sub.id === subjectId ? { ...sub, quizzes: updatedQuizzes } : sub);
       setSubjects(updatedSubs);
-      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
       setHtmlQuizTitle('');
       setHtmlQuizContent('');
       setHtmlQuizFileName('');
@@ -574,7 +781,7 @@ export function App() {
       await updateDoc(doc(db, 'subjects', subjectId), { quizzes: updatedQuizzes });
       const updatedSubs = subjects.map((sub: any) => sub.id === subjectId ? { ...sub, quizzes: updatedQuizzes } : sub);
       setSubjects(updatedSubs);
-      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
       setSuccessMessage('تم تحديث الاختبار بنجاح.');
       setTimeout(() => setSuccessMessage(null), 2500);
     } catch (error) {
@@ -626,7 +833,21 @@ export function App() {
           lastSeen: nowFormatted,
           deviceType: device
         });
-      } catch(e) {}
+        const subjectForAttempt = subjects.find((item: any) => item.id === selectedSubjectId);
+        await addDoc(collection(db, 'exam_attempts'), {
+          studentId: loggedStudent.id,
+          studentName: loggedStudent.name || '',
+          studentStage: loggedStudent.stage || '',
+          subjectId: selectedSubjectId || '',
+          subjectName: subjectForAttempt?.name || subjectForAttempt?.title || 'غير محدد',
+          quizId: activeQuiz.id || '',
+          quizTitle: activeQuiz.title || 'امتحان',
+          score: finalScore,
+          total: 100,
+          details,
+          attemptedAt: new Date().toISOString()
+        });
+      } catch(e) { console.warn('تعذر حفظ نسخة سجل الامتحان:', e); }
     }
     setSuccessMessage(`أتممت الامتحان بنجاح! درجتك: ${finalScore}/100`);
   };
@@ -673,7 +894,7 @@ export function App() {
       await updateDoc(doc(db, 'subjects', subjectId), { [listKey]: list });
       const updatedSubs = subjects.map(s => s.id === subjectId ? { ...s, [listKey]: list } : s);
       setSubjects(updatedSubs);
-      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
     } catch(e) {}
   };
 
@@ -688,8 +909,14 @@ export function App() {
     list[index] = list[targetIndex];
     list[targetIndex] = temp;
 
-    setSubjects(list);
-    localStorage.setItem('nabough_cached_subjects', JSON.stringify(list));
+    const orderedList = list.map((sub, orderIndex) => ({ ...sub, displayOrder: orderIndex }));
+    try {
+      await Promise.all(orderedList.map(sub => updateDoc(doc(db, 'subjects', sub.id), { displayOrder: sub.displayOrder })));
+      setSubjects(orderedList);
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(orderedList)); void saveSubjectsOffline(orderedList);
+    } catch (e) {
+      alert('ما تم حفظ ترتيب المواد. تأكد من الاتصال بالإنترنت ثم حاول مرة ثانية.');
+    }
   };
 
   const filteredSubjects = subjects.filter(s => {
@@ -717,7 +944,15 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-1 sm:pt-2">
-      
+      {!isOnline && (
+        <div role="status" className="sticky top-0 z-[60] w-full bg-amber-100 text-amber-900 border-b border-amber-300 px-3 py-2 text-center text-xs sm:text-sm font-bold">
+          <span className="inline-flex items-center justify-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
+            لا يوجد اتصال بالإنترنت — تعرض المنصة المحتوى المحفوظ على هذا الجهاز، وقد لا تعمل الفيديوهات والدردشة والخدمات المباشرة.
+          </span>
+        </div>
+      )}
+
       {/* نافذة تعديل الامتحان للأدمن (مع دعم تعديل السؤال، وتعديل النص والإجابة، وإضافة أسئلة جديدة) */}
       {editingQuizItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
@@ -818,7 +1053,7 @@ export function App() {
                   await updateDoc(doc(db, 'subjects', editingQuizItem.subjectId), { quizzes: updatedQuizzes });
                   const updatedSubs = subjects.map(s => s.id === editingQuizItem.subjectId ? {...s, quizzes: updatedQuizzes} : s);
                   setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
                   setEditingQuizItem(null);
                   setSuccessMessage('تم تحديث الامتحان وتعديل الأسئلة بنجاح!');
                   setTimeout(() => setSuccessMessage(null), 3000);
@@ -830,6 +1065,26 @@ export function App() {
                 إلغاء
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {editingNoteId && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-5 shadow-2xl relative space-y-3 text-right">
+            <button onClick={() => setEditingNoteId(null)} className="absolute top-3 left-3 w-8 h-8 bg-slate-100 rounded-full">✕</button>
+            <h3 className="text-lg font-black border-b pb-2">تعديل الشرح أو التعليل</h3>
+            <label className="block text-xs font-bold">عنوان الشرح</label><input value={editNoteTitle} onChange={e => setEditNoteTitle(e.target.value)} className="w-full border rounded-xl p-2 text-sm" />
+            <label className="block text-xs font-bold">نص الشرح</label><textarea value={editNoteContent} onChange={e => setEditNoteContent(e.target.value)} className="w-full border rounded-xl p-2 text-sm min-h-28" />
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-xl bg-slate-50 border p-3">
+              <label className="text-xs font-bold">حجم النص<select value={noteFontSize} onChange={e => setNoteFontSize(e.target.value)} className="mt-1 w-full border rounded-lg p-2"><option value="15">صغير</option><option value="17">متوسط</option><option value="19">كبير</option><option value="22">كبير جداً</option><option value="25">ضخم</option></select></label>
+              <label className="text-xs font-bold">لون النص<input type="color" value={noteTextColor} onChange={e => setNoteTextColor(e.target.value)} className="mt-1 w-full h-9" /></label>
+              <label className="text-xs font-bold">لون العنوان<input type="color" value={noteTitleColor} onChange={e => setNoteTitleColor(e.target.value)} className="mt-1 w-full h-9" /></label>
+              <label className="col-span-2 sm:col-span-3 flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={contentBold} onChange={e => setContentBold(e.target.checked)} /> نص عريض</label>
+            </div>
+            <label className="block text-xs font-bold">رابط الصورة (اختياري)</label><input value={editNoteImage} onChange={e => setEditNoteImage(e.target.value)} className="w-full border rounded-xl p-2 text-sm" />
+            <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editNoteVip} onChange={e => setEditNoteVip(e.target.checked)} /> شرح خاص بـ VIP</label>
+            <div className="flex gap-2 pt-2"><button onClick={async () => { const subjectId = selectedSubjectId; if (!subjectId) { alert('لم يتم تحديد المادة. أغلق النافذة وافتح التعديل من داخل المادة مرة أخرى.'); return; } try { const subjectRef = doc(db, 'subjects', subjectId); const freshSnap = await getDoc(subjectRef); if (!freshSnap.exists()) { alert('لم نعثر على المادة في قاعدة البيانات.'); return; } const freshSubject = freshSnap.data() as any; const freshNotes = Array.isArray(freshSubject.notes) ? freshSubject.notes : []; if (!freshNotes.some((n: any) => n.id === editingNoteId)) { alert('لم نعثر على الشرح المطلوب. حدّث الصفحة وافتح التعديل من جديد.'); return; } const updatedNotes = freshNotes.map((n: any) => n.id === editingNoteId ? { ...n, title: editNoteTitle, content: editNoteContent, image: editNoteImage, isVip: editNoteVip, fontSize: `${noteFontSize}px`, textColor: noteTextColor, titleColor: noteTitleColor, contentBold } : n); await updateDoc(subjectRef, { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === subjectId ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs); setEditingNoteId(null); setSuccessMessage('تم حفظ تعديل الشرح في قاعدة البيانات بنجاح'); setTimeout(() => setSuccessMessage(null), 3000); } catch (e: any) { console.error('Note update failed:', e); alert('فشل حفظ التعديل: ' + (e?.code || e?.message || 'خطأ غير معروف')); } }} className="flex-1 bg-emerald-600 text-white rounded-xl py-2 font-bold text-sm">حفظ التعديل</button><button onClick={() => setEditingNoteId(null)} className="flex-1 bg-slate-200 rounded-xl py-2 font-bold text-sm">إلغاء</button></div>
           </div>
         </div>
       )}
@@ -848,6 +1103,10 @@ export function App() {
                 <label className="block text-xs font-bold text-slate-700 mb-1">نص السؤال</label>
                 <input type="text" value={editInteractiveQText} onChange={(e) => setEditInteractiveQText(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
               </div>
+              {(editingInteractiveItem.questionObj?.type === 'mcq' || editingInteractiveItem.questionObj?.type === 'true_false') && <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700 mb-1">الاختيارات (تگدر تعدل كل اختيار)</label>
+                {editInteractiveOptions.map((opt, idx) => <input key={idx} type="text" value={opt} onChange={(e) => setEditInteractiveOptions(prev => prev.map((v, i) => i === idx ? e.target.value : v))} placeholder={`الخيار ${idx + 1}`} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />)}
+              </div>}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">الإجابة الصحيحة</label>
                 <input type="text" value={editInteractiveCorrect} onChange={(e) => setEditInteractiveCorrect(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold text-emerald-900 bg-emerald-50" />
@@ -864,7 +1123,8 @@ export function App() {
                     newIqList[editingInteractiveItem.questionIndex] = {
                       ...newIqList[editingInteractiveItem.questionIndex],
                       q: editInteractiveQText,
-                      correct: editInteractiveCorrect
+                      correct: editInteractiveCorrect,
+                      ...((editingInteractiveItem.questionObj?.type === 'mcq' || editingInteractiveItem.questionObj?.type === 'true_false') ? { options: editInteractiveOptions } : {})
                     };
                     return { ...n, interactiveQuestions: newIqList };
                   }
@@ -875,7 +1135,7 @@ export function App() {
                   await updateDoc(doc(db, 'subjects', editingInteractiveItem.subjectId), { notes: updatedNotes });
                   const updatedSubs = subjects.map(s => s.id === editingInteractiveItem.subjectId ? {...s, notes: updatedNotes} : s);
                   setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
                   setEditingInteractiveItem(null);
                   setSuccessMessage('تم تعديل السؤال التفاعلي بنجاح!');
                   setTimeout(() => setSuccessMessage(null), 3000);
@@ -926,7 +1186,7 @@ export function App() {
                   await updateDoc(doc(db, 'subjects', editingVideoItem.subjectId), { videos: updatedVideos });
                   const updatedSubs = subjects.map(s => s.id === editingVideoItem.subjectId ? {...s, videos: updatedVideos} : s);
                   setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
                   setEditingVideoItem(null);
                   setSuccessMessage('تم تعديل الفيديو بنجاح!');
                   setTimeout(() => setSuccessMessage(null), 3000);
@@ -976,7 +1236,7 @@ export function App() {
                   await updateDoc(doc(db, 'subjects', editingBookletItem.subjectId), { booklets: updatedBooklets });
                   const updatedSubs = subjects.map(s => s.id === editingBookletItem.subjectId ? {...s, booklets: updatedBooklets} : s);
                   setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
                   setEditingBookletItem(null);
                   setSuccessMessage('تم تعديل الملزمة بنجاح!');
                   setTimeout(() => setSuccessMessage(null), 3000);
@@ -1154,6 +1414,35 @@ export function App() {
             <button onClick={() => setViewingStudentAnswers(null)} className="w-full py-3 bg-slate-900 text-white font-bold rounded-xl text-xs">
               إغلاق النافذة
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* سجل جميع امتحانات الطالب للأدمن */}
+      {adminExamStudent && isAdmin && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-[90] flex items-center justify-center p-3">
+          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[92vh] overflow-y-auto p-4 sm:p-6 shadow-2xl relative space-y-4 text-right">
+            <button onClick={() => { setAdminExamStudent(null); setAdminExamAttempts([]); }} className="absolute top-3 left-3 w-10 h-10 bg-slate-100 hover:bg-rose-50 text-slate-600 rounded-full flex items-center justify-center"><X className="w-5 h-5" /></button>
+            <div className="border-b pb-3 pl-12">
+              <h3 className="text-lg font-black text-slate-900">الملف الامتحاني الكامل للطالب</h3>
+              <p className="text-xs text-indigo-700 font-bold mt-1">{adminExamStudent.name} · {adminExamStudent.stage}</p>
+              <p className="text-xs text-slate-500 mt-1">آخر درجة محفوظة بالنظام القديم: {adminExamStudent.examScore || 'لا توجد درجة'}</p>
+            </div>
+            {adminExamLoading ? <p className="py-8 text-center text-indigo-700 font-bold">جارٍ تحميل جميع المحاولات...</p> : adminExamError ? <p className="py-6 text-center text-rose-600 text-sm font-bold">{adminExamError}</p> : adminExamAttempts.length === 0 ? <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm text-amber-900">لا توجد محاولات في السجل الجديد لهذا الطالب حتى الآن. إذا كان قد امتحن قبل إضافة سجل المحاولات، فستبقى آخر نتيجة قديمة ظاهرة أعلاه ويمكن مراجعة تفاصيلها من زر «عرض آخر إجابات» في قائمة الطلبة.</div> : (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl bg-indigo-50 p-3"><p className="text-xs text-indigo-700">عدد المحاولات</p><p className="text-2xl font-black text-indigo-900">{adminExamAttempts.length}</p></div>
+                  <div className="rounded-xl bg-emerald-50 p-3"><p className="text-xs text-emerald-700">معدل الدرجات</p><p className="text-2xl font-black text-emerald-900">{Math.round(adminExamAttempts.reduce((sum: number, a: any) => sum + Number(a.score || 0), 0) / adminExamAttempts.length)}%</p></div>
+                </div>
+                {adminExamAttempts.map((attempt: any) => (
+                  <article key={attempt.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2"><div><h4 className="font-black text-sm text-slate-900">{attempt.subjectName || 'مادة غير محددة'} · {attempt.quizTitle || 'امتحان'}</h4><p className="text-[11px] text-slate-500 mt-1">{attempt.attemptedAt ? new Date(attempt.attemptedAt).toLocaleString('ar-IQ') : 'التاريخ غير متوفر'}</p></div><strong className="text-lg text-indigo-700 whitespace-nowrap">{attempt.score ?? 0}/{attempt.total ?? 100}</strong></div>
+                    {Array.isArray(attempt.details) && <details className="border-t pt-2"><summary className="cursor-pointer text-xs font-black text-indigo-700">تفاصيل الإجابات ونقاط القوة والضعف ({attempt.details.length} سؤال)</summary><div className="space-y-2 mt-3">{attempt.details.map((det: any, index: number) => <div key={index} className={`rounded-lg p-2 text-xs border ${det.isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}><p className="font-bold">س{index+1}: {det.q}</p><p className="mt-1">إجابة الطالب: {det.userAns || 'بدون إجابة'}</p><p>الإجابة النموذجية: {det.correct}</p><p className="font-black mt-1">{det.partialScore ?? 0}/100 · {det.isCorrect ? 'نقطة قوة / إجابة صحيحة' : 'نقطة تحتاج إلى مراجعة'}</p></div>)}</div></details>}
+                  </article>
+                ))}
+              </div>
+            )}
+            <button onClick={() => { setAdminExamStudent(null); setAdminExamAttempts([]); }} className="w-full py-3 rounded-xl bg-slate-900 text-white text-sm font-bold">إغلاق الملف</button>
           </div>
         </div>
       )}
@@ -1394,13 +1683,15 @@ export function App() {
                 >
                   <ExternalLink className="w-3.5 h-3.5" /> فتح / تحميل خارجي 📥
                 </a>
-                <button onClick={() => setActivePdfUrl(null)} className="w-9 h-9 bg-rose-600 text-white rounded-full flex items-center justify-center font-bold">
+                <button onClick={() => { setActivePdfUrl(null); setPdfLoading(false); setPdfLoadFailed(false); }} className="w-9 h-9 bg-rose-600 text-white rounded-full flex items-center justify-center font-bold">
                   <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
-            <div className="flex-1 w-full rounded-2xl overflow-hidden bg-slate-100 mt-3">
-              <iframe src={getEmbedPdfUrl(activePdfUrl)} className="w-full h-full border-0"></iframe>
+            <div className="flex-1 w-full rounded-2xl overflow-hidden bg-slate-100 mt-3 relative">
+              {pdfLoading && !pdfLoadFailed && <div className="absolute inset-0 z-10 bg-white/95 flex flex-col items-center justify-center gap-3 text-center p-5"><div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-indigo-700 to-violet-500 text-white flex items-center justify-center text-3xl font-black shadow-lg animate-pulse">ن</div><p className="font-black text-slate-800">يرجى الانتظار، جارٍ تحميل الكتاب</p><p className="text-xs text-slate-500">قد يستغرق فتح الملف بعض الوقت حسب حجمه وسرعة الإنترنت.</p><div className="w-40 h-1.5 rounded-full bg-slate-200 overflow-hidden"><div className="h-full w-1/2 bg-indigo-600 animate-pulse rounded-full" /></div></div>}
+              {pdfLoadFailed && <div className="absolute inset-0 z-10 bg-white flex flex-col items-center justify-center gap-3 text-center p-5"><p className="font-bold text-rose-700">تعذر عرض الكتاب داخل المنصة.</p><p className="text-sm text-slate-600 max-w-md">مصدر هذا الكتاب قد يمنع عرضه داخل المنصة. تگدر تفتحه من الرابط الخارجي أو تحاول مرة ثانية. المشكلة من استضافة الملف وليست من حسابك.</p><div className="flex flex-wrap justify-center gap-2"><a href={activePdfUrl} target="_blank" rel="noreferrer" className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold">فتح الكتاب خارج المنصة</a><button onClick={() => { setPdfLoadFailed(false); setPdfLoading(true); }} className="px-4 py-2 rounded-xl bg-slate-200 text-slate-800 text-xs font-bold">إعادة المحاولة</button></div></div>}
+              {!pdfLoadFailed && <iframe key={activePdfUrl} src={getEmbedPdfUrl(activePdfUrl)} onLoad={() => { setPdfLoading(false); setPdfLoadFailed(false); }} onError={() => { setPdfLoading(false); setPdfLoadFailed(true); }} className="w-full h-full border-0" title="عارض ملف PDF"></iframe>}
             </div>
           </div>
         </div>
@@ -1559,6 +1850,12 @@ export function App() {
               <button onClick={() => { setActiveTab('vipSettings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'vipSettings' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800'}`}>
                 <Crown className="w-3.5 h-3.5" /> إعدادات VIP
               </button>
+              <button onClick={() => { setActiveTab('communications'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'communications' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700'}`}>
+                <MessageSquare className="w-3.5 h-3.5" /> الإعلانات والتواصل
+              </button>
+              <button onClick={() => { setActiveTab('visitors'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'visitors' ? 'bg-violet-700 text-white' : 'bg-violet-50 text-violet-700'}`}>
+                <Users className="w-3.5 h-3.5" /> إحصائيات الزوار
+              </button>
               <button onClick={() => { setActiveTab('settings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'settings' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}>
                 <Key className="w-3.5 h-3.5" /> كلمة المرور
               </button>
@@ -1627,6 +1924,42 @@ export function App() {
             )}
           </div>
         </div>
+
+        {/* الإعلانات الموجهة لجميع الطلبة أو لمرحلتهم */}
+        {!isAdmin && announcementItems.filter((a: any) => a.active !== false && (a.stage === 'all' || (loggedStudent && a.stage === loggedStudent.stage))).map((a: any) => (
+          <div key={a.id} className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-right shadow-sm"><div className="flex items-start gap-2"><span className="text-lg">📢</span><p className="text-sm font-bold text-amber-900 leading-relaxed">{a.text}</p></div></div>
+        ))}
+        {!isAdmin && vipSettings.telegram && vipSettings.telegram !== 'https://t.me/YourUsername' && (
+          <div className="flex justify-center"><a href={vipSettings.telegram} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-4 py-2.5 text-xs font-black shadow"><Send className="w-4 h-4" /> انضم إلى قناة التليجرام</a></div>
+        )}
+
+        {!isAdmin && loggedStudent && (
+          <div className="flex justify-center -mt-1">
+            <button onClick={loadStudentExamHistory} className="w-full max-w-md rounded-2xl bg-gradient-to-r from-indigo-700 to-violet-700 hover:from-indigo-800 hover:to-violet-800 text-white px-5 py-4 shadow-lg flex items-center justify-center gap-3">
+              <Award className="w-6 h-6" />
+              <span className="text-right"><span className="block text-base font-black">امتحاناتي ودرجاتي</span><span className="block text-[11px] text-indigo-100 mt-0.5">عرض جميع الامتحانات والنتائج وتحليل الإجابات</span></span>
+            </button>
+          </div>
+        )}
+
+        {showExamHistory && loggedStudent && (
+          <section className="rounded-2xl border border-indigo-200 bg-white p-4 shadow-md space-y-3 text-right">
+            <div className="flex items-center justify-between gap-2 border-b pb-3">
+              <div><h3 className="font-black text-slate-900 text-base">سجل امتحاناتي ودرجاتي</h3><p className="text-xs text-slate-500 mt-1">{loggedStudent.name} · {loggedStudent.stage}</p></div>
+              <button onClick={() => setShowExamHistory(false)} className="rounded-full bg-slate-100 p-2 text-slate-600" aria-label="إغلاق سجل الامتحانات"><X className="w-4 h-4" /></button>
+            </div>
+            {examHistoryLoading ? <p className="py-6 text-center text-sm font-bold text-indigo-600">جارٍ تحميل سجل امتحاناتك...</p> : examHistoryError ? <p className="py-5 text-center text-sm font-bold text-rose-600">{examHistoryError}</p> : examHistory.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">لا توجد محاولات محفوظة في السجل بعد. ستظهر الامتحانات التي تؤديها بعد تفعيل هذه الإضافة هنا.</p> : (
+              <div className="space-y-3">
+                {examHistory.map((attempt: any) => (
+                  <article key={attempt.id} className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-2">
+                    <div className="flex items-start justify-between gap-2"><div><h4 className="font-black text-sm text-slate-900">{attempt.subjectName || 'المادة'} · {attempt.quizTitle || 'امتحان'}</h4><p className="text-[11px] text-slate-500 mt-1">{attempt.attemptedAt ? new Date(attempt.attemptedAt).toLocaleString('ar-IQ') : 'التاريخ غير متوفر'}</p></div><strong className="text-lg text-indigo-700 whitespace-nowrap">{attempt.score ?? 0}/{attempt.total ?? 100}</strong></div>
+                    {Array.isArray(attempt.details) && <details className="pt-2 border-t border-slate-200"><summary className="cursor-pointer text-xs font-black text-indigo-700">عرض الإجابات والتفاصيل ({attempt.details.length} سؤال)</summary><div className="space-y-2 mt-3">{attempt.details.map((det: any, index: number) => <div key={index} className={`rounded-lg p-2 text-xs border ${det.isCorrect ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}><p className="font-bold">س{index+1}: {det.q}</p><p className="mt-1">إجابتك: {det.userAns || 'بدون إجابة'}</p><p>الإجابة الصحيحة: {det.correct}</p><p className="font-black mt-1">{det.partialScore ?? 0}/100 {det.isCorrect ? '✓ صحيحة' : '✕ تحتاج مراجعة'}</p></div>)}</div></details>}
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* 1. تبويب المنهج الدراسي */}
         {activeTab === 'curriculum' && !selectedSubjectId && (
@@ -1785,12 +2118,16 @@ export function App() {
                     <div key={note.id} className="p-4 bg-white rounded-2xl border shadow-sm space-y-3 relative">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
-                          <h5 className="font-black text-slate-900 text-xs sm:text-sm">💡 {note.title}</h5>
+                          <h5 className="font-black text-xs sm:text-base" style={{ color: note.titleColor || '#0f172a', fontSize: note.titleFontSize || '18px' }}>💡 {note.title}</h5>
                           {note.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
                         </div>
+                        {isAdmin && <div className="flex items-center gap-1">
+                          <button onClick={() => { setEditingNoteId(note.id); setEditNoteTitle(note.title || ''); setEditNoteContent(note.content || ''); setEditNoteImage(note.image || ''); setEditNoteVip(!!note.isVip); setNoteFontSize(String(parseInt(note.fontSize || '17', 10))); setNoteTextColor(note.textColor || '#334155'); setNoteTitleColor(note.titleColor || '#0f172a'); setContentBold(!!note.contentBold); }} className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-bold">✏️ تعديل الشرح</button>
+                          <button onClick={async () => { if (!window.confirm('تأكيد حذف الشرح وكل الأسئلة التفاعلية التابعة له؟')) return; const updatedNotes = (currentSub.notes || []).filter((n: any) => n.id !== note.id); try { await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === currentSub.id ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs); setSuccessMessage('تم حذف الشرح بنجاح'); setTimeout(() => setSuccessMessage(null), 2500); } catch (e) { alert('تعذر حذف الشرح، حاول مرة أخرى'); } }} className="px-2 py-1 bg-rose-50 text-rose-700 rounded-lg text-[10px] font-bold">🗑 حذف</button>
+                        </div>}
                       </div>
 
-                      <p className="text-xs text-slate-700 leading-relaxed">{note.content}</p>
+                      <p className="leading-relaxed whitespace-pre-wrap" style={{ color: note.textColor || '#334155', fontSize: note.fontSize || '17px', fontWeight: note.contentBold ? 700 : 400, lineHeight: 1.9 }}>{note.content}</p>
 
                       {note.image && (
                         <div className="mt-2 h-48 w-full rounded-xl overflow-hidden border shadow-sm">
@@ -1814,13 +2151,14 @@ export function App() {
                             return (
                               <div key={iqIdx} className="bg-white p-3 rounded-lg border space-y-2 relative">
                                 <div className="flex items-center justify-between">
-                                  <div className="text-xs font-bold text-slate-900">س: {iq.q}</div>
+                                  <div className="font-bold" style={{ color: iq.questionColor || '#1e293b', fontSize: iq.questionFontSize || '16px', lineHeight: 1.8 }}>س: {iq.q}</div>
                                   {isAdmin && (
                                     <div className="flex items-center gap-1">
                                       <button onClick={() => {
                                         setEditingInteractiveItem({ subjectId: currentSub.id, noteId: note.id, questionIndex: iqIdx, questionObj: iq });
                                         setEditInteractiveQText(iq.q);
                                         setEditInteractiveCorrect(iq.correct);
+                                        setEditInteractiveOptions(Array.isArray(iq.options) ? [...iq.options] : ['', '', '', '']);
                                       }} className="p-1 bg-indigo-50 text-indigo-600 rounded text-[10px] cursor-pointer" title="تعديل السؤال"><Edit3 className="w-3 h-3" /></button>
                                       
                                       <button onClick={async () => {
@@ -1840,7 +2178,7 @@ export function App() {
                                     {iq.options.map((opt: string, oIdx: number) => (
                                       <label key={oIdx} className={`flex items-center gap-2 p-2 rounded border cursor-pointer text-xs font-bold transition-all ${userAns === opt ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50'}`}>
                                         <input type="radio" name={`iq_${ansKey}`} checked={userAns === opt} onChange={() => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: opt})} className="hidden" />
-                                        <span>{opt}</span>
+                                        <span style={{ fontSize: iq.questionFontSize || '16px' }}>{opt}</span>
                                       </label>
                                     ))}
                                   </div>
@@ -1860,7 +2198,7 @@ export function App() {
                                   </button>
                                   {isGraded && (
                                     <span className={`text-[10px] font-black ${isCorrect ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                      {isCorrect ? '✅ صحيحة بطل!' : `❌ خطأ (العبارة الصحيحة: ${iq.correct})`}
+                                      {isCorrect ? '✅ صحيحة بطل!' : <span>❌ خطأ (العبارة الصحيحة: <b style={{ color: iq.answerColor || '#047857', fontSize: iq.questionFontSize || '16px' }}>{iq.correct}</b>)</span>}
                                     </span>
                                   )}
                                 </div>
@@ -1877,7 +2215,16 @@ export function App() {
                   <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
                     <h5 className="text-xs font-black text-slate-800">➕ إضافة شرح أو تعليل جديد (مع صورة توضيحية وسؤال تفاعلي):</h5>
                     <input type="text" value={newNoteTitle} onChange={(e) => setNewNoteTitle(e.target.value)} placeholder="العنوان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
-                    <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="النص التفصيلي..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold h-20" />
+                    <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="النص التفصيلي..." className="w-full px-3 py-2 border rounded-xl text-sm font-bold min-h-28" />
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-xl border bg-slate-50 p-3">
+                      <label className="text-xs font-bold">حجم نص الشرح<select value={noteFontSize} onChange={e => setNoteFontSize(e.target.value)} className="mt-1 w-full border rounded-lg p-2 bg-white"><option value="15">صغير</option><option value="17">متوسط</option><option value="19">كبير</option><option value="22">كبير جداً</option><option value="25">ضخم</option></select></label>
+                      <label className="text-xs font-bold">لون نص الشرح<input type="color" value={noteTextColor} onChange={e => setNoteTextColor(e.target.value)} className="mt-1 w-full h-10 border rounded-lg bg-white" /></label>
+                      <label className="text-xs font-bold">لون العنوان<input type="color" value={noteTitleColor} onChange={e => setNoteTitleColor(e.target.value)} className="mt-1 w-full h-10 border rounded-lg bg-white" /></label>
+                      <label className="text-xs font-bold">حجم السؤال والاختيارات<select value={questionFontSize} onChange={e => setQuestionFontSize(e.target.value)} className="mt-1 w-full border rounded-lg p-2 bg-white"><option value="14">صغير</option><option value="16">متوسط</option><option value="18">كبير</option><option value="21">كبير جداً</option></select></label>
+                      <label className="text-xs font-bold">لون السؤال<input type="color" value={questionTextColor} onChange={e => setQuestionTextColor(e.target.value)} className="mt-1 w-full h-10 border rounded-lg bg-white" /></label>
+                      <label className="text-xs font-bold">لون الإجابة الصحيحة<input type="color" value={answerTextColor} onChange={e => setAnswerTextColor(e.target.value)} className="mt-1 w-full h-10 border rounded-lg bg-white" /></label>
+                      <label className="col-span-2 sm:col-span-3 flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={contentBold} onChange={e => setContentBold(e.target.checked)} /> جعل نص الشرح عريضاً</label>
+                    </div>
                     <input type="text" value={newNoteImage} onChange={(e) => setNewNoteImage(e.target.value)} placeholder="رابط صورة توضيحية للشرح (اختياري)..." className="w-full px-3 py-2 border rounded-xl text-xs font-mono" />
                     
                     <div className="p-3 bg-indigo-50/50 rounded-xl border border-indigo-200 space-y-2">
@@ -1920,7 +2267,8 @@ export function App() {
                           type: interactiveType,
                           q: interactiveQText,
                           options: interactiveType === 'mcq' ? interactiveOptions : (interactiveType === 'true_false' ? ['صح', 'خطأ'] : []),
-                          correct: interactiveType === 'mcq' ? interactiveCorrect : (interactiveType === 'fill' ? interactiveFill : interactiveTf)
+                          correct: interactiveType === 'mcq' ? interactiveCorrect : (interactiveType === 'fill' ? interactiveFill : interactiveTf),
+                          questionFontSize, questionColor: questionTextColor, answerColor: answerTextColor
                         };
                         setInteractiveList([...interactiveList, qObj]);
                         setInteractiveQText(''); setInteractiveCorrect(''); setInteractiveFill('');
@@ -1943,6 +2291,7 @@ export function App() {
                         id: Date.now().toString(), 
                         title: newNoteTitle, 
                         content: newNoteContent, 
+                        fontSize: `${noteFontSize}px`, textColor: noteTextColor, titleColor: noteTitleColor, titleFontSize: '18px', contentBold,
                         image: newNoteImage, 
                         isVip: newNoteVip,
                         interactiveQuestions: interactiveList
@@ -2046,7 +2395,7 @@ export function App() {
                         {book.isVip && !isVipActive && isAdmin === false ? (
                           <button onClick={() => setVipModalItem(book)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
                         ) : (
-                          <button onClick={() => setActivePdfUrl(book.url)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">قراءة 👁️</button>
+                          <button onClick={() => { setPdfLoading(true); setPdfLoadFailed(false); setActivePdfUrl(book.url); }} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">قراءة 👁️</button>
                         )}
                         {isAdmin && (
                           <div className="flex items-center gap-1">
@@ -2136,7 +2485,7 @@ export function App() {
                                     await updateDoc(doc(db, 'subjects', currentSub.id), { quizzes: updatedQuizzes });
                                     const updatedSubs = subjects.map((sub: any) => sub.id === currentSub.id ? { ...sub, quizzes: updatedQuizzes } : sub);
                                     setSubjects(updatedSubs);
-                                    localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                                    localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
                                   } catch (error) { alert('تعذر حذف الاختبار.'); }
                                 }} className="text-rose-500 p-1" title="حذف"><Trash2 className="w-4 h-4" /></button>
                               </>
@@ -2154,7 +2503,7 @@ export function App() {
                                   await updateDoc(doc(db, 'subjects', currentSub.id), { quizzes: updatedQuizzes });
                                   const updatedSubs = subjects.map((sub: any) => sub.id === currentSub.id ? {...sub, quizzes: updatedQuizzes} : sub);
                                   setSubjects(updatedSubs);
-                                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
+                                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
                                 }} className="text-rose-500 p-1"><Trash2 className="w-4 h-4" /></button>
                               </>
                             )}
@@ -2302,6 +2651,51 @@ export function App() {
             <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
               <Users className="w-5 h-5 text-indigo-600" /> إدارة الطلبة ودرجاتهم وتعديل بياناتهم
             </h2>
+
+            {/* أدوات البحث والتصفية: لا تغيّر بيانات الطلبة أو طريقة إدارتهم */}
+            <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_220px] gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
+              <div className="relative">
+                <input
+                  type="search"
+                  value={studentSearchText}
+                  onChange={(e) => setStudentSearchText(e.target.value)}
+                  placeholder="ابحث باسم الطالب أو اسم المستخدم..."
+                  aria-label="البحث باسم الطالب أو اسم المستخدم"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                />
+              </div>
+              <select
+                value={studentStageFilter}
+                onChange={(e) => setStudentStageFilter(e.target.value)}
+                aria-label="تصفية الطلبة حسب المرحلة"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold text-slate-800 outline-none focus:border-indigo-500"
+              >
+                <option value="all">كل المراحل الدراسية</option>
+                {allStagesList.map((stageOption) => (
+                  <option key={stageOption.id} value={stageOption.name}>{stageOption.name}</option>
+                ))}
+              </select>
+              <div className="sm:col-span-2 flex items-center justify-between gap-2 text-xs font-bold text-slate-600">
+                <span>عدد النتائج: {studentsList.filter((st) => {
+                  const q = studentSearchText.trim().toLocaleLowerCase();
+                  const matchesText = !q ||
+                    String(st.name || '').toLocaleLowerCase().includes(q) ||
+                    String(st.username || '').toLocaleLowerCase().includes(q);
+                  const matchesStage = studentStageFilter === 'all' || String(st.stage || '') === studentStageFilter;
+                  return matchesText && matchesStage;
+                }).length} من {studentsList.length}</span>
+                {(studentSearchText || studentStageFilter !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => { setStudentSearchText(''); setStudentStageFilter('all'); }}
+                    className="rounded-lg bg-white px-3 py-1.5 text-indigo-700 border border-indigo-100 hover:bg-indigo-100"
+                  >
+                    مسح البحث والتصفية
+                  </button>
+                )}
+              </div>
+            </div>
+
             <div className="overflow-x-auto">
               <table className="w-full text-right border-collapse min-w-[750px]">
                 <thead>
@@ -2314,7 +2708,14 @@ export function App() {
                   </tr>
                 </thead>
                 <tbody className="divide-y text-xs font-bold text-slate-800">
-                  {studentsList.map((st) => (
+                  {studentsList.filter((st) => {
+                    const q = studentSearchText.trim().toLocaleLowerCase();
+                    const matchesText = !q ||
+                      String(st.name || '').toLocaleLowerCase().includes(q) ||
+                      String(st.username || '').toLocaleLowerCase().includes(q);
+                    const matchesStage = studentStageFilter === 'all' || String(st.stage || '') === studentStageFilter;
+                    return matchesText && matchesStage;
+                  }).map((st) => (
                     <tr key={st.id} className="hover:bg-slate-50">
                       <td className="p-3">
                         <div className="font-black text-slate-900">{st.name}</div>
@@ -2402,9 +2803,12 @@ export function App() {
                       <td className="p-3 text-center space-y-1">
                         {st.examDetails && (
                           <button onClick={() => setViewingStudentAnswers(st)} className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer block mx-auto">
-                            🔍 عرض الأخطاء
+                            🔍 عرض آخر إجابات
                           </button>
                         )}
+                        <button onClick={() => loadAdminStudentExamHistory(st)} className="px-2 py-1 bg-violet-700 hover:bg-violet-800 text-white rounded text-[10px] font-bold cursor-pointer block mx-auto">
+                          📚 سجل كل الامتحانات والدرجات
+                        </button>
                         <button onClick={async () => {
                           if (window.confirm('حذف هذا الطالب نهائياً؟')) {
                             await deleteDoc(doc(db, 'students', st.id));
@@ -2414,6 +2818,20 @@ export function App() {
                       </td>
                     </tr>
                   ))}
+                  {studentsList.filter((st) => {
+                    const q = studentSearchText.trim().toLocaleLowerCase();
+                    const matchesText = !q ||
+                      String(st.name || '').toLocaleLowerCase().includes(q) ||
+                      String(st.username || '').toLocaleLowerCase().includes(q);
+                    const matchesStage = studentStageFilter === 'all' || String(st.stage || '') === studentStageFilter;
+                    return matchesText && matchesStage;
+                  }).length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-sm font-bold text-slate-500">
+                        لا توجد نتائج مطابقة للبحث أو المرحلة المحددة.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -2466,7 +2884,8 @@ export function App() {
                   price: vipSettings.price || '',
                   mastercard: vipSettings.mastercard || '',
                   transferPhone: vipSettings.transferPhone || '',
-                  whatsappPhone: (vipSettings.whatsappPhone || '').replace(/\s+/g, '')
+                  whatsappPhone: (vipSettings.whatsappPhone || '').replace(/\s+/g, ''),
+                  telegram: vipSettings.telegram || ''
                 }, { merge: true });
                 localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
                 setSuccessMessage('تم حفظ إعدادات VIP ورقم واتساب سحابياً، وستظهر للطلاب على الموبايل والحاسبة.');
@@ -2481,12 +2900,58 @@ export function App() {
               <input type="text" value={vipSettings.mastercard} onChange={(e) => setVipSettings({...vipSettings, mastercard: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono" placeholder="الماستر كارد / المصرف" />
               <label className="block text-xs font-bold text-slate-700">رقم التحويل (زين كاش / آسياسيل)</label>
               <input type="text" value={vipSettings.transferPhone || ''} onChange={(e) => setVipSettings({...vipSettings, transferPhone: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono" placeholder="رقم التحويل" />
+              <label className="block text-xs font-bold text-slate-700">رابط قناة التليجرام (يمكن إضافته لاحقاً)</label>
+              <input type="url" dir="ltr" value={vipSettings.telegram || ''} onChange={(e) => setVipSettings({...vipSettings, telegram: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono text-left" placeholder="https://t.me/اسم_القناة" />
               <label className="block text-xs font-bold text-slate-700">رقم واتساب الإدارة لاستلام طلبات VIP</label>
               <input type="tel" dir="ltr" inputMode="tel" value={vipSettings.whatsappPhone || ''} onChange={(e) => setVipSettings({...vipSettings, whatsappPhone: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono text-left" placeholder="9647XXXXXXXXX أو 07XXXXXXXXX" />
               <p className="text-[11px] text-slate-500 leading-relaxed">اكتب رقمك العراقي مع مفتاح الدولة 964، أو اكتبه بصيغة 07… وسيحوّله النظام تلقائياً. لا تكتب علامة + أو مسافات عند الحاجة.</p>
               <button type="submit" className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ إعدادات الدفع ورقم واتساب سحابياً</button>
             </form>
           </div>
+        )}
+
+        {/* إدارة الإعلانات والتواصل */}
+        {activeTab === 'communications' && isAdmin && (
+          <div className="space-y-4">
+            <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xl border space-y-3">
+              <h2 className="text-xl font-black text-slate-900">إضافة إعلان للطلاب</h2>
+              <form onSubmit={handleSaveAnnouncement} className="space-y-3">
+                <textarea value={announcementText} onChange={e => setAnnouncementText(e.target.value)} rows={3} maxLength={500} placeholder="اكتب الإعلان أو التنبيه هنا..." className="w-full border rounded-xl p-3 text-sm" />
+                <select value={announcementStage} onChange={e => setAnnouncementStage(e.target.value)} className="w-full border rounded-xl p-2 text-sm font-bold"><option value="all">جميع المراحل</option>{allStagesList.map(st => <option key={st.id} value={st.name}>{st.name}</option>)}</select>
+                <button disabled={announcementSaving || !announcementText.trim()} className="w-full rounded-xl bg-sky-600 text-white py-2.5 text-sm font-black disabled:opacity-50">{announcementSaving ? 'جارٍ النشر...' : 'نشر الإعلان'}</button>
+              </form>
+            </div>
+            <div className="bg-white rounded-2xl p-4 shadow-xl border space-y-3"><h3 className="font-black">الإعلانات المنشورة</h3>
+              {announcementItems.length === 0 ? <p className="text-xs text-slate-500">لا توجد إعلانات حالياً.</p> : announcementItems.map((a: any) => <div key={a.id} className="border rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2"><div><p className="text-sm font-bold">{a.text}</p><p className="text-[11px] text-slate-500 mt-1">{a.stage === 'all' ? 'جميع المراحل' : a.stage}</p></div><div className="flex gap-2"><button onClick={async () => { const next = prompt('تعديل نص الإعلان:', a.text); if (next === null || !next.trim()) return; try { await updateDoc(doc(db, 'announcements', a.id), { text: next.trim() }); } catch(e) { alert('تعذر تعديل الإعلان.'); } }} className="px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 text-xs font-bold">تعديل</button><button onClick={async () => { if (!confirm('هل تريد حذف هذا الإعلان؟')) return; try { await deleteDoc(doc(db, 'announcements', a.id)); } catch(e) { alert('تعذر حذف الإعلان.'); } }} className="px-3 py-1.5 rounded-lg bg-rose-50 text-rose-700 text-xs font-bold">حذف</button></div></div>)}
+            </div>
+            <div className="bg-white rounded-2xl p-4 shadow-xl border space-y-2"><h3 className="font-black">زر قناة التليجرام</h3><p className="text-xs text-slate-600">أضف رابط القناة من تبويب إعدادات VIP؛ سيظهر زر الانضمام للطلاب تلقائياً بعد حفظ الرابط.</p><button onClick={() => setActiveTab('vipSettings')} className="px-4 py-2 rounded-xl bg-amber-500 text-white text-xs font-bold">فتح إعدادات الرابط</button></div>
+          </div>
+        )}
+
+        {/* إحصائيات التواجد الفعلي للزوار والطلبة */}
+        {activeTab === 'visitors' && isAdmin && (
+          <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl border space-y-4 text-right">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div><h2 className="text-xl font-black text-slate-900">المتواجدون حالياً في المنصة</h2><p className="text-xs text-slate-500 mt-1">الجلسات التي أرسلت نبضة خلال آخر دقيقتين</p></div>
+              <span className="text-[11px] text-slate-500">{visitorStatsUpdatedAt ? `آخر تحديث ${visitorStatsUpdatedAt.toLocaleTimeString('ar-IQ')}` : 'بانتظار البيانات'}</span>
+            </div>
+            {visitorStatsError && <p className="rounded-xl bg-rose-50 border border-rose-200 p-3 text-xs font-bold text-rose-700">{visitorStatsError}</p>}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="rounded-2xl bg-indigo-50 border border-indigo-100 p-4"><p className="text-xs font-bold text-indigo-700">إجمالي المتواجدين</p><p className="text-3xl font-black text-indigo-900">{activeVisitorSessions.length}</p></div>
+              <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-4"><p className="text-xs font-bold text-emerald-700">الطلبة المسجلون</p><p className="text-3xl font-black text-emerald-900">{activeVisitorSessions.filter((v: any) => v.visitorType === 'student').length}</p></div>
+              <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4"><p className="text-xs font-bold text-amber-700">الزوار بدون حساب</p><p className="text-3xl font-black text-amber-900">{activeVisitorSessions.filter((v: any) => v.visitorType === 'guest').length}</p></div>
+            </div>
+            <div className="rounded-xl border p-3 space-y-2">
+              <h3 className="font-black text-sm">تفاصيل الجلسات النشطة</h3>
+              {activeVisitorSessions.length === 0 ? <p className="text-xs text-slate-500 py-3">لا توجد جلسات نشطة حالياً، أو لم تُمنح صلاحية قراءة المجموعة بعد.</p> : activeVisitorSessions.map((v: any) => (
+                <div key={v.id} className="flex items-center justify-between gap-2 border-b last:border-0 py-2 text-xs">
+                  <div><p className="font-bold text-slate-800">{v.visitorType === 'student' ? (v.studentName || 'طالب مسجل') : v.visitorType === 'admin' ? 'مدير المنصة' : 'زائر بدون حساب'}</p><p className="text-slate-500">{v.deviceType || 'جهاز غير محدد'}</p></div>
+                  <span className="rounded-full bg-emerald-50 text-emerald-700 px-2 py-1 font-bold">نشط</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">ملاحظة: العدّ حسب جلسة المتصفح/الجهاز، وقد يُحسب الشخص مرتين إذا استخدم جهازين أو متصفحين. الجلسة تُعد نشطة لمدة دقيقتين من آخر اتصال.</p>
+          </section>
         )}
 
         {/* 6. إعدادات كلمة المرور الموحدة سحابياً */}
