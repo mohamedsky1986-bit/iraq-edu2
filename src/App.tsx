@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { db } from './firebase';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc, increment } from 'firebase/firestore';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc } from 'firebase/firestore';
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
@@ -9,45 +9,6 @@ import {
 } from 'lucide-react';
 
 const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
-
-// مخزن محلي IndexedDB لحفظ المناهج كاملة على الجهاز للعمل دون إنترنت
-const OFFLINE_DB_NAME = 'nabigha-offline-v1';
-const OFFLINE_STORE_NAME = 'app-cache';
-const openOfflineDB = (): Promise<IDBDatabase> => new Promise((resolve, reject) => {
-  if (typeof indexedDB === 'undefined') return reject(new Error('IndexedDB غير متاح'));
-  const request = indexedDB.open(OFFLINE_DB_NAME, 1);
-  request.onupgradeneeded = () => {
-    const database = request.result;
-    if (!database.objectStoreNames.contains(OFFLINE_STORE_NAME)) database.createObjectStore(OFFLINE_STORE_NAME);
-  };
-  request.onsuccess = () => resolve(request.result);
-  request.onerror = () => reject(request.error || new Error('تعذر فتح التخزين المحلي'));
-});
-const saveSubjectsOffline = async (subjectsToSave: any[]) => {
-  try {
-    const database = await openOfflineDB();
-    await new Promise<void>((resolve, reject) => {
-      const tx = database.transaction(OFFLINE_STORE_NAME, 'readwrite');
-      tx.objectStore(OFFLINE_STORE_NAME).put(subjectsToSave, 'subjects');
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error);
-    });
-    database.close();
-  } catch (error) { console.warn('تعذر حفظ المناهج دون إنترنت:', error); }
-};
-const readSubjectsOffline = async (): Promise<any[]> => {
-  try {
-    const database = await openOfflineDB();
-    const value = await new Promise<any>((resolve, reject) => {
-      const request = database.transaction(OFFLINE_STORE_NAME, 'readonly').objectStore(OFFLINE_STORE_NAME).get('subjects');
-      request.onsuccess = () => resolve(request.result || []);
-      request.onerror = () => reject(request.error);
-    });
-    database.close();
-    return Array.isArray(value) ? value : [];
-  } catch (error) { return []; }
-};
 
 const safeGetStorage = (key: string, fallback: any) => {
   try {
@@ -63,104 +24,35 @@ const safeGetStorage = (key: string, fallback: any) => {
 
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator === 'undefined' ? true : navigator.onLine);
-
-  // إحصائيات الزوار: معرف عشوائي محلي لا يجمع الاسم أو رقم الهاتف أو بيانات شخصية.
-  const [visitorId] = useState<string>(() => {
-    try {
-      let id = localStorage.getItem('nabough_visitor_id');
-      if (!id) {
-        id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : `v_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        localStorage.setItem('nabough_visitor_id', id);
-      }
-      return id;
-    } catch {
-      return `v_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    }
-  });
-  const [visitorStats, setVisitorStats] = useState({ uniqueDevices: 0, totalVisits: 0, activeNow: 0 });
-  const [visitorStatsError, setVisitorStatsError] = useState('');
-  const [platformAnnouncement, setPlatformAnnouncement] = useState({ message: '', active: false });
-  const [announcementDraft, setAnnouncementDraft] = useState('');
-  const [announcementSaving, setAnnouncementSaving] = useState(false);
 
   useEffect(() => {
-    // تسجيل زيارة واحدة دون قراءة المستند أولاً؛ يقلل طلبات Firebase عند فتح المنصة.
-    let stopped = false;
-    const sessionRef = doc(db, 'visitor_sessions', visitorId);
-    const ping = async (countVisit: boolean) => {
-      if (stopped || document.visibilityState === 'hidden') return;
-      try {
-        await setDoc(sessionRef, {
-          lastSeen: serverTimestamp(),
-          ...(countVisit ? { visitCount: increment(1), firstSeen: serverTimestamp() } : {})
-        }, { merge: true });
-      } catch (error) {
-        console.warn('تعذر تسجيل زيارة الزائر:', error);
-      }
+    const manifest = {
+      name: "منصة النابغة التعليمية",
+      short_name: "النابغة",
+      start_url: "/",
+      display: "standalone",
+      background_color: "#0f172a",
+      theme_color: "#0f172a",
+      icons: [
+        {
+          src: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=512&h=512&q=80",
+          sizes: "512x512",
+          type: "image/png",
+          purpose: "any maskable"
+        }
+      ]
     };
-    const startTimer = window.setTimeout(() => { void ping(true); }, 2500);
-    const heartbeat = window.setInterval(() => { void ping(false); }, 300000);
-    const onVisible = () => { if (document.visibilityState === 'visible') void ping(false); };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      stopped = true;
-      window.clearTimeout(startTimer);
-      window.clearInterval(heartbeat);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [visitorId]);
-
-
-  useEffect(() => {
-    let cancelled = false;
-    getDoc(doc(db, 'settings', 'platform_announcement')).then((snap) => {
-      if (cancelled) return;
-      if (snap.exists()) {
-        const data = snap.data() as any;
-        setPlatformAnnouncement({ message: String(data.message || ''), active: !!data.active });
-        setAnnouncementDraft(String(data.message || ''));
-      }
-    }).catch((error) => console.warn('تعذر تحميل إعلان المنصة:', error));
-    return () => { cancelled = true; };
-  }, []);
-
-  // إظهار حالة الاتصال فوراً، دون التأثير على عمل المنصة أو بيانات Firebase
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  // تهيئة PWA: ملف manifest ثابت + Service Worker
-  useEffect(() => {
-    let manifestLink = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null;
-    if (!manifestLink) {
-      manifestLink = document.createElement('link');
-      manifestLink.rel = 'manifest';
-      document.head.appendChild(manifestLink);
+    const stringManifest = JSON.stringify(manifest);
+    const blob = new Blob([stringManifest], { type: 'application/json' });
+    const manifestURL = URL.createObjectURL(blob);
+    
+    let link = document.querySelector('link[rel="manifest"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'manifest';
+      document.head.appendChild(link);
     }
-    manifestLink.href = '/manifest.webmanifest';
-
-    let iconLink = document.querySelector('link[rel="icon"]') as HTMLLinkElement | null;
-    if (!iconLink) {
-      iconLink = document.createElement('link');
-      iconLink.rel = 'icon';
-      document.head.appendChild(iconLink);
-    }
-    iconLink.href = '/icons/icon-192.png';
-
-    // Service Worker يعمل على HTTPS أو localhost فقط
-    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-      navigator.serviceWorker.register('/sw.js').catch((err) => console.error('PWA service worker:', err));
-    }
+    link.setAttribute('href', manifestURL);
   }, []);
 
   const [isAdmin, setIsAdmin] = useState<boolean> (() => {
@@ -298,7 +190,7 @@ export function App() {
     const loadVipSettings = async () => {
       try {
         const snap = await getDoc(doc(db, 'settings', 'vip_config'));
-        if (snap.exists()) setVipSettings((current: any) => ({ ...current, ...snap.data(), telegram: String(snap.data().telegram || current.telegram || MY_TELEGRAM_LINK) }));
+        if (snap.exists()) setVipSettings((current: any) => ({ ...current, ...snap.data() }));
       } catch (error) {
         console.warn('تعذر تحميل إعدادات VIP المشتركة:', error);
       }
@@ -332,57 +224,38 @@ export function App() {
     return safeGetStorage('nabough_cached_students', []);
   });
 
-  // بحث وتصفية قائمة الطلبة في لوحة الإدارة فقط (بدون تعديل قاعدة البيانات)
-  const [studentSearchText, setStudentSearchText] = useState('');
-  const [studentStageFilter, setStudentStageFilter] = useState('all');
-
   // جلب البيانات مع دعم العمل بدون إنترنت
   useEffect(() => {
-    let cancelled = false;
     async function loadDataOfflineFirst() {
-      // اعرض آخر نسخة محفوظة فوراً، ثم حدّثها من Firebase إذا توفر الإنترنت
-      const idbSubjects = await readSubjectsOffline();
-      const localSubjects = safeGetStorage('nabough_cached_subjects', []);
-      const firstCached = idbSubjects.length ? idbSubjects : localSubjects;
-      if (!cancelled && firstCached.length) setSubjects(firstCached);
       try {
         const subsSnap = await getDocs(collection(db, 'subjects'));
         if (!subsSnap.empty) {
-          const loadedSubs = subsSnap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (Number.isFinite(a.displayOrder) ? a.displayOrder : 999999) - (Number.isFinite(b.displayOrder) ? b.displayOrder : 999999));
-          if (!cancelled) setSubjects(loadedSubs);
-          try { localStorage.setItem('nabough_cached_subjects', JSON.stringify(loadedSubs)); } catch (storageError) { console.warn('Local storage quota; IndexedDB remains available:', storageError); }
-          await saveSubjectsOffline(loadedSubs);
+          const loadedSubs = subsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setSubjects(loadedSubs);
+          localStorage.setItem('nabough_cached_subjects', JSON.stringify(loadedSubs));
         }
+
         const studsSnap = await getDocs(collection(db, 'students'));
         if (!studsSnap.empty) {
           const loadedStuds = studsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-          if (!cancelled) setStudentsList(loadedStuds);
-          try { localStorage.setItem('nabough_cached_students', JSON.stringify(loadedStuds)); } catch (storageError) { console.warn('Students cache quota:', storageError); }
+          setStudentsList(loadedStuds);
+          localStorage.setItem('nabough_cached_students', JSON.stringify(loadedStuds));
         }
       } catch (e) {
-        const cachedSubs = firstCached;
+        const cachedSubs = safeGetStorage('nabough_cached_subjects', []);
         const cachedStuds = safeGetStorage('nabough_cached_students', []);
-        if (!cancelled && cachedSubs.length) setSubjects(cachedSubs);
-        if (!cancelled && cachedStuds.length) setStudentsList(cachedStuds);
+        if (cachedSubs.length > 0) setSubjects(cachedSubs);
+        if (cachedStuds.length > 0) setStudentsList(cachedStuds);
       } finally {
-        if (!cancelled) setIsLoading(false);
+        setIsLoading(false);
       }
     }
     loadDataOfflineFirst();
-    const refreshWhenOnline = async () => {
-      try {
-        const fresh = await getDocs(collection(db, 'subjects'));
-        if (!fresh.empty && !cancelled) {
-          const latest = fresh.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any, b: any) => (Number.isFinite(a.displayOrder) ? a.displayOrder : 999999) - (Number.isFinite(b.displayOrder) ? b.displayOrder : 999999));
-          setSubjects(latest);
-          try { localStorage.setItem('nabough_cached_subjects', JSON.stringify(latest)); } catch (storageError) { console.warn('Local storage quota:', storageError); }
-          await saveSubjectsOffline(latest);
-        }
-      } catch (error) { console.warn('تعذر تحديث المحتوى بعد عودة الإنترنت:', error); }
-    };
-    window.addEventListener('online', refreshWhenOnline);
-    const safetyTimer = setTimeout(() => { if (!cancelled) setIsLoading(false); }, 1200);
-    return () => { cancelled = true; clearTimeout(safetyTimer); window.removeEventListener('online', refreshWhenOnline); };
+
+    const safetyTimer = setTimeout(() => {
+      setIsLoading(false);
+    }, 800);
+    return () => clearTimeout(safetyTimer);
   }, []);
 
   const [subjects, setSubjects] = useState<any[]>(() => {
@@ -400,65 +273,7 @@ export function App() {
 
   const [isChangingStage, setIsChangingStage] = useState<boolean>(false);
 
-  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings' | 'accessSettings' | 'visitorStats' | 'announcements'>('curriculum');
-  const [visitorStatsRefresh, setVisitorStatsRefresh] = useState(0);
-
-  // تحميل الإحصائيات عند فتح تبويبها فقط، بدلاً من مراقبة كل الزوار طوال وقت تشغيل المنصة.
-  useEffect(() => {
-    if (!isAdmin || activeTab !== 'visitorStats') return;
-    let cancelled = false;
-    const loadVisitorStats = async () => {
-      try {
-        const snapshot = await getDocs(collection(db, 'visitor_sessions'));
-        const now = Date.now();
-        let visits = 0;
-        let active = 0;
-        snapshot.docs.forEach((item) => {
-          const data = item.data() as any;
-          visits += Number(data.visitCount || 0);
-          const lastSeenMs = data.lastSeen?.toMillis ? data.lastSeen.toMillis() : 0;
-          if (lastSeenMs && now - lastSeenMs <= 5 * 60 * 1000) active += 1;
-        });
-        if (!cancelled) { setVisitorStats({ uniqueDevices: snapshot.size, totalVisits: visits, activeNow: active }); setVisitorStatsError(''); }
-      } catch (error) {
-        console.warn('تعذر تحميل إحصائيات الزوار:', error);
-        if (!cancelled) setVisitorStatsError('تعذر تحميل الإحصائيات. تحقق من صلاحيات قراءة مجموعة visitor_sessions في Firestore.');
-      }
-    };
-    void loadVisitorStats();
-    return () => { cancelled = true; };
-  }, [isAdmin, activeTab, visitorStatsRefresh]);
-  // إعدادات مستقلة لصلاحيات الزوار؛ لا تغيّر سجلات المواد أو الطلبة الحالية.
-  type GuestAccessSettings = { mode: 'open' | 'login' | 'closed'; lessons: boolean; exams: boolean; grades: boolean; vip: boolean };
-  const DEFAULT_GUEST_ACCESS: GuestAccessSettings = { mode: 'open', lessons: true, exams: false, grades: false, vip: false };
-  const [guestAccess, setGuestAccess] = useState<GuestAccessSettings>(() => safeGetStorage('nabough_guest_access', DEFAULT_GUEST_ACCESS));
-  const [guestAccessSaving, setGuestAccessSaving] = useState(false);
-  const [guestAccessLoaded, setGuestAccessLoaded] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const snap = await getDoc(doc(db, 'settings', 'guest_access'));
-        if (!cancelled && snap.exists()) setGuestAccess((current) => ({ ...DEFAULT_GUEST_ACCESS, ...snap.data() } as GuestAccessSettings));
-      } catch (error) { console.warn('تعذر تحميل صلاحيات الزوار؛ ستستخدم الإعدادات المحفوظة محلياً:', error); }
-      finally { if (!cancelled) setGuestAccessLoaded(true); }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    try { localStorage.setItem('nabough_guest_access', JSON.stringify(guestAccess)); } catch (error) { console.warn('تعذر حفظ نسخة صلاحيات الزوار محلياً:', error); }
-  }, [guestAccess]);
-
-  const guestNeedsLogin = (section: 'lessons' | 'exams' | 'grades' | 'vip') => {
-    if (isAdmin || loggedStudent) return false;
-    if (guestAccess.mode === 'closed') return true;
-    if (guestAccess.mode === 'login') return true;
-    return !guestAccess[section];
-  };
-  const requestStudentLogin = () => setShowStudentAuthModal(true);
-
+  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings'>('curriculum');
   const [selectedStage, setSelectedStage] = useState<string>('all'); 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   
@@ -497,7 +312,6 @@ export function App() {
   const [editingInteractiveItem, setEditingInteractiveItem] = useState<{subjectId: string, noteId: string, questionIndex: number, questionObj: any} | null>(null);
   const [editInteractiveQText, setEditInteractiveQText] = useState('');
   const [editInteractiveCorrect, setEditInteractiveCorrect] = useState('');
-  const [editInteractiveOptions, setEditInteractiveOptions] = useState<string[]>(['', '', '', '']);
 
   const getEmbedPdfUrl = (url: string) => {
     if (!url) return '';
@@ -697,7 +511,7 @@ export function App() {
       await updateDoc(doc(db, 'subjects', subjectId), { quizzes: updatedQuizzes });
       const updatedSubs = subjects.map(sub => sub.id === subjectId ? { ...sub, quizzes: updatedQuizzes } : sub);
       setSubjects(updatedSubs);
-      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
       setQuizTitle('');
       setQuizIsVip(false);
       setQuizDurationMinutes(15);
@@ -738,7 +552,7 @@ export function App() {
       await updateDoc(doc(db, 'subjects', subjectId), { quizzes: updatedQuizzes });
       const updatedSubs = subjects.map((sub: any) => sub.id === subjectId ? { ...sub, quizzes: updatedQuizzes } : sub);
       setSubjects(updatedSubs);
-      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
       setHtmlQuizTitle('');
       setHtmlQuizContent('');
       setHtmlQuizFileName('');
@@ -760,7 +574,7 @@ export function App() {
       await updateDoc(doc(db, 'subjects', subjectId), { quizzes: updatedQuizzes });
       const updatedSubs = subjects.map((sub: any) => sub.id === subjectId ? { ...sub, quizzes: updatedQuizzes } : sub);
       setSubjects(updatedSubs);
-      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
       setSuccessMessage('تم تحديث الاختبار بنجاح.');
       setTimeout(() => setSuccessMessage(null), 2500);
     } catch (error) {
@@ -859,7 +673,7 @@ export function App() {
       await updateDoc(doc(db, 'subjects', subjectId), { [listKey]: list });
       const updatedSubs = subjects.map(s => s.id === subjectId ? { ...s, [listKey]: list } : s);
       setSubjects(updatedSubs);
-      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
+      localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
     } catch(e) {}
   };
 
@@ -874,14 +688,8 @@ export function App() {
     list[index] = list[targetIndex];
     list[targetIndex] = temp;
 
-    const orderedList = list.map((sub, orderIndex) => ({ ...sub, displayOrder: orderIndex }));
-    try {
-      await Promise.all(orderedList.map(sub => updateDoc(doc(db, 'subjects', sub.id), { displayOrder: sub.displayOrder })));
-      setSubjects(orderedList);
-      localStorage.setItem('nabough_cached_subjects', JSON.stringify(orderedList)); void saveSubjectsOffline(orderedList);
-    } catch (e) {
-      alert('ما تم حفظ ترتيب المواد. تأكد من الاتصال بالإنترنت ثم حاول مرة ثانية.');
-    }
+    setSubjects(list);
+    localStorage.setItem('nabough_cached_subjects', JSON.stringify(list));
   };
 
   const filteredSubjects = subjects.filter(s => {
@@ -909,15 +717,7 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col text-slate-900 font-sans antialiased overflow-x-hidden pt-1 sm:pt-2">
-      {!isOnline && (
-        <div role="status" className="sticky top-0 z-[60] w-full bg-amber-100 text-amber-900 border-b border-amber-300 px-3 py-2 text-center text-xs sm:text-sm font-bold">
-          <span className="inline-flex items-center justify-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-rose-600 animate-pulse" />
-            لا يوجد اتصال بالإنترنت — تعرض المنصة المحتوى المحفوظ على هذا الجهاز، وقد لا تعمل الفيديوهات والدردشة والخدمات المباشرة.
-          </span>
-        </div>
-      )}
-
+      
       {/* نافذة تعديل الامتحان للأدمن (مع دعم تعديل السؤال، وتعديل النص والإجابة، وإضافة أسئلة جديدة) */}
       {editingQuizItem && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
@@ -1018,7 +818,7 @@ export function App() {
                   await updateDoc(doc(db, 'subjects', editingQuizItem.subjectId), { quizzes: updatedQuizzes });
                   const updatedSubs = subjects.map(s => s.id === editingQuizItem.subjectId ? {...s, quizzes: updatedQuizzes} : s);
                   setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                   setEditingQuizItem(null);
                   setSuccessMessage('تم تحديث الامتحان وتعديل الأسئلة بنجاح!');
                   setTimeout(() => setSuccessMessage(null), 3000);
@@ -1030,20 +830,6 @@ export function App() {
                 إلغاء
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {editingNoteId && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-2 sm:p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-5 shadow-2xl relative space-y-3 text-right">
-            <button onClick={() => setEditingNoteId(null)} className="absolute top-3 left-3 w-8 h-8 bg-slate-100 rounded-full">✕</button>
-            <h3 className="text-lg font-black border-b pb-2">تعديل الشرح أو التعليل</h3>
-            <label className="block text-xs font-bold">عنوان الشرح</label><input value={editNoteTitle} onChange={e => setEditNoteTitle(e.target.value)} className="w-full border rounded-xl p-2 text-sm" />
-            <label className="block text-xs font-bold">نص الشرح</label><textarea value={editNoteContent} onChange={e => setEditNoteContent(e.target.value)} className="w-full border rounded-xl p-2 text-sm min-h-28" />
-            <label className="block text-xs font-bold">رابط الصورة (اختياري)</label><input value={editNoteImage} onChange={e => setEditNoteImage(e.target.value)} className="w-full border rounded-xl p-2 text-sm" />
-            <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editNoteVip} onChange={e => setEditNoteVip(e.target.checked)} /> شرح خاص بـ VIP</label>
-            <div className="flex gap-2 pt-2"><button onClick={async () => { const subjectId = selectedSubjectId; if (!subjectId) { alert('لم يتم تحديد المادة. أغلق النافذة وافتح التعديل من داخل المادة مرة أخرى.'); return; } try { const subjectRef = doc(db, 'subjects', subjectId); const freshSnap = await getDoc(subjectRef); if (!freshSnap.exists()) { alert('لم نعثر على المادة في قاعدة البيانات.'); return; } const freshSubject = freshSnap.data() as any; const freshNotes = Array.isArray(freshSubject.notes) ? freshSubject.notes : []; if (!freshNotes.some((n: any) => n.id === editingNoteId)) { alert('لم نعثر على الشرح المطلوب. حدّث الصفحة وافتح التعديل من جديد.'); return; } const updatedNotes = freshNotes.map((n: any) => n.id === editingNoteId ? { ...n, title: editNoteTitle, content: editNoteContent, image: editNoteImage, isVip: editNoteVip } : n); await updateDoc(subjectRef, { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === subjectId ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs); setEditingNoteId(null); setSuccessMessage('تم حفظ تعديل الشرح في قاعدة البيانات بنجاح'); setTimeout(() => setSuccessMessage(null), 3000); } catch (e: any) { console.error('Note update failed:', e); alert('فشل حفظ التعديل: ' + (e?.code || e?.message || 'خطأ غير معروف')); } }} className="flex-1 bg-emerald-600 text-white rounded-xl py-2 font-bold text-sm">حفظ التعديل</button><button onClick={() => setEditingNoteId(null)} className="flex-1 bg-slate-200 rounded-xl py-2 font-bold text-sm">إلغاء</button></div>
           </div>
         </div>
       )}
@@ -1062,10 +848,6 @@ export function App() {
                 <label className="block text-xs font-bold text-slate-700 mb-1">نص السؤال</label>
                 <input type="text" value={editInteractiveQText} onChange={(e) => setEditInteractiveQText(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
               </div>
-              {(editingInteractiveItem.questionObj?.type === 'mcq' || editingInteractiveItem.questionObj?.type === 'true_false') && <div className="space-y-2">
-                <label className="block text-xs font-bold text-slate-700 mb-1">الاختيارات (تگدر تعدل كل اختيار)</label>
-                {editInteractiveOptions.map((opt, idx) => <input key={idx} type="text" value={opt} onChange={(e) => setEditInteractiveOptions(prev => prev.map((v, i) => i === idx ? e.target.value : v))} placeholder={`الخيار ${idx + 1}`} className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />)}
-              </div>}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">الإجابة الصحيحة</label>
                 <input type="text" value={editInteractiveCorrect} onChange={(e) => setEditInteractiveCorrect(e.target.value)} className="w-full px-3 py-2 border rounded-xl text-xs font-bold text-emerald-900 bg-emerald-50" />
@@ -1082,8 +864,7 @@ export function App() {
                     newIqList[editingInteractiveItem.questionIndex] = {
                       ...newIqList[editingInteractiveItem.questionIndex],
                       q: editInteractiveQText,
-                      correct: editInteractiveCorrect,
-                      ...((editingInteractiveItem.questionObj?.type === 'mcq' || editingInteractiveItem.questionObj?.type === 'true_false') ? { options: editInteractiveOptions } : {})
+                      correct: editInteractiveCorrect
                     };
                     return { ...n, interactiveQuestions: newIqList };
                   }
@@ -1094,7 +875,7 @@ export function App() {
                   await updateDoc(doc(db, 'subjects', editingInteractiveItem.subjectId), { notes: updatedNotes });
                   const updatedSubs = subjects.map(s => s.id === editingInteractiveItem.subjectId ? {...s, notes: updatedNotes} : s);
                   setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                   setEditingInteractiveItem(null);
                   setSuccessMessage('تم تعديل السؤال التفاعلي بنجاح!');
                   setTimeout(() => setSuccessMessage(null), 3000);
@@ -1145,7 +926,7 @@ export function App() {
                   await updateDoc(doc(db, 'subjects', editingVideoItem.subjectId), { videos: updatedVideos });
                   const updatedSubs = subjects.map(s => s.id === editingVideoItem.subjectId ? {...s, videos: updatedVideos} : s);
                   setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                   setEditingVideoItem(null);
                   setSuccessMessage('تم تعديل الفيديو بنجاح!');
                   setTimeout(() => setSuccessMessage(null), 3000);
@@ -1195,7 +976,7 @@ export function App() {
                   await updateDoc(doc(db, 'subjects', editingBookletItem.subjectId), { booklets: updatedBooklets });
                   const updatedSubs = subjects.map(s => s.id === editingBookletItem.subjectId ? {...s, booklets: updatedBooklets} : s);
                   setSubjects(updatedSubs);
-                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
+                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                   setEditingBookletItem(null);
                   setSuccessMessage('تم تعديل الملزمة بنجاح!');
                   setTimeout(() => setSuccessMessage(null), 3000);
@@ -1366,7 +1147,7 @@ export function App() {
                   </div>
                 ))
               ) : (
-                <p className="text-center text-slate-500 py-6 text-sm font-bold">لا توجد نتيجة امتحان محفوظة لهذا الحساب حتى الآن.</p>
+                <p className="text-center text-slate-500 py-6 text-sm font-bold">لم يتقدم هذا الطالب لأي امتحان تفاعلي بعد.</p>
               )}
             </div>
 
@@ -1775,15 +1556,6 @@ export function App() {
               <button onClick={() => { setActiveTab('adminPanel'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'adminPanel' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}`}>
                 <PlusCircle className="w-3.5 h-3.5" /> إضافة المواد
               </button>
-              <button onClick={() => { setActiveTab('accessSettings' as any); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === ('accessSettings' as any) ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700 border border-sky-200'}`}>
-                <ShieldCheck className="w-3.5 h-3.5" /> صلاحيات الزوار
-              </button>
-              <button onClick={() => { setActiveTab('visitorStats'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'visitorStats' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700 border border-violet-200'}`}>
-                <Users className="w-3.5 h-3.5" /> إحصائيات الزوار
-              </button>
-              <button onClick={() => { setActiveTab('announcements'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'announcements' ? 'bg-orange-600 text-white' : 'bg-orange-50 text-orange-700 border border-orange-200'}`}>
-                <MessageSquare className="w-3.5 h-3.5" /> الإعلانات والتنبيهات
-              </button>
               <button onClick={() => { setActiveTab('vipSettings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'vipSettings' ? 'bg-amber-600 text-white' : 'bg-amber-50 text-amber-800'}`}>
                 <Crown className="w-3.5 h-3.5" /> إعدادات VIP
               </button>
@@ -1800,18 +1572,6 @@ export function App() {
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-3 py-2 rounded-xl flex items-center gap-2 text-xs font-bold shadow-sm">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
             <span>{successMessage}</span>
-          </div>
-        </div>
-      )}
-
-      {platformAnnouncement.active && platformAnnouncement.message.trim() && (
-        <div className="w-full px-2 sm:px-4 mt-3">
-          <div className="max-w-7xl mx-auto bg-amber-50 border border-amber-300 text-amber-950 px-4 py-3 rounded-xl flex items-start gap-3 shadow-sm" role="status">
-            <span className="text-xl flex-shrink-0">📢</span>
-            <div className="min-w-0">
-              <div className="text-xs font-black mb-1">إعلان من إدارة منصة النابغة</div>
-              <p className="text-sm font-bold leading-6 whitespace-pre-wrap break-words">{platformAnnouncement.message}</p>
-            </div>
           </div>
         </div>
       )}
@@ -1868,38 +1628,6 @@ export function App() {
           </div>
         </div>
 
-        {!isAdmin && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {loggedStudent && (
-              <button
-                type="button"
-                onClick={() => setViewingStudentAnswers(currentLoggedStudentData || loggedStudent)}
-                className="w-full flex items-center justify-between gap-3 rounded-2xl border border-indigo-200 bg-white p-4 text-right shadow-sm hover:shadow-md"
-              >
-                <span className="flex items-center gap-3">
-                  <span className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center text-xl">📝</span>
-                  <span><b className="block text-sm text-slate-900">امتحاناتي ودرجاتي</b><small className="text-xs text-slate-500">عرض آخر درجة ونتائج إجاباتك</small></span>
-                </span>
-                <span className="text-indigo-600 font-black">←</span>
-              </button>
-            )}
-            {(vipSettings.telegram || '').trim() && !(vipSettings.telegram || '').includes('YourUsername') && (
-              <a
-                href={vipSettings.telegram}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full flex items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-white p-4 text-right shadow-sm hover:shadow-md"
-              >
-                <span className="flex items-center gap-3">
-                  <span className="w-11 h-11 rounded-xl bg-sky-50 text-sky-700 flex items-center justify-center text-xl">✈️</span>
-                  <span><b className="block text-sm text-slate-900">قناة تليجرام المنصة</b><small className="text-xs text-slate-500">تابع الإعلانات والتنبيهات</small></span>
-                </span>
-                <span className="text-sky-600 font-black">↗</span>
-              </a>
-            )}
-          </div>
-        )}
-
         {/* 1. تبويب المنهج الدراسي */}
         {activeTab === 'curriculum' && !selectedSubjectId && (
           <div className="space-y-4">
@@ -1936,8 +1664,8 @@ export function App() {
                 <div 
                   key={sub.id}
                   onClick={() => {
-                    if (!isAdmin && !loggedStudent && guestAccess.mode !== 'open') {
-                      requestStudentLogin();
+                    if (!loggedStudent && !isAdmin) {
+                      setShowStudentAuthModal(true);
                     } else {
                       setSelectedSubjectId(sub.id);
                       setSearchQuery('');
@@ -2005,16 +1733,13 @@ export function App() {
 
         {/* 2. إدارة وتصفح المادة الدراسية المفصلة */}
         {selectedSubjectId && (() => {
-          if (!isAdmin && !loggedStudent && guestAccess.mode !== 'open') return <div className="bg-white rounded-2xl p-8 text-center border"><h3 className="font-black text-slate-900">يتطلب هذا المحتوى تسجيل الدخول</h3><button onClick={requestStudentLogin} className="mt-3 px-5 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold">دخول / إنشاء حساب</button></div>;
           const currentSub = subjects.find(s => s.id === selectedSubjectId);
           if (!currentSub) return null;
 
-          const filteredNotes = (currentSub.notes || []).filter((n: any) => {
-            if (!isAdmin && guestNeedsLogin('lessons')) return false;
-            if (!isAdmin && n.isVip && guestNeedsLogin('vip')) return false;
-            return n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-              n.content.toLowerCase().includes(searchQuery.toLowerCase());
-          });
+          const filteredNotes = (currentSub.notes || []).filter((n: any) => 
+            n.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+            n.content.toLowerCase().includes(searchQuery.toLowerCase())
+          );
 
           const filteredVideos = (currentSub.videos || []).filter((v: any) => 
             v.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -2055,7 +1780,6 @@ export function App() {
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
                 </h4>
-                {!isAdmin && guestNeedsLogin('lessons') && <div className="p-4 rounded-xl bg-sky-50 border border-sky-200 text-sky-800 text-xs font-bold">قراءة الدروس تتطلب تسجيل الدخول حسب إعدادات المنصة. <button onClick={requestStudentLogin} className="underline mr-1">سجّل دخولك</button></div>}
                 <div className="space-y-4">
                   {filteredNotes.map((note: any, nIdx: number) => (
                     <div key={note.id} className="p-4 bg-white rounded-2xl border shadow-sm space-y-3 relative">
@@ -2064,10 +1788,6 @@ export function App() {
                           <h5 className="font-black text-slate-900 text-xs sm:text-sm">💡 {note.title}</h5>
                           {note.isVip && <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-black">⭐ VIP</span>}
                         </div>
-                        {isAdmin && <div className="flex items-center gap-1">
-                          <button onClick={() => { setEditingNoteId(note.id); setEditNoteTitle(note.title || ''); setEditNoteContent(note.content || ''); setEditNoteImage(note.image || ''); setEditNoteVip(!!note.isVip); }} className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-[10px] font-bold">✏️ تعديل الشرح</button>
-                          <button onClick={async () => { if (!window.confirm('تأكيد حذف الشرح وكل الأسئلة التفاعلية التابعة له؟')) return; const updatedNotes = (currentSub.notes || []).filter((n: any) => n.id !== note.id); try { await updateDoc(doc(db, 'subjects', currentSub.id), { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === currentSub.id ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs); setSuccessMessage('تم حذف الشرح بنجاح'); setTimeout(() => setSuccessMessage(null), 2500); } catch (e) { alert('تعذر حذف الشرح، حاول مرة أخرى'); } }} className="px-2 py-1 bg-rose-50 text-rose-700 rounded-lg text-[10px] font-bold">🗑 حذف</button>
-                        </div>}
                       </div>
 
                       <p className="text-xs text-slate-700 leading-relaxed">{note.content}</p>
@@ -2101,7 +1821,6 @@ export function App() {
                                         setEditingInteractiveItem({ subjectId: currentSub.id, noteId: note.id, questionIndex: iqIdx, questionObj: iq });
                                         setEditInteractiveQText(iq.q);
                                         setEditInteractiveCorrect(iq.correct);
-                                        setEditInteractiveOptions(Array.isArray(iq.options) ? [...iq.options] : ['', '', '', '']);
                                       }} className="p-1 bg-indigo-50 text-indigo-600 rounded text-[10px] cursor-pointer" title="تعديل السؤال"><Edit3 className="w-3 h-3" /></button>
                                       
                                       <button onClick={async () => {
@@ -2258,7 +1977,7 @@ export function App() {
                       </div>
                       <div className="flex items-center gap-2">
                         {vid.isVip && !isVipActive && isAdmin === false ? (
-                          <button onClick={() => { if (guestNeedsLogin('vip')) requestStudentLogin(); else setVipModalItem(vid); }} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
+                          <button onClick={() => setVipModalItem(vid)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
                         ) : (
                           <button onClick={() => setActiveVideoUrl(vid.url)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">تشغيل</button>
                         )}
@@ -2325,7 +2044,7 @@ export function App() {
                       </div>
                       <div className="flex items-center gap-2">
                         {book.isVip && !isVipActive && isAdmin === false ? (
-                          <button onClick={() => { if (guestNeedsLogin('vip')) requestStudentLogin(); else setVipModalItem(book); }} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
+                          <button onClick={() => setVipModalItem(book)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
                         ) : (
                           <button onClick={() => setActivePdfUrl(book.url)} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">قراءة 👁️</button>
                         )}
@@ -2390,8 +2109,6 @@ export function App() {
                           <button onClick={() => setVipModalItem(quiz)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
                         ) : (
                           <button onClick={() => {
-                            if (guestNeedsLogin('exams')) { requestStudentLogin(); return; }
-                            if (quiz.isVip && guestNeedsLogin('vip')) { requestStudentLogin(); return; }
                             if (quiz.type === 'html' || quiz.htmlContent) setActiveQuiz(quiz);
                             else { setActiveQuiz(quiz); setTimeLeft((quiz.durationMinutes || 15) * 60); setTimerActive(true); }
                           }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">
@@ -2419,7 +2136,7 @@ export function App() {
                                     await updateDoc(doc(db, 'subjects', currentSub.id), { quizzes: updatedQuizzes });
                                     const updatedSubs = subjects.map((sub: any) => sub.id === currentSub.id ? { ...sub, quizzes: updatedQuizzes } : sub);
                                     setSubjects(updatedSubs);
-                                    localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
+                                    localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                                   } catch (error) { alert('تعذر حذف الاختبار.'); }
                                 }} className="text-rose-500 p-1" title="حذف"><Trash2 className="w-4 h-4" /></button>
                               </>
@@ -2437,7 +2154,7 @@ export function App() {
                                   await updateDoc(doc(db, 'subjects', currentSub.id), { quizzes: updatedQuizzes });
                                   const updatedSubs = subjects.map((sub: any) => sub.id === currentSub.id ? {...sub, quizzes: updatedQuizzes} : sub);
                                   setSubjects(updatedSubs);
-                                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs);
+                                  localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs));
                                 }} className="text-rose-500 p-1"><Trash2 className="w-4 h-4" /></button>
                               </>
                             )}
@@ -2585,51 +2302,6 @@ export function App() {
             <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
               <Users className="w-5 h-5 text-indigo-600" /> إدارة الطلبة ودرجاتهم وتعديل بياناتهم
             </h2>
-
-            {/* أدوات البحث والتصفية: لا تغيّر بيانات الطلبة أو طريقة إدارتهم */}
-            <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_220px] gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
-              <div className="relative">
-                <input
-                  type="search"
-                  value={studentSearchText}
-                  onChange={(e) => setStudentSearchText(e.target.value)}
-                  placeholder="ابحث باسم الطالب أو اسم المستخدم..."
-                  aria-label="البحث باسم الطالب أو اسم المستخدم"
-                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-800 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                />
-              </div>
-              <select
-                value={studentStageFilter}
-                onChange={(e) => setStudentStageFilter(e.target.value)}
-                aria-label="تصفية الطلبة حسب المرحلة"
-                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm font-bold text-slate-800 outline-none focus:border-indigo-500"
-              >
-                <option value="all">كل المراحل الدراسية</option>
-                {allStagesList.map((stageOption) => (
-                  <option key={stageOption.id} value={stageOption.name}>{stageOption.name}</option>
-                ))}
-              </select>
-              <div className="sm:col-span-2 flex items-center justify-between gap-2 text-xs font-bold text-slate-600">
-                <span>عدد النتائج: {studentsList.filter((st) => {
-                  const q = studentSearchText.trim().toLocaleLowerCase();
-                  const matchesText = !q ||
-                    String(st.name || '').toLocaleLowerCase().includes(q) ||
-                    String(st.username || '').toLocaleLowerCase().includes(q);
-                  const matchesStage = studentStageFilter === 'all' || String(st.stage || '') === studentStageFilter;
-                  return matchesText && matchesStage;
-                }).length} من {studentsList.length}</span>
-                {(studentSearchText || studentStageFilter !== 'all') && (
-                  <button
-                    type="button"
-                    onClick={() => { setStudentSearchText(''); setStudentStageFilter('all'); }}
-                    className="rounded-lg bg-white px-3 py-1.5 text-indigo-700 border border-indigo-100 hover:bg-indigo-100"
-                  >
-                    مسح البحث والتصفية
-                  </button>
-                )}
-              </div>
-            </div>
-
             <div className="overflow-x-auto">
               <table className="w-full text-right border-collapse min-w-[750px]">
                 <thead>
@@ -2642,14 +2314,7 @@ export function App() {
                   </tr>
                 </thead>
                 <tbody className="divide-y text-xs font-bold text-slate-800">
-                  {studentsList.filter((st) => {
-                    const q = studentSearchText.trim().toLocaleLowerCase();
-                    const matchesText = !q ||
-                      String(st.name || '').toLocaleLowerCase().includes(q) ||
-                      String(st.username || '').toLocaleLowerCase().includes(q);
-                    const matchesStage = studentStageFilter === 'all' || String(st.stage || '') === studentStageFilter;
-                    return matchesText && matchesStage;
-                  }).map((st) => (
+                  {studentsList.map((st) => (
                     <tr key={st.id} className="hover:bg-slate-50">
                       <td className="p-3">
                         <div className="font-black text-slate-900">{st.name}</div>
@@ -2735,12 +2400,10 @@ export function App() {
                       </td>
 
                       <td className="p-3 text-center space-y-1">
-                        {Array.isArray(st.examDetails) && st.examDetails.length > 0 ? (
+                        {st.examDetails && (
                           <button onClick={() => setViewingStudentAnswers(st)} className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer block mx-auto">
-                            🔍 عرض تفاصيل الامتحان والأخطاء
+                            🔍 عرض الأخطاء
                           </button>
-                        ) : (
-                          <span className="block text-[10px] text-slate-400 font-bold">لا توجد تفاصيل امتحان محفوظة حالياً</span>
                         )}
                         <button onClick={async () => {
                           if (window.confirm('حذف هذا الطالب نهائياً؟')) {
@@ -2751,150 +2414,9 @@ export function App() {
                       </td>
                     </tr>
                   ))}
-                  {studentsList.filter((st) => {
-                    const q = studentSearchText.trim().toLocaleLowerCase();
-                    const matchesText = !q ||
-                      String(st.name || '').toLocaleLowerCase().includes(q) ||
-                      String(st.username || '').toLocaleLowerCase().includes(q);
-                    const matchesStage = studentStageFilter === 'all' || String(st.stage || '') === studentStageFilter;
-                    return matchesText && matchesStage;
-                  }).length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="p-8 text-center text-sm font-bold text-slate-500">
-                        لا توجد نتائج مطابقة للبحث أو المرحلة المحددة.
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
-
-        {/* إحصائيات الزوار - لوحة مستقلة */}
-        {activeTab === 'visitorStats' && isAdmin && (
-          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl border border-violet-200 space-y-5 w-full">
-            <div>
-              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2"><Users className="w-5 h-5 text-violet-600" /> إحصائيات زوار المنصة</h2>
-              <p className="text-xs text-slate-500 mt-2 leading-6">يتم تحميل الأرقام عند فتح هذه الصفحة لتخفيف الحمل على المنصة. الزائر النشط هو متصفح/جهاز أرسل إشارة خلال آخر 5 دقائق.</p>
-              <button type="button" onClick={() => setVisitorStatsRefresh((v) => v + 1)} className="mt-2 px-3 py-2 rounded-lg bg-violet-600 text-white text-xs font-bold">تحديث الإحصائيات الآن</button>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="rounded-2xl border bg-violet-50 p-4">
-                <div className="text-xs font-bold text-violet-700">الموجودون الآن تقريباً</div>
-                <div className="text-3xl font-black text-violet-900 mt-2 tabular-nums">{visitorStats.activeNow}</div>
-                <div className="text-[11px] text-violet-700 mt-1">زائر نشط خلال آخر 5 دقائق</div>
-              </div>
-              <div className="rounded-2xl border bg-sky-50 p-4">
-                <div className="text-xs font-bold text-sky-700">إجمالي الأجهزة/المتصفحات</div>
-                <div className="text-3xl font-black text-sky-900 mt-2 tabular-nums">{visitorStats.uniqueDevices}</div>
-                <div className="text-[11px] text-sky-700 mt-1">معرّفات متصفح مميزة</div>
-              </div>
-              <div className="rounded-2xl border bg-emerald-50 p-4">
-                <div className="text-xs font-bold text-emerald-700">إجمالي الزيارات</div>
-                <div className="text-3xl font-black text-emerald-900 mt-2 tabular-nums">{visitorStats.totalVisits}</div>
-                <div className="text-[11px] text-emerald-700 mt-1">عدد مرات فتح المنصة المسجلة</div>
-              </div>
-            </div>
-            {visitorStatsError && <p className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-xl p-3">{visitorStatsError}</p>}
-            <p className="text-[11px] text-slate-500 bg-slate-50 border rounded-xl p-3 leading-6">ملاحظة: هذه أرقام تقريبية للأجهزة والمتصفحات وليست أسماء أشخاص. قد يُحسب الشخص أكثر من مرة إذا استخدم أكثر من جهاز أو حذف بيانات المتصفح. لا يتم جمع الاسم أو رقم الهاتف للزائر غير المسجل.</p>
-          </div>
-        )}
-
-        {/* إدارة إعلانات وتنبيهات المنصة - مستقلة عن صلاحيات الزوار */}
-        {activeTab === 'announcements' && isAdmin && (
-          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl border border-orange-200 space-y-4 w-full">
-            <div>
-              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-orange-600" /> إضافة إعلان أو تنبيه</h2>
-              <p className="text-xs text-slate-500 mt-2">اكتب الإعلان وسيظهر للزوار والطلبة في واجهة المنصة عند تفعيله.</p>
-            </div>
-            <textarea value={announcementDraft} onChange={(e) => setAnnouncementDraft(e.target.value)} rows={4} maxLength={1200} placeholder="اكتب الإعلان أو الملاحظة أو التنبيه هنا..." className="w-full border rounded-xl p-3 text-sm font-bold leading-6" />
-            <div className="flex items-center justify-between text-[11px] text-slate-500">
-              <span>{announcementDraft.length}/1200 حرف</span>
-              <span>{platformAnnouncement.active ? 'الإعلان منشور حالياً' : 'الإعلان غير منشور'}</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button disabled={announcementSaving || !announcementDraft.trim()} onClick={async () => {
-                setAnnouncementSaving(true);
-                try {
-                  await setDoc(doc(db, 'settings', 'platform_announcement'), { message: announcementDraft.trim(), active: true, updatedAt: serverTimestamp() }, { merge: true });
-                  setSuccessMessage('تم نشر الإعلان على المنصة.');
-                } catch (error) {
-                  console.error('Announcement save failed:', error);
-                  alert('تعذر نشر الإعلان. تحقق من اتصال الإنترنت وصلاحيات Firestore.');
-                } finally { setAnnouncementSaving(false); setTimeout(() => setSuccessMessage(null), 3500); }
-              }} className="flex-1 min-w-[140px] py-3 bg-orange-600 text-white rounded-xl text-xs font-black disabled:opacity-50">{announcementSaving ? 'جارٍ النشر...' : 'نشر الإعلان'}</button>
-              <button disabled={announcementSaving} onClick={async () => {
-                setAnnouncementSaving(true);
-                try {
-                  await setDoc(doc(db, 'settings', 'platform_announcement'), { message: announcementDraft.trim(), active: false, updatedAt: serverTimestamp() }, { merge: true });
-                  setSuccessMessage('تم إيقاف عرض الإعلان.');
-                } catch (error) { alert('تعذر إيقاف الإعلان. تحقق من الاتصال وصلاحيات Firestore.'); }
-                finally { setAnnouncementSaving(false); setTimeout(() => setSuccessMessage(null), 3500); }
-              }} className="px-4 py-3 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">إيقاف الإعلان</button>
-              <button disabled={announcementSaving} onClick={async () => {
-                if (!window.confirm('هل تريد حذف نص الإعلان نهائياً؟')) return;
-                setAnnouncementSaving(true);
-                try {
-                  await setDoc(doc(db, 'settings', 'platform_announcement'), { message: '', active: false, updatedAt: serverTimestamp() }, { merge: true });
-                  setAnnouncementDraft('');
-                  setSuccessMessage('تم حذف الإعلان.');
-                } catch (error) { alert('تعذر حذف الإعلان.'); }
-                finally { setAnnouncementSaving(false); setTimeout(() => setSuccessMessage(null), 3500); }
-              }} className="px-4 py-3 bg-rose-50 text-rose-700 rounded-xl text-xs font-bold">حذف الإعلان</button>
-            </div>
-            {platformAnnouncement.active && platformAnnouncement.message.trim() && (
-              <div className="rounded-xl border border-amber-300 bg-amber-50 p-3">
-                <div className="text-xs font-black text-amber-900 mb-1">معاينة الإعلان المنشور</div>
-                <p className="text-sm font-bold leading-6 whitespace-pre-wrap">{platformAnnouncement.message}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* إعدادات صلاحيات الزوار - قسم مستقل لا يغيّر محتوى المواد */}
-        {activeTab === ('accessSettings' as any) && isAdmin && (
-          <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl border border-sky-200 space-y-5 w-full">
-            <div>
-              <h2 className="text-xl font-black text-slate-900 flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-sky-600" /> إدارة صلاحيات الوصول</h2>
-              <p className="text-xs text-slate-500 mt-2 leading-6">تحكم بما يستطيع الزائر مشاهدته قبل إنشاء حساب. هذه الإعدادات محفوظة في مستند مستقل باسم settings/guest_access ولا تعدّل بيانات المناهج أو الطلبة.</p>
-            </div>
-            <div className="p-3 rounded-xl bg-sky-50 border border-sky-100 space-y-2">
-              <label className="block text-xs font-black text-slate-800">وضع المنصة للزوار</label>
-              <select value={guestAccess.mode} onChange={(e) => setGuestAccess(v => ({ ...v, mode: e.target.value as GuestAccessSettings['mode'] }))} className="w-full p-3 rounded-xl border bg-white text-sm font-bold">
-                <option value="open">مفتوحة للتعريف والتصفح حسب الصلاحيات أدناه</option>
-                <option value="login">تتطلب تسجيل الدخول لكل المحتوى</option>
-                <option value="closed">مغلقة عن الزوار بالكامل</option>
-              </select>
-              <p className="text-[11px] text-slate-500">وضع «مفتوحة» يسمح بتطبيق مفاتيح الأقسام أدناه، أما «تسجيل الدخول» و«مغلقة» فيمنعان الزائر من فتح المواد.</p>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {([
-                ['lessons', 'قراءة الدروس والشروحات', 'السماح للزائر بقراءة الشروحات'],
-                ['exams', 'حل الامتحانات', 'السماح للزائر ببدء الامتحانات'],
-                ['grades', 'عرض الدرجات والسجل', 'السماح للزائر بمشاهدة الدرجات'],
-                ['vip', 'محتوى VIP', 'السماح للزائر بمحتوى VIP (مع بقاء فحص الاشتراك الحالي)']
-              ] as const).map(([key, title, desc]) => (
-                <label key={key} className="flex items-start gap-3 p-3 rounded-xl border bg-slate-50 cursor-pointer">
-                  <input type="checkbox" checked={guestAccess[key]} onChange={(e) => setGuestAccess(v => ({ ...v, [key]: e.target.checked }))} className="mt-1 w-4 h-4" />
-                  <span><b className="block text-xs text-slate-800">{title}</b><small className="text-[11px] text-slate-500">{desc}</small></span>
-                </label>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <button disabled={guestAccessSaving} onClick={async () => {
-                setGuestAccessSaving(true);
-                try {
-                  await setDoc(doc(db, 'settings', 'guest_access'), { ...guestAccess, updatedAt: serverTimestamp() }, { merge: true });
-                  setSuccessMessage('تم حفظ صلاحيات الزوار سحابياً بنجاح.');
-                } catch (error: any) {
-                  console.error('Guest access save failed:', error);
-                  alert('تعذر حفظ الصلاحيات. تحقق من اتصال الإنترنت وقواعد Firestore. بقيت الإعدادات المحلية محفوظة على هذا الجهاز.');
-                } finally { setGuestAccessSaving(false); setTimeout(() => setSuccessMessage(null), 3500); }
-              }} className="flex-1 min-w-[150px] py-3 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-xl text-xs font-black">{guestAccessSaving ? 'جارٍ الحفظ...' : 'حفظ الصلاحيات سحابياً'}</button>
-              <button onClick={() => setGuestAccess(DEFAULT_GUEST_ACCESS)} className="px-4 py-3 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">إرجاع الإعدادات الافتراضية</button>
-            </div>
-            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-3 leading-6">تنبيه تقني: هذه الإضافة تتحكم بواجهة المنصة. الحماية الكاملة للبيانات والروابط المباشرة تحتاج أيضاً تحديث قواعد أمان Firestore وتخزين الملفات بما يتوافق مع هذه الصلاحيات؛ لا تعتبر إخفاء الأزرار وحده حماية للملفات.</p>
           </div>
         )}
 
@@ -2944,8 +2466,7 @@ export function App() {
                   price: vipSettings.price || '',
                   mastercard: vipSettings.mastercard || '',
                   transferPhone: vipSettings.transferPhone || '',
-                  whatsappPhone: (vipSettings.whatsappPhone || '').replace(/\s+/g, ''),
-                  telegram: (vipSettings.telegram || '').trim()
+                  whatsappPhone: (vipSettings.whatsappPhone || '').replace(/\s+/g, '')
                 }, { merge: true });
                 localStorage.setItem('nabough_vip_settings', JSON.stringify(vipSettings));
                 setSuccessMessage('تم حفظ إعدادات VIP ورقم واتساب سحابياً، وستظهر للطلاب على الموبايل والحاسبة.');
@@ -2963,10 +2484,7 @@ export function App() {
               <label className="block text-xs font-bold text-slate-700">رقم واتساب الإدارة لاستلام طلبات VIP</label>
               <input type="tel" dir="ltr" inputMode="tel" value={vipSettings.whatsappPhone || ''} onChange={(e) => setVipSettings({...vipSettings, whatsappPhone: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono text-left" placeholder="9647XXXXXXXXX أو 07XXXXXXXXX" />
               <p className="text-[11px] text-slate-500 leading-relaxed">اكتب رقمك العراقي مع مفتاح الدولة 964، أو اكتبه بصيغة 07… وسيحوّله النظام تلقائياً. لا تكتب علامة + أو مسافات عند الحاجة.</p>
-              <label className="block text-xs font-bold text-slate-700">رابط قناة تليجرام المنصة</label>
-              <input type="url" dir="ltr" value={vipSettings.telegram || ''} onChange={(e) => setVipSettings({...vipSettings, telegram: e.target.value})} className="w-full px-3 py-2 border rounded-xl text-xs font-mono text-left" placeholder="https://t.me/اسم_القناة" />
-              <p className="text-[11px] text-slate-500 leading-relaxed">ضع رابط القناة الكامل، ثم احفظ الإعدادات. سيُحفظ الرابط ضمن إعدادات المنصة.</p>
-              <button type="submit" className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ إعدادات VIP والتليجرام وواتساب سحابياً</button>
+              <button type="submit" className="w-full py-2.5 bg-amber-600 text-white rounded-xl text-xs font-bold cursor-pointer">حفظ إعدادات الدفع ورقم واتساب سحابياً</button>
             </form>
           </div>
         )}
