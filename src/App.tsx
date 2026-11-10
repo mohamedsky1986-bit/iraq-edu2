@@ -730,6 +730,11 @@ export function App() {
   const [fillCorrect, setFillCorrect] = useState('');
   const [tfCorrect, setTfCorrect] = useState('صح');
   const [currentQuestionsList, setCurrentQuestionsList] = useState<any[]>([]);
+  // استيراد بنك الأسئلة الوزارية مباشرة إلى منشئ الامتحانات الحالي
+  const [ministerialBankData, setMinisterialBankData] = useState<any[] | null>(null);
+  const [ministerialBankFileName, setMinisterialBankFileName] = useState('');
+  const [ministerialBankMessage, setMinisterialBankMessage] = useState('');
+  const [ministerialBankLoading, setMinisterialBankLoading] = useState(false);
 
   const [newSubName, setNewSubName] = useState('');
   const [newSubStage, setNewSubStage] = useState('الثالث المتوسط');
@@ -846,6 +851,116 @@ export function App() {
     setIsMinisterialQuestion(false);
     setSuccessMessage('تمت إضافة السؤال بنجاح إلى ورقة الامتحان!');
     setTimeout(() => setSuccessMessage(null), 2500);
+  };
+
+  // قراءة بنك الأسئلة الوزارية مع دعم قائمة questions أو التجميع حسب السنة/الدور/الفصل.
+  const parseMinisterialBankFile = async (file: File) => {
+    setMinisterialBankData(null);
+    setMinisterialBankFileName(file.name);
+    setMinisterialBankMessage('');
+    if (!file.name.toLowerCase().endsWith('.json')) {
+      setMinisterialBankMessage('الرجاء اختيار ملف JSON فقط.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setMinisterialBankMessage('حجم ملف البنك أكبر من 5 ميغابايت.');
+      return;
+    }
+    setMinisterialBankLoading(true);
+    try {
+      const parsed = JSON.parse(await file.text());
+      const collected: any[] = [];
+      const seen = new Set<any>();
+      const questionKeys = ['questions', 'items', 'bank', 'questionBank'];
+      const groupKeys = ['years', 'rounds', 'roles', 'chapters', 'sections', 'exams', 'groups', 'subjects', 'data', 'bank', 'questionBank'];
+      const visit = (node: any, meta: any = {}) => {
+        if (Array.isArray(node)) {
+          node.forEach((item) => visit(item, meta));
+          return;
+        }
+        if (!node || typeof node !== 'object' || seen.has(node)) return;
+        seen.add(node);
+        const text = node.q ?? node.question ?? node.questionText ?? node.text ?? node.prompt;
+        const answer = node.correct ?? node.answer ?? node.solution ?? node.modelAnswer ?? node.correctAnswer;
+        if (typeof text === 'string' && text.trim() && answer !== undefined && answer !== null && String(answer).trim()) {
+          const options = Array.isArray(node.options) ? node.options.map((v: any) => String(v)) :
+            (Array.isArray(node.choices) ? node.choices.map((v: any) => String(v)) : []);
+          let correct = String(answer).trim();
+          if (options.length && /^\d+$/.test(correct)) {
+            const answerIndex = Number(correct);
+            if (answerIndex === 0) correct = options[0];
+            else if (answerIndex >= 1 && answerIndex <= options.length) correct = options[answerIndex - 1];
+          }
+          if (options.length && /^[a-d]$/i.test(correct)) {
+            const answerIndex = correct.toUpperCase().charCodeAt(0) - 65;
+            if (options[answerIndex] !== undefined) correct = options[answerIndex];
+          }
+          const rawType = String(node.type || node.questionType || '').toLowerCase();
+          const type = ['true_false', 'true-false', 'tf'].includes(rawType) ? 'true_false' :
+            (['fill', 'blank', 'short_answer', 'essay'].includes(rawType) ? 'fill' :
+              (['mcq', 'multiple_choice', 'multiple-choice'].includes(rawType) || options.length ? 'mcq' : 'fill'));
+          collected.push({
+            type,
+            q: text.trim(),
+            options: type === 'mcq' ? options : (type === 'true_false' ? ['صح', 'خطأ'] : []),
+            correct,
+            isMinisterial: true,
+            explanation: String(node.explanation ?? node.solutionSteps ?? node.modelSolution ?? ''),
+            ministerialYear: node.year ?? node.examYear ?? meta.year ?? '',
+            ministerialRound: node.round ?? node.role ?? node.examRound ?? meta.round ?? '',
+            chapter: node.chapter ?? node.chapterName ?? meta.chapter ?? '',
+            subject: node.subject ?? meta.subject ?? '',
+            sourceId: node.id ?? node.questionId ?? ''
+          });
+          return;
+        }
+        const nextMeta = {
+          ...meta,
+          year: node.year ?? node.examYear ?? meta.year,
+          round: node.round ?? node.role ?? node.examRound ?? meta.round,
+          chapter: node.chapter ?? node.chapterName ?? meta.chapter,
+          subject: node.subject ?? meta.subject
+        };
+        questionKeys.forEach((key) => { if (Array.isArray(node[key])) visit(node[key], nextMeta); });
+        groupKeys.forEach((key) => {
+          if (Array.isArray(node[key])) visit(node[key], nextMeta);
+          else if (node[key] && typeof node[key] === 'object') visit(node[key], nextMeta);
+        });
+      };
+      if (Array.isArray(parsed)) visit(parsed);
+      else if (parsed && typeof parsed === 'object') {
+        if (Array.isArray(parsed.questions)) visit(parsed.questions, {
+          year: parsed.year ?? parsed.examYear ?? '',
+          round: parsed.round ?? parsed.role ?? '',
+          chapter: parsed.chapter ?? '',
+          subject: parsed.subject ?? ''
+        });
+        else visit(parsed);
+      }
+      if (!collected.length) {
+        throw new Error('لم نعثر على أسئلة قابلة للاستيراد. يجب أن يحتوي الملف على questions، ولكل سؤال نص وإجابة صحيحة (correct أو answer أو solution).');
+      }
+      setMinisterialBankData(collected);
+      setMinisterialBankMessage(`تمت قراءة ${collected.length} سؤالاً وزارياً. راجع العدد ثم أضفها إلى ورقة الامتحان.`);
+    } catch (error: any) {
+      setMinisterialBankMessage(error?.message || 'تعذرت قراءة ملف بنك الأسئلة.');
+    } finally {
+      setMinisterialBankLoading(false);
+    }
+  };
+
+  const addMinisterialBankToCurrentQuiz = () => {
+    if (!ministerialBankData?.length) return;
+    const existing = new Set(currentQuestionsList.map((q: any) => String(q.q || '').trim().toLowerCase()));
+    const fresh = ministerialBankData.filter((q: any) => !existing.has(String(q.q || '').trim().toLowerCase()));
+    if (!fresh.length) {
+      setMinisterialBankMessage('كل أسئلة هذا الملف موجودة مسبقاً في الامتحان؛ لم تتم إضافة نسخ مكررة.');
+      return;
+    }
+    setCurrentQuestionsList((current: any[]) => [...current, ...fresh]);
+    setMinisterialBankMessage(`تمت إضافة ${fresh.length} سؤال وزاري إلى الامتحان${fresh.length < ministerialBankData.length ? `، وتم تجاوز ${ministerialBankData.length - fresh.length} سؤال مكرر` : ''}.`);
+    setMinisterialBankData(null);
+    setMinisterialBankFileName('');
   };
 
   const handleSaveQuizToSubject = async (subjectId: string) => {
@@ -2731,6 +2846,34 @@ export function App() {
                     <h5 className="text-xs font-black text-slate-800">🛠️ صياغة امتحان جديد (مع الاستيراد السريع للأسئلة التفاعلية):</h5>
                     <input type="text" value={quizTitle} onChange={(e) => setQuizTitle(e.target.value)} placeholder="عنوان الامتحان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
                     
+                    {/* استيراد بنك الأسئلة الوزارية إلى منشئ الامتحان نفسه */}
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+                      <label className="block text-xs font-black text-amber-900">🏛️ استيراد بنك الأسئلة الوزارية (JSON)</label>
+                      <input
+                        type="file"
+                        accept=".json,application/json"
+                        disabled={ministerialBankLoading}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) void parseMinisterialBankFile(file);
+                          e.currentTarget.value = '';
+                        }}
+                        className="w-full text-xs bg-white border rounded-lg p-2"
+                      />
+                      {ministerialBankFileName && <p className="text-[11px] text-slate-600">الملف: {ministerialBankFileName}</p>}
+                      {ministerialBankLoading && <p className="text-xs font-bold text-indigo-700">جارٍ قراءة بنك الأسئلة...</p>}
+                      {ministerialBankMessage && <p className="text-xs font-bold text-slate-700" role="status">{ministerialBankMessage}</p>}
+                      {ministerialBankData?.length > 0 && (
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                          <span className="text-xs font-bold text-amber-900">تم العثور على {ministerialBankData.length} سؤالاً وزارياً</span>
+                          <button type="button" onClick={addMinisterialBankToCurrentQuiz} className="px-3 py-2 bg-amber-700 text-white rounded-lg text-xs font-black">
+                            إضافة الأسئلة إلى الامتحان
+                          </button>
+                        </div>
+                      )}
+                      <p className="text-[10px] leading-relaxed text-slate-600">تُضاف الأسئلة إلى قائمة الامتحان الحالية دون حذف الأسئلة اليدوية أو أسئلة الشروحات. تُعلّم تلقائياً بأنها وزارية، وتُحفظ معلومات السنة والدور والفصل والحل إذا كانت موجودة في الملف.</p>
+                    </div>
+
                     {/* استيراد سريع من الشروحات والأسئلة التفاعلية المضافة سابقاً */}
                     {currentSub.notes && currentSub.notes.length > 0 && (
                       <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl space-y-2">
