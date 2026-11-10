@@ -5,7 +5,7 @@ import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, que
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
-  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send, MessageSquare, Globe, Search, RotateCcw, Unlock as UnlockIcon, Laptop
+  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send, MessageSquare, Globe, Search, RotateCcw, Unlock as UnlockIcon, Laptop, Upload
 } from 'lucide-react';
 
 const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
@@ -506,6 +506,144 @@ export function App() {
   const [editInteractiveCorrect, setEditInteractiveCorrect] = useState('');
   const [editInteractiveOptions, setEditInteractiveOptions] = useState<string[]>(['', '', '', '']);
 
+  const parseBulkLessonFile = async (file: File) => {
+    setBulkImportMessage(null);
+    if (!file.name.toLowerCase().endsWith('.json')) {
+      setBulkImportMessage('الرجاء اختيار ملف JSON فقط.');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setBulkImportMessage('حجم ملف الاستيراد أكبر من 2 ميغابايت.');
+      return;
+    }
+    try {
+      const parsed = JSON.parse(await file.text());
+      const lessons = Array.isArray(parsed) ? parsed : parsed.lessons;
+      if (!Array.isArray(lessons) || lessons.length === 0) {
+        throw new Error('يجب أن يحتوي الملف على قائمة lessons وبداخلها درس واحد على الأقل.');
+      }
+      const errors: string[] = [];
+      lessons.forEach((lesson: any, index: number) => {
+        const n = index + 1;
+        if (!lesson || typeof lesson.title !== 'string' || !lesson.title.trim()) errors.push(`الدرس ${n}: عنوان الدرس مفقود.`);
+        if (typeof lesson.content !== 'string' || !lesson.content.trim()) errors.push(`الدرس ${n}: نص الشرح مفقود.`);
+        if (lesson.interactiveQuestions !== undefined && !Array.isArray(lesson.interactiveQuestions)) errors.push(`الدرس ${n}: interactiveQuestions يجب أن تكون قائمة.`);
+        (Array.isArray(lesson.interactiveQuestions) ? lesson.interactiveQuestions : []).forEach((q: any, qi: number) => {
+          const label = `الدرس ${n}، السؤال ${qi + 1}`;
+          if (!q || typeof q.q !== 'string' || !q.q.trim()) errors.push(`${label}: نص السؤال مفقود.`);
+          if (!['mcq', 'fill', 'true_false'].includes(q?.type)) errors.push(`${label}: نوع السؤال غير مدعوم (mcq أو fill أو true_false).`);
+          if (typeof q?.correct !== 'string' || !q.correct.trim()) errors.push(`${label}: الإجابة الصحيحة مفقودة.`);
+          if (q?.type === 'mcq' && (!Array.isArray(q.options) || q.options.length < 2 || !q.options.includes(q.correct))) errors.push(`${label}: الاختيارات يجب أن تتضمن الإجابة الصحيحة.`);
+        });
+      });
+      if (errors.length) {
+        setBulkImportData({ lessons, errors });
+        setBulkImportFileName(file.name);
+        setBulkImportMessage(`تمت قراءة الملف، لكن توجد ${errors.length} مشكلة. صححها ثم أعد رفع الملف.`);
+        return;
+      }
+      setBulkImportData({ lessons, errors: [] });
+      setBulkImportFileName(file.name);
+      const qCount = lessons.reduce((sum: number, lesson: any) => sum + (lesson.interactiveQuestions?.length || 0), 0);
+      setBulkImportMessage(`تمت قراءة الملف بنجاح: ${lessons.length} شرح و${qCount} سؤال تفاعلي. راجع المعاينة قبل الحفظ.`);
+    } catch (error: any) {
+      setBulkImportData(null);
+      setBulkImportFileName(file.name);
+      setBulkImportMessage(error?.message || 'تعذرت قراءة ملف JSON.');
+    }
+  };
+
+  const downloadBulkImportTemplate = () => {
+    const template = {
+      format: 'nabigha-lessons-v1',
+      subject: 'اسم المادة',
+      stage: 'اسم المرحلة',
+      chapter: 'الفصل الأول',
+      lessons: [{
+        title: 'عنوان الدرس',
+        content: 'اكتب الشرح التفصيلي هنا',
+        isVip: false,
+        image: '',
+        interactiveQuestions: [
+          { type: 'mcq', q: 'نص سؤال الاختيار', options: ['الخيار الأول', 'الخيار الثاني', 'الخيار الثالث', 'الخيار الرابع'], correct: 'الخيار الصحيح' },
+          { type: 'fill', q: 'أكمل الفراغ: ...', correct: 'الإجابة النموذجية' },
+          { type: 'true_false', q: 'العبارة صحيحة أم خاطئة؟', options: ['صح', 'خطأ'], correct: 'صح' }
+        ]
+      }]
+    };
+    const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'قالب-استيراد-النابغة.json'; a.click(); URL.revokeObjectURL(url);
+  };
+
+  const saveBulkImport = async (subjectId: string) => {
+    if (!isAdmin || !bulkImportData?.lessons?.length || bulkImportData.errors?.length) return;
+    if (!window.confirm(`تأكيد استيراد ${bulkImportData.lessons.length} شرح إلى المادة؟ لن يتم حذف أي محتوى موجود.`)) return;
+    setBulkImportSaving(true);
+    setBulkImportMessage(null);
+    try {
+      const subjectRef = doc(db, 'subjects', subjectId);
+      const freshSnap = await getDoc(subjectRef);
+      if (!freshSnap.exists()) throw new Error('لم يتم العثور على المادة في قاعدة البيانات.');
+      const freshSubject = freshSnap.data() as any;
+      const originalNotes = Array.isArray(freshSubject.notes) ? freshSubject.notes : [];
+      const updatedNotes = [...originalNotes];
+      let added = 0, updated = 0, skipped = 0;
+      bulkImportData.lessons.forEach((lesson: any, index: number) => {
+        const title = lesson.title.trim();
+        const existingIndex = updatedNotes.findIndex((note: any) => String(note.title || '').trim().toLowerCase() === title.toLowerCase());
+        const questions = (lesson.interactiveQuestions || []).map((q: any, qi: number) => ({
+          type: q.type,
+          q: q.q.trim(),
+          options: q.type === 'mcq' ? q.options.map((option: string) => String(option).trim()) : (q.type === 'true_false' ? ['صح', 'خطأ'] : []),
+          correct: q.correct.trim(),
+          ...(q.explanation ? { explanation: q.explanation } : {}),
+          ...(q.hint ? { hint: q.hint } : {}),
+          importKey: q.id || `${title}::${qi}::${q.q.trim()}`
+        }));
+        if (existingIndex >= 0 && bulkImportMode === 'skip') { skipped++; return; }
+        if (existingIndex >= 0 && bulkImportMode === 'update') {
+          const old = updatedNotes[existingIndex];
+          updatedNotes[existingIndex] = {
+            ...old,
+            title,
+            content: lesson.content,
+            ...(lesson.image !== undefined ? { image: lesson.image } : {}),
+            ...(lesson.isVip !== undefined ? { isVip: !!lesson.isVip } : {}),
+            interactiveQuestions: questions
+          };
+          updated++;
+        } else {
+          updatedNotes.push({
+            id: `bulk_${Date.now()}_${index}_${Math.random().toString(36).slice(2, 7)}`,
+            title,
+            content: lesson.content,
+            fontSize: '17px', textColor: '#334155', titleColor: '#0f172a', titleFontSize: '18px', contentBold: false,
+            image: lesson.image || '', isVip: !!lesson.isVip,
+            interactiveQuestions: questions,
+            importSource: 'bulk-json-v1'
+          });
+          added++;
+        }
+      });
+      const payload = { notes: updatedNotes };
+      const estimatedBytes = new Blob([JSON.stringify({ ...freshSubject, ...payload })]).size;
+      if (estimatedBytes > 900 * 1024) throw new Error('المحتوى بعد الاستيراد يقترب من الحد الأقصى لحجم وثيقة Firestore. قسّم الفصل إلى ملفات أصغر (مثلاً 3–5 دروس لكل ملف). لم يتم حفظ أي تغيير.');
+      await updateDoc(subjectRef, payload);
+      const updatedSubjects = subjects.map((subject: any) => subject.id === subjectId ? { ...subject, notes: updatedNotes } : subject);
+      setSubjects(updatedSubjects);
+      try { localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubjects)); } catch (storageError) { console.warn('تعذر تحديث التخزين المحلي:', storageError); }
+      void saveSubjectsOffline(updatedSubjects);
+      setBulkImportMessage(`اكتمل الاستيراد: ${added} شرح جديد، ${updated} شرح محدّث، ${skipped} شرح متروك لأنه موجود مسبقاً.`);
+      setBulkImportData(null); setBulkImportFileName('');
+    } catch (error: any) {
+      console.error('Bulk curriculum import failed:', error);
+      setBulkImportMessage(`لم يتم حفظ الاستيراد: ${error?.message || 'حدث خطأ غير معروف'}`);
+    } finally {
+      setBulkImportSaving(false);
+    }
+  };
+
   const getEmbedPdfUrl = (url: string) => {
     if (!url) return '';
     if (url.includes('drive.google.com')) {
@@ -565,6 +703,12 @@ export function App() {
   const [interactiveFill, setInteractiveFill] = useState('');
   const [interactiveTf, setInteractiveTf] = useState('صح');
   const [interactiveList, setInteractiveList] = useState<any[]>([]);
+  // استيراد جماعي آمن للشروحات والأسئلة التفاعلية
+  const [bulkImportData, setBulkImportData] = useState<any | null>(null);
+  const [bulkImportFileName, setBulkImportFileName] = useState('');
+  const [bulkImportMode, setBulkImportMode] = useState<'skip' | 'update'>('skip');
+  const [bulkImportSaving, setBulkImportSaving] = useState(false);
+  const [bulkImportMessage, setBulkImportMessage] = useState<string | null>(null);
   const [studentInteractiveAnswers, setStudentInteractiveAnswers] = useState<Record<number, string>>({});
   const [interactiveGradedStatus, setInteractiveGradedStatus] = useState<Record<number, boolean>>({});
 
@@ -2107,6 +2251,41 @@ export function App() {
                   className="w-full bg-slate-50 border-2 border-indigo-100 rounded-2xl pr-10 pl-4 py-3 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:border-indigo-500 shadow-sm"
                 />
               </div>
+
+              {isAdmin && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-3 sm:p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <h4 className="font-black text-indigo-950 text-sm flex items-center gap-2"><Upload className="w-4 h-4" /> استيراد جماعي للشروحات والأسئلة</h4>
+                      <p className="text-[11px] text-indigo-800 mt-1">ارفع ملف JSON واحداً يحتوي عدة دروس وأسئلتها. تُحفظ الأسئلة داخل الشرح وتظهر للطالب بالنظام الحالي.</p>
+                    </div>
+                    <button type="button" onClick={downloadBulkImportTemplate} className="px-3 py-2 bg-white border border-indigo-200 text-indigo-800 rounded-lg text-xs font-bold">تنزيل قالب الاستيراد</button>
+                  </div>
+                  <input type="file" accept=".json,application/json" onChange={(e) => { const file = e.target.files?.[0]; if (file) void parseBulkLessonFile(file); e.currentTarget.value = ''; }} className="block w-full text-xs file:ml-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-indigo-700 file:text-white file:font-bold" />
+                  {bulkImportFileName && <p className="text-xs text-slate-700 font-bold">الملف: {bulkImportFileName}</p>}
+                  {bulkImportData && (
+                    <div className="bg-white border rounded-xl p-3 space-y-2">
+                      <p className="text-xs font-black text-slate-900">معاينة قبل الحفظ</p>
+                      <p className="text-xs text-slate-700">عدد الشروحات: {bulkImportData.lessons.length} | عدد الأسئلة: {bulkImportData.lessons.reduce((sum: number, lesson: any) => sum + (lesson.interactiveQuestions?.length || 0), 0)}</p>
+                      <div className="max-h-36 overflow-y-auto space-y-1">
+                        {bulkImportData.lessons.map((lesson: any, idx: number) => <div key={idx} className="text-xs border-b last:border-0 py-1"><strong>{idx + 1}. {lesson.title || 'بدون عنوان'}</strong><span className="text-slate-500"> — {lesson.interactiveQuestions?.length || 0} سؤال</span></div>)}
+                      </div>
+                      {bulkImportData.errors?.length > 0 && <div className="bg-rose-50 text-rose-800 rounded-lg p-2 text-xs space-y-1">{bulkImportData.errors.slice(0, 10).map((error: string, idx: number) => <p key={idx}>• {error}</p>)}</div>}
+                      {bulkImportData.errors?.length === 0 && (
+                        <>
+                          <label className="block text-xs font-bold text-slate-700">إذا كان عنوان الدرس موجوداً مسبقاً:</label>
+                          <select value={bulkImportMode} onChange={(e) => setBulkImportMode(e.target.value as 'skip' | 'update')} className="w-full border rounded-lg p-2 text-xs bg-white">
+                            <option value="skip">تخطي الدرس الموجود (الأكثر أماناً)</option>
+                            <option value="update">تحديث الشرح والأسئلة للدرس المطابق بالعنوان</option>
+                          </select>
+                          <button type="button" disabled={bulkImportSaving} onClick={() => void saveBulkImport(currentSub.id)} className="w-full bg-emerald-700 disabled:opacity-50 text-white rounded-xl py-2.5 text-xs font-black">{bulkImportSaving ? 'جارٍ التحقق والحفظ...' : 'تأكيد الاستيراد إلى هذه المادة'}</button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {bulkImportMessage && <p className={`text-xs font-bold ${bulkImportMessage.includes('لم يتم') || bulkImportMessage.includes('مشكلة') || bulkImportMessage.includes('خطأ') ? 'text-rose-700' : 'text-emerald-800'}`}>{bulkImportMessage}</p>}
+                </div>
+              )}
 
               {/* أ) الشروحات والتعاليل */}
               <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
