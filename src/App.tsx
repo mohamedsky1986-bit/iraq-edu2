@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
-import { db } from './firebase';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc, Timestamp, where } from 'firebase/firestore';
+import { db, app } from './firebase';
+import { getMessaging, getToken, isSupported } from 'firebase/messaging';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc, Timestamp, where, arrayUnion } from 'firebase/firestore';
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
@@ -432,6 +433,66 @@ export function App() {
   const [announcementText, setAnnouncementText] = useState('');
   const [announcementStage, setAnnouncementStage] = useState('all');
   const [announcementSaving, setAnnouncementSaving] = useState(false);
+  const [pushTitle, setPushTitle] = useState('تنبيه من منصة النابغة');
+  const [pushBody, setPushBody] = useState('');
+  const [pushTarget, setPushTarget] = useState('all');
+  const [pushStage, setPushStage] = useState('all');
+  const [pushStudentId, setPushStudentId] = useState('');
+  const [pushSaving, setPushSaving] = useState(false);
+  const [pushEnableBusy, setPushEnableBusy] = useState(false);
+
+  const enableStudentPush = async () => {
+    if (!loggedStudent?.id) { alert('سجّل دخولك أولاً حتى تفعّل إشعارات حسابك.'); return; }
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+      alert('هذا المتصفح لا يدعم إشعارات الهاتف. جرّب Chrome أو ثبّت المنصة كتطبيق.'); return;
+    }
+    setPushEnableBusy(true);
+    try {
+      const supported = await isSupported();
+      if (!supported) throw new Error('المتصفح لا يدعم Firebase Cloud Messaging');
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') throw new Error('لم تسمح بإظهار الإشعارات. فعّل الإذن من إعدادات المتصفح.');
+      const registration = await navigator.serviceWorker.ready;
+      const messaging = getMessaging(app);
+      const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
+      if (!vapidKey) throw new Error('مفتاح VAPID غير موجود بإعدادات النشر.');
+      const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
+      if (!token) throw new Error('لم يتم إنشاء رمز الجهاز. تأكد من تثبيت المنصة واتصال الإنترنت.');
+      await updateDoc(doc(db, 'students', loggedStudent.id), {
+        fcmTokens: arrayUnion(token),
+        pushEnabled: true,
+        pushEnabledAt: serverTimestamp()
+      });
+      setSuccessMessage('تم تفعيل إشعارات هذا الجهاز بنجاح.');
+    } catch (error: any) {
+      console.error('FCM registration error:', error);
+      alert(error?.message || 'تعذر تفعيل الإشعارات.');
+    } finally { setPushEnableBusy(false); }
+  };
+
+  const handleSendPushNotification = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pushBody.trim()) return;
+    if (pushTarget === 'student' && !pushStudentId) { alert('اختر الطالب أولاً.'); return; }
+    setPushSaving(true);
+    try {
+      await addDoc(collection(db, 'push_notifications'), {
+        title: pushTitle.trim() || 'تنبيه من منصة النابغة',
+        body: pushBody.trim(),
+        targetType: pushTarget,
+        stage: pushTarget === 'stage' ? pushStage : null,
+        studentId: pushTarget === 'student' ? pushStudentId : null,
+        status: 'queued',
+        createdAt: serverTimestamp(),
+        createdBy: 'admin'
+      });
+      setPushBody('');
+      setSuccessMessage('تم تسجيل التنبيه. سيُرسل عبر خدمة Firebase بعد نشر وظائف الإرسال.');
+    } catch (error) {
+      console.error(error);
+      alert('تعذر تسجيل التنبيه. تحقق من صلاحيات Firestore.');
+    } finally { setPushSaving(false); }
+  };
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
   const [showExamHistory, setShowExamHistory] = useState(false);
   const [examHistory, setExamHistory] = useState<any[]>([]);
@@ -1765,6 +1826,7 @@ export function App() {
                   isVip: false,
                   status: 'متصل الآن',
                   lastSeen: nowFormatted,
+                  lastSeenAt: serverTimestamp(),
                   regDate: regDateFormatted,
                   deviceType: device,
                   examScore: 'لم يتقدم'
@@ -1827,6 +1889,7 @@ export function App() {
                     await updateDoc(doc(db, 'students', found.id), { 
                       status: 'متصل الآن', 
                       lastSeen: nowFormatted,
+                      lastSeenAt: serverTimestamp(),
                       deviceType: device
                     });
                   } catch(err) {}
@@ -2197,6 +2260,14 @@ export function App() {
         ))}
         {!isAdmin && vipSettings.telegram && vipSettings.telegram !== 'https://t.me/YourUsername' && (
           <div className="flex justify-center"><a href={vipSettings.telegram} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-4 py-2.5 text-xs font-black shadow"><Send className="w-4 h-4" /> انضم إلى قناة التليجرام</a></div>
+        )}
+
+        {!isAdmin && loggedStudent && (
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-right space-y-2">
+            <div className="flex items-center gap-2"><span className="text-xl">🔔</span><h3 className="font-black text-sky-900">فعّل إشعارات النابغة</h3></div>
+            <p className="text-xs text-sky-800 leading-relaxed">حتى توصلك أخبار الدروس والامتحانات والتنبيهات على جهازك عندما تكون المنصة مغلقة. يجب السماح بالإشعارات على هذا الجهاز.</p>
+            <button type="button" disabled={pushEnableBusy} onClick={enableStudentPush} className="w-full rounded-xl bg-sky-700 px-4 py-3 text-sm font-black text-white disabled:opacity-50">{pushEnableBusy ? 'جارٍ التفعيل...' : 'تفعيل إشعارات الهاتف'}</button>
+          </div>
         )}
 
         {!isAdmin && loggedStudent && (
@@ -3242,6 +3313,18 @@ export function App() {
         {/* إدارة الإعلانات والتواصل */}
         {activeTab === 'communications' && isAdmin && (
           <div className="space-y-4">
+            <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xl border border-sky-200 space-y-3">
+              <h2 className="text-xl font-black text-slate-900">إرسال إشعار إلى هاتف الطالب</h2>
+              <p className="text-xs text-slate-600">يرسل الإشعار للأجهزة التي فعّل أصحابها الإشعارات مسبقاً. هذه الخدمة منفصلة عن الإعلانات الموجودة ولا تغيّرها.</p>
+              <form onSubmit={handleSendPushNotification} className="space-y-3">
+                <input value={pushTitle} onChange={e => setPushTitle(e.target.value)} maxLength={80} className="w-full rounded-xl border p-3 text-sm" placeholder="عنوان الإشعار" />
+                <textarea value={pushBody} onChange={e => setPushBody(e.target.value)} required maxLength={300} rows={3} className="w-full rounded-xl border p-3 text-sm" placeholder="اكتب التنبيه: درس جديد، امتحان، تحديث..." />
+                <select value={pushTarget} onChange={e => setPushTarget(e.target.value)} className="w-full rounded-xl border p-3 text-sm font-bold"><option value="all">جميع الطلاب</option><option value="stage">مرحلة دراسية محددة</option><option value="student">طالب واحد</option></select>
+                {pushTarget === 'stage' && <select value={pushStage} onChange={e => setPushStage(e.target.value)} className="w-full rounded-xl border p-3 text-sm"><option value="all">كل المراحل</option>{allStagesList.map(st => <option key={st.id} value={st.name}>{st.name}</option>)}</select>}
+                {pushTarget === 'student' && <select value={pushStudentId} onChange={e => setPushStudentId(e.target.value)} className="w-full rounded-xl border p-3 text-sm"><option value="">اختر الطالب</option>{studentsList.map(st => <option key={st.id} value={st.id}>{st.name} — {st.stage || 'مرحلة غير محددة'}</option>)}</select>}
+                <button disabled={pushSaving || !pushBody.trim()} className="w-full rounded-xl bg-sky-700 py-3 text-sm font-black text-white disabled:opacity-50">{pushSaving ? 'جارٍ تجهيز الإشعار...' : 'إرسال إشعار الهاتف'}</button>
+              </form>
+            </div>
             <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xl border space-y-3">
               <h2 className="text-xl font-black text-slate-900">إضافة إعلان للطلاب</h2>
               <form onSubmit={handleSaveAnnouncement} className="space-y-3">
