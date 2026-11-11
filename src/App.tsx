@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
-import { db, app } from './firebase';
-import { getMessaging, getToken, isSupported } from 'firebase/messaging';
-import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc, Timestamp, where, arrayUnion } from 'firebase/firestore';
+import { db } from './firebase';
+import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc, Timestamp, where } from 'firebase/firestore';
 import { 
   GraduationCap, ShieldCheck, MapPin, BookOpen, Video, FileText, 
   Award, ArrowRight, UserCheck, Users, ChevronDown, CheckCircle2, 
-  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send, MessageSquare, Globe, Search, RotateCcw, Unlock as UnlockIcon, Laptop, Upload
+  Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, Bell, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send, MessageSquare, Globe, Search, RotateCcw, Unlock as UnlockIcon, Laptop, Upload
 } from 'lucide-react';
 
 const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
@@ -293,6 +292,20 @@ export function App() {
     }
   }, [loggedStudent]);
 
+  // الطالب يشترك فقط برسائله، بينما الأدمن يشاهد سجل الرسائل وحالة القراءة.
+  useEffect(() => {
+    if (!isAdmin && !loggedStudent?.id) { setNotificationItems([]); return; }
+    const notificationsQuery = isAdmin
+      ? collection(db, 'notifications')
+      : query(collection(db, 'notifications'), where('studentId', '==', loggedStudent.id));
+    const unsubscribe = onSnapshot(notificationsQuery, (snapshot) => {
+      const items = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      items.sort((a: any, b: any) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setNotificationItems(items);
+    }, (error) => console.warn('تعذر تحميل مركز الإشعارات:', error));
+    return () => unsubscribe();
+  }, [isAdmin, loggedStudent?.id]);
+
   // تسجيل وجود المتصفح: لا يجمع اسماً للزائر المجهول، ويحدّث نفس الوثيقة بدلاً من إنشاء زيارات متكررة.
   useEffect(() => {
     if (typeof window === 'undefined' || !isOnline) return;
@@ -433,66 +446,70 @@ export function App() {
   const [announcementText, setAnnouncementText] = useState('');
   const [announcementStage, setAnnouncementStage] = useState('all');
   const [announcementSaving, setAnnouncementSaving] = useState(false);
-  const [pushTitle, setPushTitle] = useState('تنبيه من منصة النابغة');
-  const [pushBody, setPushBody] = useState('');
-  const [pushTarget, setPushTarget] = useState('all');
-  const [pushStage, setPushStage] = useState('all');
-  const [pushStudentId, setPushStudentId] = useState('');
-  const [pushSaving, setPushSaving] = useState(false);
-  const [pushEnableBusy, setPushEnableBusy] = useState(false);
+  // مركز الإشعارات الداخلي: لا يستخدم صلاحيات الهاتف أو Firebase Cloud Messaging.
+  const [notificationTitle, setNotificationTitle] = useState('');
+  const [notificationBody, setNotificationBody] = useState('');
+  const [notificationCategory, setNotificationCategory] = useState('عام');
+  const [notificationTarget, setNotificationTarget] = useState('all');
+  const [notificationStage, setNotificationStage] = useState('الثالث المتوسط');
+  const [notificationStudentIds, setNotificationStudentIds] = useState<string[]>([]);
+  const [notificationSaving, setNotificationSaving] = useState(false);
+  const [notificationItems, setNotificationItems] = useState<any[]>([]);
+  const [showNotifications, setShowNotifications] = useState(false);
 
-  const enableStudentPush = async () => {
-    if (!loggedStudent?.id) { alert('سجّل دخولك أولاً حتى تفعّل إشعارات حسابك.'); return; }
-    if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-      alert('هذا المتصفح لا يدعم إشعارات الهاتف. جرّب Chrome أو ثبّت المنصة كتطبيق.'); return;
-    }
-    setPushEnableBusy(true);
-    try {
-      const supported = await isSupported();
-      if (!supported) throw new Error('المتصفح لا يدعم Firebase Cloud Messaging');
-      const permission = await Notification.requestPermission();
-      if (permission !== 'granted') throw new Error('لم تسمح بإظهار الإشعارات. فعّل الإذن من إعدادات المتصفح.');
-      const registration = await navigator.serviceWorker.ready;
-      const messaging = getMessaging(app);
-      const vapidKey = import.meta.env.VITE_FIREBASE_VAPID_KEY;
-      if (!vapidKey) throw new Error('مفتاح VAPID غير موجود بإعدادات النشر.');
-      const token = await getToken(messaging, { vapidKey, serviceWorkerRegistration: registration });
-      if (!token) throw new Error('لم يتم إنشاء رمز الجهاز. تأكد من تثبيت المنصة واتصال الإنترنت.');
-      await updateDoc(doc(db, 'students', loggedStudent.id), {
-        fcmTokens: arrayUnion(token),
-        pushEnabled: true,
-        pushEnabledAt: serverTimestamp()
-      });
-      setSuccessMessage('تم تفعيل إشعارات هذا الجهاز بنجاح.');
-    } catch (error: any) {
-      console.error('FCM registration error:', error);
-      alert(error?.message || 'تعذر تفعيل الإشعارات.');
-    } finally { setPushEnableBusy(false); }
-  };
-
-  const handleSendPushNotification = async (e: React.FormEvent) => {
+  const handleSendInternalNotification = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pushBody.trim()) return;
-    if (pushTarget === 'student' && !pushStudentId) { alert('اختر الطالب أولاً.'); return; }
-    setPushSaving(true);
+    if (!notificationTitle.trim() || !notificationBody.trim()) { alert('اكتب عنوان الرسالة ونصها أولاً.'); return; }
+    let recipients = studentsList;
+    let targetLabel = 'جميع الطلاب';
+    if (notificationTarget === 'stage') {
+      recipients = studentsList.filter((student: any) => student.stage === notificationStage);
+      targetLabel = notificationStage;
+    } else if (notificationTarget === 'students') {
+      if (notificationStudentIds.length === 0) { alert('حدد طالباً واحداً على الأقل.'); return; }
+      recipients = studentsList.filter((student: any) => notificationStudentIds.includes(student.id));
+      targetLabel = `${recipients.length} طالب محدد`;
+    }
+    if (recipients.length === 0) { alert('ماكو طلاب ضمن التحديد المختار.'); return; }
+    setNotificationSaving(true);
     try {
-      await addDoc(collection(db, 'push_notifications'), {
-        title: pushTitle.trim() || 'تنبيه من منصة النابغة',
-        body: pushBody.trim(),
-        targetType: pushTarget,
-        stage: pushTarget === 'stage' ? pushStage : null,
-        studentId: pushTarget === 'student' ? pushStudentId : null,
-        status: 'queued',
+      // ينشأ سجل مستقل لكل طالب حتى لا يقرأ الطالب رسائل غيره.
+      await Promise.all(recipients.map((student: any) => addDoc(collection(db, 'notifications'), {
+        studentId: student.id,
+        studentName: student.name || '',
+        title: notificationTitle.trim(),
+        body: notificationBody.trim(),
+        category: notificationCategory,
+        targetType: notificationTarget,
+        targetLabel,
+        stage: student.stage || null,
+        isRead: false,
         createdAt: serverTimestamp(),
         createdBy: 'admin'
-      });
-      setPushBody('');
-      setSuccessMessage('تم تسجيل التنبيه. سيُرسل عبر خدمة Firebase بعد نشر وظائف الإرسال.');
+      })));
+      setNotificationTitle('');
+      setNotificationBody('');
+      setNotificationStudentIds([]);
+      setSuccessMessage(`تم إرسال الرسالة إلى ${recipients.length} طالب بنجاح.`);
     } catch (error) {
-      console.error(error);
-      alert('تعذر تسجيل التنبيه. تحقق من صلاحيات Firestore.');
-    } finally { setPushSaving(false); }
+      console.error('تعذر إرسال الإشعار الداخلي:', error);
+      alert('تعذر حفظ الرسالة. تحقق من اتصال الإنترنت وصلاحيات مجموعة notifications في Firestore.');
+    } finally { setNotificationSaving(false); }
   };
+
+  const studentNotifications = notificationItems;
+  const unreadNotificationCount = studentNotifications.filter((item: any) => !item.isRead).length;
+
+  const markNotificationAsRead = async (item: any) => {
+    if (!loggedStudent?.id || item.studentId !== loggedStudent.id || item.isRead) return;
+    try {
+      await updateDoc(doc(db, 'notifications', item.id), { isRead: true, readAt: serverTimestamp() });
+    } catch (error) {
+      console.warn('تعذر تحديث حالة قراءة الإشعار:', error);
+      alert('تعذر تحديث حالة القراءة. تحقق من صلاحيات Firestore.');
+    }
+  };
+
   const [activeQuiz, setActiveQuiz] = useState<any | null>(null);
   const [showExamHistory, setShowExamHistory] = useState(false);
   const [examHistory, setExamHistory] = useState<any[]>([]);
@@ -2146,6 +2163,13 @@ export function App() {
             </button>
           )}
 
+          {!isAdmin && loggedStudent && (
+            <button onClick={() => setShowNotifications(true)} className="relative px-3 py-1.5 bg-white text-indigo-700 rounded-xl text-[11px] font-black shadow flex items-center gap-1.5" aria-label="فتح الإشعارات">
+              <Bell className="w-4 h-4" /> الرسائل
+              {unreadNotificationCount > 0 && <span className="absolute -top-2 -left-2 min-w-5 h-5 px-1 rounded-full bg-rose-600 text-white text-[10px] flex items-center justify-center">{unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}</span>}
+            </button>
+          )}
+
           {isAdmin ? (
             <button onClick={() => setIsAdmin(false)} className="px-2.5 py-1.5 bg-rose-600 text-white rounded-xl text-[11px] font-bold shadow-sm">خروج الأدمن</button>
           ) : loggedStudent ? (
@@ -2161,6 +2185,27 @@ export function App() {
           )}
         </div>
       </div>
+
+      {showNotifications && loggedStudent && !isAdmin && (
+        <div className="fixed inset-0 z-[80] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-3" onClick={() => setShowNotifications(false)}>
+          <section className="bg-white w-full max-w-xl max-h-[85vh] overflow-hidden rounded-3xl shadow-2xl flex flex-col text-right" onClick={(e) => e.stopPropagation()}>
+            <div className="p-4 border-b flex items-center justify-between gap-3 bg-indigo-50">
+              <div><h2 className="font-black text-lg text-slate-900">رسائلي وإشعاراتي 🔔</h2><p className="text-xs text-slate-500 mt-1">{loggedStudent.name} · {loggedStudent.stage}</p></div>
+              <button onClick={() => setShowNotifications(false)} className="w-9 h-9 rounded-full bg-white text-slate-600 font-black" aria-label="إغلاق">✕</button>
+            </div>
+            <div className="p-4 overflow-y-auto space-y-3">
+              {studentNotifications.length === 0 ? <p className="text-center text-sm text-slate-500 py-10">ما عندك رسائل حالياً. راح تظهر هنا رسائل الإدارة الموجهة إلك.</p> : studentNotifications.map((item: any) => {
+                const isRead = !!item.isRead;
+                return <article key={item.id} className={`rounded-2xl border p-4 space-y-2 ${isRead ? 'border-slate-200 bg-white' : 'border-indigo-200 bg-indigo-50'}`}>
+                  <div className="flex items-start justify-between gap-2"><div><span className="text-[10px] font-bold text-indigo-700">{item.category || 'عام'}</span><h3 className="font-black text-slate-900 text-sm mt-1">{item.title}</h3></div>{!isRead && <span className="rounded-full bg-rose-600 text-white text-[10px] px-2 py-1 shrink-0">جديد</span>}</div>
+                  <p className="text-sm text-slate-700 leading-7 whitespace-pre-wrap">{item.body}</p>
+                  <div className="flex items-center justify-between gap-2 pt-1"><span className="text-[10px] text-slate-400">{item.createdAt?.toDate ? item.createdAt.toDate().toLocaleString('ar-IQ') : 'رسالة حديثة'}</span>{!isRead ? <button onClick={() => markNotificationAsRead(item)} className="text-xs font-black text-indigo-700 bg-white border border-indigo-200 rounded-lg px-3 py-2">تحديد كمقروءة</button> : <span className="text-[10px] text-emerald-700 font-bold">✓ تمت القراءة</span>}</div>
+                </article>;
+              })}
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* شريط التبويبات (للأدمن فقط) */}
       {isAdmin && (
@@ -2260,14 +2305,6 @@ export function App() {
         ))}
         {!isAdmin && vipSettings.telegram && vipSettings.telegram !== 'https://t.me/YourUsername' && (
           <div className="flex justify-center"><a href={vipSettings.telegram} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-700 text-white px-4 py-2.5 text-xs font-black shadow"><Send className="w-4 h-4" /> انضم إلى قناة التليجرام</a></div>
-        )}
-
-        {!isAdmin && loggedStudent && (
-          <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4 text-right space-y-2">
-            <div className="flex items-center gap-2"><span className="text-xl">🔔</span><h3 className="font-black text-sky-900">فعّل إشعارات النابغة</h3></div>
-            <p className="text-xs text-sky-800 leading-relaxed">حتى توصلك أخبار الدروس والامتحانات والتنبيهات على جهازك عندما تكون المنصة مغلقة. يجب السماح بالإشعارات على هذا الجهاز.</p>
-            <button type="button" disabled={pushEnableBusy} onClick={enableStudentPush} className="w-full rounded-xl bg-sky-700 px-4 py-3 text-sm font-black text-white disabled:opacity-50">{pushEnableBusy ? 'جارٍ التفعيل...' : 'تفعيل إشعارات الهاتف'}</button>
-          </div>
         )}
 
         {!isAdmin && loggedStudent && (
@@ -3313,17 +3350,26 @@ export function App() {
         {/* إدارة الإعلانات والتواصل */}
         {activeTab === 'communications' && isAdmin && (
           <div className="space-y-4">
-            <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xl border border-sky-200 space-y-3">
-              <h2 className="text-xl font-black text-slate-900">إرسال إشعار إلى هاتف الطالب</h2>
-              <p className="text-xs text-slate-600">يرسل الإشعار للأجهزة التي فعّل أصحابها الإشعارات مسبقاً. هذه الخدمة منفصلة عن الإعلانات الموجودة ولا تغيّرها.</p>
-              <form onSubmit={handleSendPushNotification} className="space-y-3">
-                <input value={pushTitle} onChange={e => setPushTitle(e.target.value)} maxLength={80} className="w-full rounded-xl border p-3 text-sm" placeholder="عنوان الإشعار" />
-                <textarea value={pushBody} onChange={e => setPushBody(e.target.value)} required maxLength={300} rows={3} className="w-full rounded-xl border p-3 text-sm" placeholder="اكتب التنبيه: درس جديد، امتحان، تحديث..." />
-                <select value={pushTarget} onChange={e => setPushTarget(e.target.value)} className="w-full rounded-xl border p-3 text-sm font-bold"><option value="all">جميع الطلاب</option><option value="stage">مرحلة دراسية محددة</option><option value="student">طالب واحد</option></select>
-                {pushTarget === 'stage' && <select value={pushStage} onChange={e => setPushStage(e.target.value)} className="w-full rounded-xl border p-3 text-sm"><option value="all">كل المراحل</option>{allStagesList.map(st => <option key={st.id} value={st.name}>{st.name}</option>)}</select>}
-                {pushTarget === 'student' && <select value={pushStudentId} onChange={e => setPushStudentId(e.target.value)} className="w-full rounded-xl border p-3 text-sm"><option value="">اختر الطالب</option>{studentsList.map(st => <option key={st.id} value={st.id}>{st.name} — {st.stage || 'مرحلة غير محددة'}</option>)}</select>}
-                <button disabled={pushSaving || !pushBody.trim()} className="w-full rounded-xl bg-sky-700 py-3 text-sm font-black text-white disabled:opacity-50">{pushSaving ? 'جارٍ تجهيز الإشعار...' : 'إرسال إشعار الهاتف'}</button>
+            <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xl border border-indigo-200 space-y-3">
+              <h2 className="text-xl font-black text-slate-900">إرسال رسالة داخل المنصة 🔔</h2>
+              <p className="text-xs text-slate-600">تظهر الرسالة في جرس الطالب داخل حسابه، ولا تحتاج تفعيل إشعارات الهاتف.</p>
+              <form onSubmit={handleSendInternalNotification} className="space-y-3">
+                <label className="block text-xs font-bold text-slate-700">عنوان الرسالة</label>
+                <input value={notificationTitle} onChange={e => setNotificationTitle(e.target.value)} required maxLength={100} className="w-full rounded-xl border p-3 text-sm" placeholder="مثال: تمت إضافة أسئلة جديدة" />
+                <label className="block text-xs font-bold text-slate-700">نوع الرسالة</label>
+                <select value={notificationCategory} onChange={e => setNotificationCategory(e.target.value)} className="w-full rounded-xl border p-3 text-sm font-bold"><option>عام</option><option>درس جديد</option><option>أسئلة جديدة</option><option>امتحان جديد</option><option>تنويه إداري</option></select>
+                <label className="block text-xs font-bold text-slate-700">نص الرسالة</label>
+                <textarea value={notificationBody} onChange={e => setNotificationBody(e.target.value)} required maxLength={1000} rows={4} className="w-full rounded-xl border p-3 text-sm" placeholder="اكتب تفاصيل الرسالة للطلاب..." />
+                <label className="block text-xs font-bold text-slate-700">إرسال إلى</label>
+                <select value={notificationTarget} onChange={e => { setNotificationTarget(e.target.value); setNotificationStudentIds([]); }} className="w-full rounded-xl border p-3 text-sm font-bold"><option value="all">جميع الطلاب</option><option value="stage">مرحلة دراسية محددة</option><option value="students">طلاب محددون</option></select>
+                {notificationTarget === 'stage' && <select value={notificationStage} onChange={e => setNotificationStage(e.target.value)} className="w-full rounded-xl border p-3 text-sm">{allStagesList.map(st => <option key={st.id} value={st.name}>{st.name}</option>)}</select>}
+                {notificationTarget === 'students' && <div className="rounded-xl border p-3 space-y-2"><div className="flex items-center justify-between gap-2"><span className="text-xs font-black">حدد الطلاب المستلمين ({notificationStudentIds.length})</span><button type="button" onClick={() => setNotificationStudentIds(notificationStudentIds.length === studentsList.length ? [] : studentsList.map(st => st.id))} className="text-[11px] font-bold text-indigo-700">{notificationStudentIds.length === studentsList.length ? 'إلغاء تحديد الكل' : 'تحديد الكل'}</button></div><div className="max-h-48 overflow-y-auto space-y-1">{studentsList.map(st => <label key={st.id} className="flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-slate-50 text-xs"><input type="checkbox" checked={notificationStudentIds.includes(st.id)} onChange={e => setNotificationStudentIds(current => e.target.checked ? [...current, st.id] : current.filter(id => id !== st.id))} /><span className="font-bold">{st.name}</span><span className="text-slate-500 mr-auto">{st.stage || 'غير محدد'}</span></label>)}</div></div>}
+                <button disabled={notificationSaving || !notificationTitle.trim() || !notificationBody.trim()} className="w-full rounded-xl bg-indigo-700 py-3 text-sm font-black text-white disabled:opacity-50">{notificationSaving ? 'جارٍ إرسال الرسالة...' : 'إرسال وحفظ الرسالة'}</button>
               </form>
+            </div>
+            <div className="bg-white rounded-2xl p-4 shadow-xl border space-y-3">
+              <h3 className="font-black">الرسائل المرسلة</h3>
+              {notificationItems.length === 0 ? <p className="text-xs text-slate-500">ماكو رسائل مرسلة لحد الآن.</p> : notificationItems.slice(0, 40).map((item: any) => <div key={item.id} className="border rounded-xl p-3 space-y-1"><div className="flex items-start justify-between gap-2"><div><p className="text-sm font-black">{item.title}</p><p className="text-[10px] text-indigo-700">{item.category || 'عام'} · {item.targetLabel || item.targetType} · {item.studentName}</p></div><button onClick={async () => { if (!confirm('حذف هذه الرسالة من مركز الإشعارات؟')) return; try { await deleteDoc(doc(db, 'notifications', item.id)); } catch (e) { alert('تعذر حذف الرسالة.'); } }} className="text-rose-600 text-xs font-bold">حذف</button></div><p className="text-xs text-slate-600 whitespace-pre-wrap">{item.body}</p><p className="text-[10px] text-slate-400">{item.isRead ? 'قرأها الطالب' : 'لم يقرأها بعد'}</p></div>)}
             </div>
             <div className="bg-white rounded-2xl p-4 sm:p-6 shadow-xl border space-y-3">
               <h2 className="text-xl font-black text-slate-900">إضافة إعلان للطلاب</h2>
