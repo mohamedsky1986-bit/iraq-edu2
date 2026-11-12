@@ -1468,20 +1468,58 @@ export function App() {
                 ))}
               </div>
 
-              {/* استيراد أسئلة موجودة من الشروحات أو الامتحانات السابقة دون المساس بالمصدر */}
+              {/* اختيار سؤال واحد من القائمة وإضافته فوراً، بنفس طريقة الاستيراد السريع */}
               <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-2">
-                <h5 className="text-xs font-black text-emerald-900">استيراد من بنك أسئلة المادة</h5>
-                <p className="text-[11px] text-slate-600">يجمع الأسئلة التفاعلية داخل الشروحات وأسئلة الامتحانات الأخرى المحفوظة في هذه المادة. لا يحذف ولا يعدّل المصدر.</p>
+                <h5 className="text-xs font-black text-emerald-900">⭐ استيراد سؤال من الشروحات أو الامتحانات السابقة</h5>
+                <p className="text-[11px] text-slate-600">اختَر السؤال من القائمة، وسيُضاف مباشرةً إلى هذا الامتحان. كرر الاختيار لإضافة أسئلة أخرى؛ المصدر الأصلي لا يتغير.</p>
                 <select value={editImportSource} onChange={(e) => setEditImportSource(e.target.value as 'all' | 'lessons' | 'quizzes')} className="w-full px-3 py-2 bg-white border rounded-lg text-xs font-bold">
                   <option value="all">كل المصادر</option>
                   <option value="lessons">الشروحات فقط</option>
                   <option value="quizzes">الامتحانات السابقة فقط</option>
                 </select>
                 <input type="search" value={editImportSearch} onChange={(e) => setEditImportSearch(e.target.value)} placeholder="ابحث بنص السؤال أو اسم الشرح/الامتحان..." className="w-full px-3 py-2 bg-white border rounded-lg text-xs" />
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <span className="text-[11px] text-slate-600">الأسئلة المتاحة: {getEditableQuizQuestionBank().filter((q: any) => (editImportSource === 'all' || q.sourceType === editImportSource) && (!editImportSearch.trim() || q.q.toLowerCase().includes(editImportSearch.trim().toLowerCase()) || q.sourceLabel.toLowerCase().includes(editImportSearch.trim().toLowerCase()))).length}</span>
-                  <button type="button" onClick={importQuestionsIntoEditedQuiz} className="px-3 py-2 bg-emerald-700 text-white rounded-lg text-xs font-bold">استيراد الأسئلة المطابقة</button>
-                </div>
+                <select
+                  key={`${editImportSource}-${editImportSearch}`}
+                  defaultValue=""
+                  onChange={(e) => {
+                    const sourceKey = e.target.value;
+                    if (!sourceKey) return;
+                    const selected = getEditableQuizQuestionBank().find((q: any) =>
+                      q.sourceKey === sourceKey &&
+                      (editImportSource === 'all' || q.sourceType === editImportSource) &&
+                      (!editImportSearch.trim() || q.q.toLowerCase().includes(editImportSearch.trim().toLowerCase()) || q.sourceLabel.toLowerCase().includes(editImportSearch.trim().toLowerCase()))
+                    );
+                    if (!selected) return;
+                    const newQuestion = {
+                      type: selected.type === 'mcq' ? 'mcq' : (selected.type === 'true_false' ? 'true_false' : 'fill'),
+                      q: selected.q,
+                      options: selected.type === 'mcq' ? selected.options : (selected.type === 'true_false' ? ['صح', 'خطأ'] : []),
+                      correct: selected.correct,
+                      isMinisterial: !!selected.isMinisterial,
+                      importedFrom: selected.sourceLabel
+                    };
+                    setEditQuizQuestions((current: any[]) => {
+                      const duplicate = current.some((item: any) => normalizeArabic(String(item.q || '')) === normalizeArabic(newQuestion.q));
+                      if (duplicate) {
+                        setSuccessMessage('هذا السؤال موجود مسبقاً في الامتحان.');
+                        return current;
+                      }
+                      setSuccessMessage('تمت إضافة السؤال مباشرةً إلى قائمة الامتحان. اضغط حفظ التعديلات نهائياً لإتمام الحفظ.');
+                      return [...current, newQuestion];
+                    });
+                    window.setTimeout(() => setSuccessMessage(null), 2500);
+                    e.target.value = '';
+                  }}
+                  className="w-full px-3 py-2 bg-white border border-emerald-300 rounded-lg text-xs font-bold text-slate-800 cursor-pointer"
+                >
+                  <option value="">-- اضغط لاختيار سؤال وإضافته مباشرةً --</option>
+                  {getEditableQuizQuestionBank()
+                    .filter((q: any) => (editImportSource === 'all' || q.sourceType === editImportSource) && (!editImportSearch.trim() || q.q.toLowerCase().includes(editImportSearch.trim().toLowerCase()) || q.sourceLabel.toLowerCase().includes(editImportSearch.trim().toLowerCase())))
+                    .map((q: any) => (
+                      <option key={q.sourceKey} value={q.sourceKey}>⭐ {q.q} — {q.sourceLabel}</option>
+                    ))}
+                </select>
+                <p className="text-[10px] text-slate-500">الأسئلة المتاحة: {getEditableQuizQuestionBank().filter((q: any) => (editImportSource === 'all' || q.sourceType === editImportSource) && (!editImportSearch.trim() || q.q.toLowerCase().includes(editImportSearch.trim().toLowerCase()) || q.sourceLabel.toLowerCase().includes(editImportSearch.trim().toLowerCase()))).length}</p>
               </div>
 
               {/* إضافة سؤال جديد مع تحديد نوعه */}
