@@ -568,6 +568,11 @@ export function App() {
   // حقول إضافة سؤال جديد داخل نافذة تعديل الامتحان
   const [editNewQText, setEditNewQText] = useState('');
   const [editNewQCorrect, setEditNewQCorrect] = useState('');
+  const [editNewQType, setEditNewQType] = useState<'mcq' | 'fill' | 'true_false'>('fill');
+  const [editNewQOptions, setEditNewQOptions] = useState<string[]>(['', '', '', '']);
+  const [editImportSearch, setEditImportSearch] = useState('');
+  const [editImportSource, setEditImportSource] = useState<'all' | 'lessons' | 'quizzes'>('all');
+  const [speakingNoteId, setSpeakingNoteId] = useState<string | null>(null);
 
   const [editingVideoItem, setEditingVideoItem] = useState<{subjectId: string, video: any} | null>(null);
   const [editVideoTitle, setEditVideoTitle] = useState('');
@@ -1048,6 +1053,97 @@ export function App() {
     setMinisterialBankFileName('');
   };
 
+  // بنك استيراد داخلي للامتحان: يجمع أسئلة الشروحات والامتحانات المحفوظة للمادة نفسها فقط.
+  // لا يغيّر المصدر؛ ينسخ السؤال إلى مسودة الامتحان الحالية مع الاحتفاظ بنوعه واختياراته.
+  const getEditableQuizQuestionBank = () => {
+    if (!editingQuizItem?.subjectId) return [];
+    const subject = subjects.find((item: any) => item.id === editingQuizItem.subjectId);
+    if (!subject) return [];
+    const fromLessons = (subject.notes || []).flatMap((note: any) =>
+      (note.interactiveQuestions || []).map((q: any, index: number) => ({
+        ...q,
+        q: String(q.q || ''),
+        correct: String(q.correct || ''),
+        options: Array.isArray(q.options) ? q.options : [],
+        sourceLabel: `شرح: ${note.title || 'شرح بدون عنوان'}`,
+        sourceType: 'lessons',
+        sourceKey: `note:${note.id}:${index}`
+      }))
+    );
+    const fromQuizzes = (subject.quizzes || [])
+      .filter((quiz: any) => quiz.id !== editingQuizItem.quiz.id && quiz.type !== 'html')
+      .flatMap((quiz: any) => (quiz.questions || []).map((q: any, index: number) => ({
+        ...q,
+        q: String(q.q || ''),
+        correct: String(q.correct || ''),
+        options: Array.isArray(q.options) ? q.options : [],
+        sourceLabel: `امتحان: ${quiz.title || 'امتحان بدون عنوان'}`,
+        sourceType: 'quizzes',
+        sourceKey: `quiz:${quiz.id}:${index}`
+      })));
+    return [...fromLessons, ...fromQuizzes].filter((q: any) => q.q.trim() && q.correct.trim());
+  };
+
+  const importQuestionsIntoEditedQuiz = () => {
+    const bank = getEditableQuizQuestionBank();
+    const needle = editImportSearch.trim().toLowerCase();
+    const matching = bank.filter((q: any) => (editImportSource === 'all' || q.sourceType === editImportSource) && (!needle || q.q.toLowerCase().includes(needle) || q.sourceLabel.toLowerCase().includes(needle)));
+    const existing = new Set(editQuizQuestions.map((q: any) => normalizeArabic(String(q.q || ''))));
+    const fresh = matching.filter((q: any) => {
+      const key = normalizeArabic(q.q);
+      if (existing.has(key)) return false;
+      existing.add(key);
+      return true;
+    });
+    if (!fresh.length) {
+      alert(matching.length ? 'الأسئلة المطابقة موجودة مسبقاً في الامتحان.' : 'ما لقينا أسئلة مطابقة في الشروحات أو الامتحانات المحفوظة لهذه المادة.');
+      return;
+    }
+    setEditQuizQuestions((current: any[]) => [
+      ...current,
+      ...fresh.map((q: any) => ({
+        type: q.type === 'mcq' ? 'mcq' : (q.type === 'true_false' ? 'true_false' : 'fill'),
+        q: q.q,
+        options: q.type === 'mcq' ? q.options : (q.type === 'true_false' ? ['صح', 'خطأ'] : []),
+        correct: q.correct,
+        isMinisterial: !!q.isMinisterial,
+        importedFrom: q.sourceLabel
+      }))
+    ]);
+    alert(`تم استيراد ${fresh.length} سؤالاً. المصدر الأصلي لم يتغير، اضغط حفظ التعديلات نهائياً لحفظ الامتحان.`);
+  };
+
+  // قراءة الشرح بصوت عربي من محرك النطق الموجود في المتصفح/الجهاز.
+  const speakLessonNote = (note: any) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      alert('ميزة القراءة الصوتية غير مدعومة في هذا المتصفح. جرّب Chrome أو Edge.');
+      return;
+    }
+    const textToRead = String(note?.content || '').trim();
+    if (!textToRead) { alert('لا يوجد نص لقراءته في هذا الشرح.'); return; }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(textToRead);
+    utterance.lang = 'ar-IQ';
+    utterance.rate = 0.9;
+    utterance.onstart = () => setSpeakingNoteId(String(note.id));
+    utterance.onend = () => setSpeakingNoteId(null);
+    utterance.onerror = () => setSpeakingNoteId(null);
+    const voices = window.speechSynthesis.getVoices();
+    const arabicVoice = voices.find((voice) => voice.lang.toLowerCase().startsWith('ar-iq')) ||
+      voices.find((voice) => voice.lang.toLowerCase().startsWith('ar'));
+    if (arabicVoice) utterance.voice = arabicVoice;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const stopLessonSpeech = () => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+    setSpeakingNoteId(null);
+  };
+
+  useEffect(() => () => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+  }, []);
+
   const handleSaveQuizToSubject = async (subjectId: string) => {
     if (!quizTitle || currentQuestionsList.length === 0) {
       alert('يرجى كتابة عنوان الامتحان وإضافة سؤال واحد على الأقل.');
@@ -1339,6 +1435,24 @@ export function App() {
                       placeholder="نص السؤال..." 
                       className="w-full px-3 py-1.5 bg-white border rounded-lg text-xs font-bold" 
                     />
+                    {eq.type === 'mcq' && (
+                      <div className="grid grid-cols-2 gap-2">
+                        {(eq.options || []).map((option: string, optionIndex: number) => (
+                          <input key={optionIndex} type="text" value={option} placeholder={`الخيار ${optionIndex + 1}`} onChange={(e) => {
+                            const next = [...editQuizQuestions];
+                            const nextOptions = [...(next[eqIdx].options || [])];
+                            nextOptions[optionIndex] = e.target.value;
+                            next[eqIdx] = { ...next[eqIdx], options: nextOptions };
+                            setEditQuizQuestions(next);
+                          }} className="w-full px-2 py-1.5 bg-white border rounded-lg text-xs" />
+                        ))}
+                      </div>
+                    )}
+                    {eq.type === 'true_false' && (
+                      <select value={eq.correct} onChange={(e) => {
+                        const next = [...editQuizQuestions]; next[eqIdx] = { ...next[eqIdx], correct: e.target.value }; setEditQuizQuestions(next);
+                      }} className="w-full px-3 py-2 bg-white border rounded-lg text-xs"><option value="صح">صح</option><option value="خطأ">خطأ</option></select>
+                    )}
                     <input 
                       type="text" 
                       value={eq.correct} 
@@ -1354,32 +1468,50 @@ export function App() {
                 ))}
               </div>
 
-              {/* إضافة سؤال جديد داخل نافذة التعديل */}
+              {/* استيراد أسئلة موجودة من الشروحات أو الامتحانات السابقة دون المساس بالمصدر */}
+              <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200 space-y-2">
+                <h5 className="text-xs font-black text-emerald-900">استيراد من بنك أسئلة المادة</h5>
+                <p className="text-[11px] text-slate-600">يجمع الأسئلة التفاعلية داخل الشروحات وأسئلة الامتحانات الأخرى المحفوظة في هذه المادة. لا يحذف ولا يعدّل المصدر.</p>
+                <select value={editImportSource} onChange={(e) => setEditImportSource(e.target.value as 'all' | 'lessons' | 'quizzes')} className="w-full px-3 py-2 bg-white border rounded-lg text-xs font-bold">
+                  <option value="all">كل المصادر</option>
+                  <option value="lessons">الشروحات فقط</option>
+                  <option value="quizzes">الامتحانات السابقة فقط</option>
+                </select>
+                <input type="search" value={editImportSearch} onChange={(e) => setEditImportSearch(e.target.value)} placeholder="ابحث بنص السؤال أو اسم الشرح/الامتحان..." className="w-full px-3 py-2 bg-white border rounded-lg text-xs" />
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-[11px] text-slate-600">الأسئلة المتاحة: {getEditableQuizQuestionBank().filter((q: any) => (editImportSource === 'all' || q.sourceType === editImportSource) && (!editImportSearch.trim() || q.q.toLowerCase().includes(editImportSearch.trim().toLowerCase()) || q.sourceLabel.toLowerCase().includes(editImportSearch.trim().toLowerCase()))).length}</span>
+                  <button type="button" onClick={importQuestionsIntoEditedQuiz} className="px-3 py-2 bg-emerald-700 text-white rounded-lg text-xs font-bold">استيراد الأسئلة المطابقة</button>
+                </div>
+              </div>
+
+              {/* إضافة سؤال جديد مع تحديد نوعه */}
               <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-200 space-y-2">
-                <h5 className="text-xs font-black text-indigo-900">➕ إضافة سؤال جديد لهذا الامتحان أثناء التعديل:</h5>
-                <input 
-                  type="text" 
-                  value={editNewQText} 
-                  onChange={(e) => setEditNewQText(e.target.value)} 
-                  placeholder="نص السؤال الجديد..." 
-                  className="w-full px-3 py-1.5 bg-white border rounded-lg text-xs font-bold" 
-                />
-                <input 
-                  type="text" 
-                  value={editNewQCorrect} 
-                  onChange={(e) => setEditNewQCorrect(e.target.value)} 
-                  placeholder="الإجابة الصحيحة للسؤال الجديد..." 
-                  className="w-full px-3 py-1.5 bg-white border rounded-lg text-xs font-bold text-emerald-900" 
-                />
+                <h5 className="text-xs font-black text-indigo-900">إضافة سؤال جديد لهذا الامتحان:</h5>
+                <select value={editNewQType} onChange={(e) => { const type = e.target.value as 'mcq' | 'fill' | 'true_false'; setEditNewQType(type); setEditNewQCorrect(type === 'true_false' ? 'صح' : ''); }} className="w-full px-3 py-2 bg-white border rounded-lg text-xs font-bold">
+                  <option value="fill">أكمل الفراغ</option>
+                  <option value="mcq">اختيار من متعدد</option>
+                  <option value="true_false">صح أو خطأ</option>
+                </select>
+                <input type="text" value={editNewQText} onChange={(e) => setEditNewQText(e.target.value)} placeholder="نص السؤال الجديد..." className="w-full px-3 py-1.5 bg-white border rounded-lg text-xs font-bold" />
+                {editNewQType === 'mcq' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    {editNewQOptions.map((option, optionIndex) => <input key={optionIndex} value={option} onChange={(e) => setEditNewQOptions((current) => current.map((value, index) => index === optionIndex ? e.target.value : value))} placeholder={`الخيار ${optionIndex + 1}`} className="w-full px-2 py-2 bg-white border rounded-lg text-xs" />)}
+                  </div>
+                )}
+                {editNewQType === 'true_false' ? (
+                  <select value={editNewQCorrect} onChange={(e) => setEditNewQCorrect(e.target.value)} className="w-full px-3 py-2 bg-white border rounded-lg text-xs"><option value="صح">صح</option><option value="خطأ">خطأ</option></select>
+                ) : (
+                  <input type="text" value={editNewQCorrect} onChange={(e) => setEditNewQCorrect(e.target.value)} placeholder="الإجابة الصحيحة..." className="w-full px-3 py-1.5 bg-white border rounded-lg text-xs font-bold text-emerald-900" />
+                )}
                 <button type="button" onClick={() => {
-                  if (!editNewQText || !editNewQCorrect) {
-                    alert('يرجى كتابة نص السؤال والإجابة الصحيحة.');
+                  if (!editNewQText.trim() || !editNewQCorrect.trim() || (editNewQType === 'mcq' && (editNewQOptions.filter(Boolean).length < 2 || !editNewQOptions.includes(editNewQCorrect)))) {
+                    alert('أكمل نص السؤال والإجابة، وللاختيار من متعدد أدخل خيارين على الأقل واجعل الإجابة الصحيحة مطابقة لأحد الخيارات.');
                     return;
                   }
-                  setEditQuizQuestions([...editQuizQuestions, { type: 'fill', q: editNewQText, correct: editNewQCorrect, isMinisterial: false }]);
-                  setEditNewQText('');
-                  setEditNewQCorrect('');
-                  alert('✅ تم إضافة السؤال الجديد للقائمة مؤقتاً، اضغط حفظ التعديلات نهائياً للاتمام.');
+                  const newQuestion = { type: editNewQType, q: editNewQText.trim(), correct: editNewQCorrect.trim(), options: editNewQType === 'mcq' ? editNewQOptions.filter(Boolean) : (editNewQType === 'true_false' ? ['صح', 'خطأ'] : []), isMinisterial: false };
+                  setEditQuizQuestions((current: any[]) => [...current, newQuestion]);
+                  setEditNewQText(''); setEditNewQCorrect(''); setEditNewQOptions(['', '', '', '']);
+                  alert('تمت إضافة السؤال مؤقتاً. اضغط حفظ التعديلات نهائياً لإتمام الحفظ.');
                 }} className="px-3 py-1.5 bg-slate-900 text-white rounded-lg text-xs font-bold cursor-pointer">
                   + إرفاق هذا السؤال للامتحان
                 </button>
@@ -2537,6 +2669,12 @@ export function App() {
                       </div>
 
                       <p className="leading-relaxed whitespace-pre-wrap" style={{ color: note.textColor || '#334155', fontSize: note.fontSize || '17px', fontWeight: note.contentBold ? 700 : 400, lineHeight: 1.9 }}>{note.content}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button type="button" onClick={() => speakingNoteId === String(note.id) ? stopLessonSpeech() : speakLessonNote(note)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-bold hover:bg-indigo-100">
+                          <Play className="w-4 h-4" /> {speakingNoteId === String(note.id) ? 'إيقاف القراءة' : 'استمع إلى الشرح'}
+                        </button>
+                        {speakingNoteId === String(note.id) && <span className="text-[11px] text-emerald-700 font-bold">جارٍ قراءة الشرح صوتياً...</span>}
+                      </div>
 
                       {note.image && (
                         <div className="mt-2 h-48 w-full rounded-xl overflow-hidden border shadow-sm">
