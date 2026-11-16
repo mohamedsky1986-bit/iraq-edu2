@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { db } from './firebase';
 import { collection, getDocs, addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, setDoc, getDoc, Timestamp, where } from 'firebase/firestore';
@@ -1370,6 +1370,42 @@ export function App() {
     }
   });
 
+  // رجوع داخلي آمن: يغلق الطبقة الحالية أو يرجع من المادة/التبويب دون مغادرة المنصة.
+  const handleInternalBack = () => {
+    if (showPublicChatModal) { setShowPublicChatModal(false); return; }
+    if (showNotifications) { setShowNotifications(false); return; }
+    if (showStudentAuthModal) { setShowStudentAuthModal(false); return; }
+    if (showAdminLoginModal) { setShowAdminLoginModal(false); return; }
+    if (vipModalItem) { setVipModalItem(null); return; }
+    if (activePdfUrl) { setActivePdfUrl(null); setPdfLoading(false); setPdfLoadFailed(false); return; }
+    if (activeVideoUrl) { setActiveVideoUrl(null); return; }
+    if (activeQuiz && !activeQuiz.htmlContent) {
+      if (!quizResult && !window.confirm('تريد الرجوع وترك الامتحان؟ إجاباتك الحالية ستبقى محفوظة مؤقتاً.')) return;
+      setActiveQuiz(null);
+      setTimerActive(false);
+      return;
+    }
+    if (showExamHistory) { setShowExamHistory(false); return; }
+    if (selectedSubjectId) { setSelectedSubjectId(null); setSearchQuery(''); return; }
+    if (isAdmin && activeTab !== 'curriculum') { setActiveTab('curriculum'); return; }
+    if (selectedStage !== 'all') { setSelectedStage('all'); return; }
+    // في الصفحة الرئيسية نبقى داخل المنصة ولا نسمح بزر الرجوع بإغلاقها.
+  };
+
+  const backHandlerRef = useRef<() => void>(() => {});
+  backHandlerRef.current = handleInternalBack;
+
+  // يعترض زر الرجوع في أندرويد/المتصفح ويعيد المستخدم إلى طبقة المنصة السابقة.
+  useEffect(() => {
+    window.history.pushState({ nabighaInternal: true }, '', window.location.href);
+    const handlePopState = () => {
+      backHandlerRef.current();
+      window.history.pushState({ nabighaInternal: true }, '', window.location.href);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 text-white">
@@ -2448,6 +2484,14 @@ export function App() {
 
       {/* المحتوى الرئيسي */}
       <main className="flex-1 w-full max-w-full mx-auto px-1 sm:px-3 py-3 space-y-5 overflow-x-hidden">
+        {(selectedSubjectId || showExamHistory || activeQuiz || activePdfUrl || activeVideoUrl || (isAdmin && activeTab !== 'curriculum')) && (
+          <div className="flex justify-start px-1">
+            <button type="button" onClick={handleInternalBack} className="inline-flex items-center gap-2 rounded-xl bg-white border border-indigo-200 px-4 py-2 text-sm font-black text-indigo-700 shadow-sm hover:bg-indigo-50 active:scale-95" aria-label="رجوع داخل المنصة">
+              <ArrowRight className="w-4 h-4" /> رجوع
+            </button>
+          </div>
+        )}
+
         
         {/* البانر العلوي */}
         <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-indigo-900 rounded-2xl shadow-lg text-white p-4 sm:p-6 relative overflow-hidden">
