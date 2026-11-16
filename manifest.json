@@ -1,14 +1,19 @@
+
 export default function ContactLinks() {
-  // ضع رقم هاتفك هنا مع رمز الدولة (مثال: العراق 964) بدون أصفار زائدة أو علامة +
-  const whatsappNumber = "9647800000000"; 
-  const whatsappMessage = encodeURIComponent("مرحباً، أواجه مشكلة أو استفسار بخصوص المنصة التعليمية.");
-  
-  // ضع معرف تليجرام الخاص بك هنا بدون علامة @
-  const telegramUsername = "YourTelegramUsername"; 
+  // رقم واتساب مع رمز العراق، بدون + أو صفر بالبداية
+  const whatsappNumber = "9647800000000";
+
+  const whatsappMessage = encodeURIComponent(
+    "مرحباً، أواجه مشكلة أو لدي استفسار بخصوص منصة النابغة التعليمية."
+  );
+
+  // معرف التليجرام بدون @
+  const telegramUsername = "YourTelegramUsername";
 
   return (
-    <div className="flex gap-4 justify-center my-4">
-      {شیء -> زر الواتساب الآمن والمباشر}
+    <div className="flex flex-wrap gap-4 justify-center my-4">
+
+      {/* زر الواتساب */}
       <a
         href={`https://wa.me/${whatsappNumber}?text=${whatsappMessage}`}
         target="_blank"
@@ -18,7 +23,7 @@ export default function ContactLinks() {
         تواصل عبر واتساب
       </a>
 
-      {/* زر التليجرام الآمن والمباشر */}
+      {/* زر التليجرام */}
       <a
         href={`https://t.me/${telegramUsername}`}
         target="_blank"
@@ -27,6 +32,7 @@ export default function ContactLinks() {
       >
         تواصل عبر تليجرام
       </a>
+
     </div>
   );
 }
