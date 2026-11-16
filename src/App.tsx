@@ -435,6 +435,13 @@ export function App() {
   }, [isAdmin, activeTab]);
   const [selectedStage, setSelectedStage] = useState<string>('all'); 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
+  const [showAskNabigha, setShowAskNabigha] = useState(false);
+  const [askSubjectId, setAskSubjectId] = useState('');
+  const [askQuestion, setAskQuestion] = useState('');
+  const [askImage, setAskImage] = useState<{ data: string; mimeType: string; name: string } | null>(null);
+  const [askMessages, setAskMessages] = useState<any[]>([]);
+  const [askLoading, setAskLoading] = useState(false);
+  const [askError, setAskError] = useState('');
   
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -1380,6 +1387,34 @@ export function App() {
     }
   };
 
+  const sendAskNabighaQuestion = async () => {
+    if (!askQuestion.trim() && !askImage) { setAskError('اكتب سؤالك أو أرفق صورة للسؤال.'); return; }
+    if (askLoading) return;
+    const chosenSubject = subjects.find((s: any) => s.id === askSubjectId) || subjects.find((s: any) => s.id === selectedSubjectId) || null;
+    if (!chosenSubject) { setAskError('اختَر المادة حتى أبحث ضمن منهجها.'); return; }
+    const stageName = loggedStudent?.stage || chosenSubject.stageName || chosenSubject.stage || selectedStage;
+    const noteLines = (chosenSubject.notes || []).flatMap((note: any) => {
+      const plain = String(note.content || '').replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+      const questions = (note.interactiveQuestions || []).map((q: any) => `سؤال: ${q.q || ''}\nالإجابة الموجودة: ${q.correct || ''}`).join('\n');
+      return [`درس: ${note.title || ''}\n${plain}`, questions].filter(Boolean);
+    }).join('\n\n').slice(0, 18000);
+    const studentMessage = { role: 'student', text: askQuestion.trim() || 'يرجى حل السؤال الموجود في الصورة', imageName: askImage?.name };
+    setAskMessages((prev: any[]) => [...prev, studentMessage]);
+    setAskError(''); setAskLoading(true);
+    try {
+      const response = await fetch('/api/ask', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: askQuestion.trim() || 'اشرح وأجب عن السؤال الموجود في الصورة.', subject: chosenSubject.name, stage: stageName, curriculumContext: noteLines, image: askImage ? { data: askImage.data, mimeType: askImage.mimeType } : null })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'تعذر الحصول على الإجابة.');
+      setAskMessages((prev: any[]) => [...prev, { role: 'tutor', text: data.answer, subject: chosenSubject.name }]);
+      setAskQuestion(''); setAskImage(null);
+    } catch (error: any) {
+      setAskError(error?.message || 'تعذر الاتصال بالمدرّس الذكي.');
+    } finally { setAskLoading(false); }
+  };
+
   const filteredSubjects = subjects.filter(s => {
     if (isAdmin) {
       return selectedStage === 'all' || s.stage === selectedStage || s.stageName === selectedStage;
@@ -1392,6 +1427,7 @@ export function App() {
 
   // رجوع داخلي آمن: يغلق الطبقة الحالية أو يرجع من المادة/التبويب دون مغادرة المنصة.
   const handleInternalBack = () => {
+    if (showAskNabigha) { setShowAskNabigha(false); return; }
     if (showPublicChatModal) { setShowPublicChatModal(false); return; }
     if (showNotifications) { setShowNotifications(false); return; }
     if (showStudentAuthModal) { setShowStudentAuthModal(false); return; }
@@ -2607,8 +2643,41 @@ export function App() {
           </section>
         )}
 
+        {!isAdmin && (
+          <section className="rounded-2xl border border-indigo-200 bg-gradient-to-l from-indigo-950 via-indigo-900 to-slate-900 p-4 sm:p-5 text-white shadow-lg space-y-3">
+            <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center"><Sparkles className="w-6 h-6 text-amber-300" /></div><div><h2 className="font-black text-lg">اسأل النابغة 🤖</h2><p className="text-xs text-indigo-100">مدرّسك الذكي يشرح لك من محتوى المنهج المرفوع</p></div></div>
+            <button type="button" onClick={() => { setAskSubjectId(selectedSubjectId || filteredSubjects[0]?.id || ''); setShowAskNabigha(true); }} className="w-full rounded-xl bg-white text-indigo-950 font-black py-3 hover:bg-indigo-50 flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> اكتب سؤالك واحصل على شرح</button>
+            <p className="text-[10px] text-indigo-200">تقدر تكتب السؤال أو ترفق صورة. الإجابات تعتمد على الدروس المتوفرة للمادة.</p>
+          </section>
+        )}
+
+        {showAskNabigha && (
+          <section className="bg-white rounded-2xl border border-indigo-200 shadow-xl overflow-hidden">
+            <div className="bg-gradient-to-l from-indigo-950 to-indigo-700 text-white p-4 flex items-center justify-between gap-3"><div><h2 className="font-black text-lg flex items-center gap-2"><Sparkles className="w-5 h-5 text-amber-300" /> اسأل النابغة</h2><p className="text-xs text-indigo-100">اسأل عن أي نقطة ضمن منهجك</p></div><button type="button" onClick={() => setShowAskNabigha(false)} className="rounded-lg bg-white/15 px-3 py-2 text-sm font-bold">إغلاق ✕</button></div>
+            <div className="p-3 sm:p-4 space-y-3">
+              <label className="block text-xs font-black text-slate-700">المادة الدراسية</label>
+              <select value={askSubjectId} onChange={e => setAskSubjectId(e.target.value)} className="w-full rounded-xl border border-slate-300 p-3 text-sm font-bold bg-white text-slate-900">
+                <option value="">-- اختر المادة --</option>{filteredSubjects.map((sub: any) => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
+              </select>
+              <div className="max-h-[42vh] min-h-[120px] overflow-y-auto rounded-xl bg-slate-50 border border-slate-200 p-3 space-y-3">
+                {askMessages.length === 0 ? <div className="text-center py-8 text-slate-500"><MessageCircle className="w-8 h-8 mx-auto mb-2 text-indigo-300" /><p className="font-bold text-sm">أهلاً بيك! شنو السؤال اللي تريد تفهمه؟</p><p className="text-xs mt-1">راح أبحث ضمن شروحات المادة المختارة.</p></div> : askMessages.map((m: any, index: number) => <div key={index} className={`max-w-[95%] rounded-2xl p-3 text-sm leading-7 whitespace-pre-wrap ${m.role === 'student' ? 'mr-auto bg-indigo-100 text-indigo-950' : 'ml-auto bg-white border border-emerald-200 text-slate-800 shadow-sm'}`}><div className="text-[10px] font-black mb-1 opacity-70">{m.role === 'student' ? 'سؤالك' : 'النابغة · المدرّس الذكي'}</div>{m.text}{m.imageName && <div className="text-[10px] mt-1">📷 {m.imageName}</div>}</div>)}
+                {askLoading && <div className="text-sm text-indigo-700 font-bold animate-pulse">النابغة يراجع المنهج ويحضّر الإجابة…</div>}
+              </div>
+              {askImage && <div className="flex items-center justify-between gap-2 rounded-lg bg-amber-50 border border-amber-200 p-2 text-xs"><span>📎 {askImage.name}</span><button type="button" onClick={() => setAskImage(null)} className="text-rose-700 font-black">إزالة</button></div>}
+              <textarea value={askQuestion} onChange={e => setAskQuestion(e.target.value)} rows={3} placeholder="اكتب سؤالك هنا… مثال: اشرح لي طريقة حل المعادلة" className="w-full rounded-xl border border-slate-300 p-3 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+              <div className="flex flex-wrap gap-2">
+                <label className="cursor-pointer rounded-xl border border-slate-300 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50">📷 إرفاق صورة<input type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (!file) return; if (file.size > 3 * 1024 * 1024) { setAskError('الصورة أكبر من 3 ميغابايت. اختَر صورة أصغر.'); e.target.value = ''; return; } const reader = new FileReader(); reader.onload = () => setAskImage({ data: String(reader.result || ''), mimeType: file.type, name: file.name }); reader.readAsDataURL(file); e.target.value = ''; }} /></label>
+                <button type="button" disabled={askLoading} onClick={sendAskNabighaQuestion} className="flex-1 rounded-xl bg-indigo-600 text-white px-4 py-2.5 text-sm font-black disabled:opacity-50">{askLoading ? 'جاري الإجابة…' : 'إرسال السؤال ←'}</button>
+              </div>
+              {askError && <p className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2">{askError}</p>}
+              <p className="text-[10px] text-slate-500">تنبيه: إذا ما متوفر جواب مؤكد في المحتوى المرفوع، راح ينبهك المدرّس بدل التخمين.</p>
+            </div>
+          </section>
+        )}
+
         {/* 1. تبويب المنهج الدراسي */}
         {activeTab === 'curriculum' && !selectedSubjectId && (
+
           <div className="space-y-4">
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="flex items-center gap-2.5 w-full sm:w-auto">
