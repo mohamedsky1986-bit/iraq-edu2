@@ -679,7 +679,11 @@ export function App() {
         interactiveQuestions: [
           { type: 'mcq', q: 'نص سؤال الاختيار', options: ['الخيار الأول', 'الخيار الثاني', 'الخيار الثالث', 'الخيار الرابع'], correct: 'الخيار الصحيح' },
           { type: 'fill', q: 'أكمل الفراغ: ...', correct: 'الإجابة النموذجية' },
-          { type: 'true_false', q: 'العبارة صحيحة أم خاطئة؟', options: ['صح', 'خطأ'], correct: 'صح' },\n          { type: 'definition', q: 'عرّف المصطلح الآتي...', correct: 'الإجابة النموذجية...' },\n          { type: 'reason', q: 'علّل: ...', correct: 'الإجابة النموذجية...' },\n          { type: 'enumeration', q: 'عدد ...', correct: '1- ...\n2- ...' },\n          { type: 'compare', q: 'قارن بين ...', correct: 'وجه المقارنة: ...' }
+          { type: 'true_false', q: 'العبارة صحيحة أم خاطئة؟', options: ['صح', 'خطأ'], correct: 'صح' },
+          { type: 'definition', q: 'عرّف المصطلح الآتي...', correct: 'الإجابة النموذجية...' },
+          { type: 'reason', q: 'علّل: ...', correct: 'الإجابة النموذجية...' },
+          { type: 'enumeration', q: 'عدد ...', correct: '1- ...\n2- ...' },
+          { type: 'compare', q: 'قارن بين ...', correct: 'وجه المقارنة: ...' }
         ]
       }]
     };
