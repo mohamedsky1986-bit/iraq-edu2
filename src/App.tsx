@@ -61,34 +61,6 @@ const safeGetStorage = (key: string, fallback: any) => {
   }
 };
 
-
-// تنظيف محتوى محرر الشرح: السماح بتنسيقات تعليمية آمنة فقط.
-const sanitizeLessonHtml = (input: string): string => {
-  if (typeof window === 'undefined') return input || '';
-  const parser = new DOMParser();
-  const parsed = parser.parseFromString(String(input || ''), 'text/html');
-  const allowedTags = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'UL', 'OL', 'LI', 'H2', 'H3', 'BLOCKQUOTE', 'SPAN', 'DIV']);
-  const allowedStyles = new Set(['color', 'background-color', 'font-size', 'font-weight', 'font-style', 'text-decoration', 'text-align']);
-  const cleanNode = (node: Node): string => {
-    if (node.nodeType === Node.TEXT_NODE) return (node.textContent || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    if (node.nodeType !== Node.ELEMENT_NODE) return '';
-    const el = node as HTMLElement;
-    const tag = el.tagName;
-    const children = Array.from(el.childNodes).map(cleanNode).join('');
-    if (!allowedTags.has(tag)) return children;
-    const styles: string[] = [];
-    (el.getAttribute('style') || '').split(';').forEach((rule) => {
-      const [rawKey, ...rawValue] = rule.split(':');
-      const key = (rawKey || '').trim().toLowerCase();
-      const value = rawValue.join(':').trim();
-      if (allowedStyles.has(key) && value && !/url\\s*\\(|expression|javascript/i.test(value)) styles.push(`${key}:${value}`);
-    });
-    const styleAttr = styles.length ? ` style="${styles.join(';')}"` : '';
-    return `<${tag.toLowerCase()}${styleAttr}>${children}</${tag.toLowerCase()}>`;
-  };
-  return Array.from(parsed.body.childNodes).map(cleanNode).join('');
-};
-
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -643,7 +615,7 @@ export function App() {
         (Array.isArray(lesson.interactiveQuestions) ? lesson.interactiveQuestions : []).forEach((q: any, qi: number) => {
           const label = `الدرس ${n}، السؤال ${qi + 1}`;
           if (!q || typeof q.q !== 'string' || !q.q.trim()) errors.push(`${label}: نص السؤال مفقود.`);
-          if (!['mcq', 'fill', 'true_false', 'definition', 'enumeration', 'reason', 'compare', 'explain', 'procedure', 'short_answer'].includes(q?.type)) errors.push(`${label}: نوع السؤال غير مدعوم.`);
+          if (!['mcq', 'fill', 'true_false'].includes(q?.type)) errors.push(`${label}: نوع السؤال غير مدعوم (mcq أو fill أو true_false).`);
           if (typeof q?.correct !== 'string' || !q.correct.trim()) errors.push(`${label}: الإجابة الصحيحة مفقودة.`);
           if (q?.type === 'mcq' && (!Array.isArray(q.options) || q.options.length < 2 || !q.options.includes(q.correct))) errors.push(`${label}: الاختيارات يجب أن تتضمن الإجابة الصحيحة.`);
         });
@@ -679,11 +651,7 @@ export function App() {
         interactiveQuestions: [
           { type: 'mcq', q: 'نص سؤال الاختيار', options: ['الخيار الأول', 'الخيار الثاني', 'الخيار الثالث', 'الخيار الرابع'], correct: 'الخيار الصحيح' },
           { type: 'fill', q: 'أكمل الفراغ: ...', correct: 'الإجابة النموذجية' },
-          { type: 'true_false', q: 'العبارة صحيحة أم خاطئة؟', options: ['صح', 'خطأ'], correct: 'صح' },
-          { type: 'definition', q: 'عرّف المصطلح الآتي...', correct: 'الإجابة النموذجية...' },
-          { type: 'reason', q: 'علّل: ...', correct: 'الإجابة النموذجية...' },
-          { type: 'enumeration', q: 'عدد ...', correct: '1- ...\n2- ...' },
-          { type: 'compare', q: 'قارن بين ...', correct: 'وجه المقارنة: ...' }
+          { type: 'true_false', q: 'العبارة صحيحة أم خاطئة؟', options: ['صح', 'خطأ'], correct: 'صح' }
         ]
       }]
     };
@@ -788,44 +756,7 @@ export function App() {
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editNoteTitle, setEditNoteTitle] = useState('');
   const [editNoteContent, setEditNoteContent] = useState('');
-
-  const editNoteEditorRef = useRef<HTMLDivElement>(null);
-  const newNoteEditorRef = useRef<HTMLDivElement>(null);
-  const applyNoteFormat = (editorRef: React.RefObject<HTMLDivElement>, command: string, value?: string) => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    editor.focus();
-    document.execCommand(command, false, value);
-    if (editor === editNoteEditorRef.current) setEditNoteContent(editor.innerHTML);
-    if (editor === newNoteEditorRef.current) setNewNoteContent(editor.innerHTML);
-  };
-  const renderNoteToolbar = (editorRef: React.RefObject<HTMLDivElement>) => (
-    <div className="flex flex-wrap items-center gap-1 rounded-xl border bg-slate-50 p-2" dir="rtl">
-      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyNoteFormat(editorRef, 'bold')} className="px-2 py-1 rounded border bg-white text-xs font-black" title="عريض">B</button>
-      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyNoteFormat(editorRef, 'italic')} className="px-2 py-1 rounded border bg-white text-xs italic" title="مائل">I</button>
-      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyNoteFormat(editorRef, 'underline')} className="px-2 py-1 rounded border bg-white text-xs underline" title="تحته خط">U</button>
-      <label className="flex items-center gap-1 px-2 py-1 rounded border bg-white text-[11px] font-bold">لون النص <input aria-label="لون النص المحدد" type="color" onChange={(e) => applyNoteFormat(editorRef, 'foreColor', e.target.value)} className="w-6 h-6" /></label>
-      <label className="flex items-center gap-1 px-2 py-1 rounded border bg-white text-[11px] font-bold">التظليل <input aria-label="لون تظليل النص المحدد" type="color" defaultValue="#fff2a8" onChange={(e) => applyNoteFormat(editorRef, 'hiliteColor', e.target.value)} className="w-6 h-6" /></label>
-      <select aria-label="حجم النص المحدد" defaultValue="3" onChange={(e) => applyNoteFormat(editorRef, 'fontSize', e.target.value)} className="px-2 py-1 rounded border bg-white text-xs">
-        <option value="2">صغير</option><option value="3">متوسط</option><option value="4">كبير</option><option value="5">كبير جداً</option>
-      </select>
-      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyNoteFormat(editorRef, 'justifyRight')} className="px-2 py-1 rounded border bg-white text-xs">يمين</button>
-      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyNoteFormat(editorRef, 'insertUnorderedList')} className="px-2 py-1 rounded border bg-white text-xs">• تعداد</button>
-      <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => applyNoteFormat(editorRef, 'removeFormat')} className="px-2 py-1 rounded border bg-white text-xs">إزالة التنسيق</button>
-    </div>
-  );
-
   const [editNoteImage, setEditNoteImage] = useState('');
-
-  useEffect(() => {
-    if (editingNoteId && editNoteEditorRef.current) {
-      const raw = editNoteContent || '';
-      editNoteEditorRef.current.innerHTML = /<\/?[a-z][\s\S]*>/i.test(raw)
-        ? sanitizeLessonHtml(raw)
-        : raw.split(/\r?\n/).map((line) => `<p>${line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') || '<br>'}</p>`).join('');
-    }
-  }, [editingNoteId]);
-
   const [editNoteVip, setEditNoteVip] = useState(false);
   // إعدادات تنسيق الشروحات والأسئلة والأجوبة الجديدة
   const [noteFontSize, setNoteFontSize] = useState('17');
@@ -1723,10 +1654,7 @@ export function App() {
             <button onClick={() => setEditingNoteId(null)} className="absolute top-3 left-3 w-8 h-8 bg-slate-100 rounded-full">✕</button>
             <h3 className="text-lg font-black border-b pb-2">تعديل الشرح أو التعليل</h3>
             <label className="block text-xs font-bold">عنوان الشرح</label><input value={editNoteTitle} onChange={e => setEditNoteTitle(e.target.value)} className="w-full border rounded-xl p-2 text-sm" />
-            <label className="block text-xs font-bold">نص الشرح — حدد أي جزء ثم غيّر لونه أو ظلّله</label>
-            {renderNoteToolbar(editNoteEditorRef)}
-            <div ref={editNoteEditorRef} contentEditable suppressContentEditableWarning onInput={(e) => setEditNoteContent(e.currentTarget.innerHTML)} className="w-full border rounded-xl p-3 text-sm min-h-40 max-h-80 overflow-y-auto text-right leading-8 focus:outline-none focus:ring-2 focus:ring-indigo-200" dir="rtl" />
-
+            <label className="block text-xs font-bold">نص الشرح</label><textarea value={editNoteContent} onChange={e => setEditNoteContent(e.target.value)} className="w-full border rounded-xl p-2 text-sm min-h-28" />
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-xl bg-slate-50 border p-3">
               <label className="text-xs font-bold">حجم النص<select value={noteFontSize} onChange={e => setNoteFontSize(e.target.value)} className="mt-1 w-full border rounded-lg p-2"><option value="15">صغير</option><option value="17">متوسط</option><option value="19">كبير</option><option value="22">كبير جداً</option><option value="25">ضخم</option></select></label>
               <label className="text-xs font-bold">لون النص<input type="color" value={noteTextColor} onChange={e => setNoteTextColor(e.target.value)} className="mt-1 w-full h-9" /></label>
@@ -1735,7 +1663,7 @@ export function App() {
             </div>
             <label className="block text-xs font-bold">رابط الصورة (اختياري)</label><input value={editNoteImage} onChange={e => setEditNoteImage(e.target.value)} className="w-full border rounded-xl p-2 text-sm" />
             <label className="flex items-center gap-2 text-xs font-bold"><input type="checkbox" checked={editNoteVip} onChange={e => setEditNoteVip(e.target.checked)} /> شرح خاص بـ VIP</label>
-            <div className="flex gap-2 pt-2"><button onClick={async () => { const subjectId = selectedSubjectId; if (!subjectId) { alert('لم يتم تحديد المادة. أغلق النافذة وافتح التعديل من داخل المادة مرة أخرى.'); return; } try { const subjectRef = doc(db, 'subjects', subjectId); const freshSnap = await getDoc(subjectRef); if (!freshSnap.exists()) { alert('لم نعثر على المادة في قاعدة البيانات.'); return; } const freshSubject = freshSnap.data() as any; const freshNotes = Array.isArray(freshSubject.notes) ? freshSubject.notes : []; if (!freshNotes.some((n: any) => n.id === editingNoteId)) { alert('لم نعثر على الشرح المطلوب. حدّث الصفحة وافتح التعديل من جديد.'); return; } const updatedNotes = freshNotes.map((n: any) => n.id === editingNoteId ? { ...n, title: editNoteTitle, content: sanitizeLessonHtml(editNoteEditorRef.current?.innerHTML || editNoteContent), image: editNoteImage, isVip: editNoteVip, fontSize: `${noteFontSize}px`, textColor: noteTextColor, titleColor: noteTitleColor, contentBold } : n); await updateDoc(subjectRef, { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === subjectId ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs); setEditingNoteId(null); setSuccessMessage('تم حفظ تعديل الشرح في قاعدة البيانات بنجاح'); setTimeout(() => setSuccessMessage(null), 3000); } catch (e: any) { console.error('Note update failed:', e); alert('فشل حفظ التعديل: ' + (e?.code || e?.message || 'خطأ غير معروف')); } }} className="flex-1 bg-emerald-600 text-white rounded-xl py-2 font-bold text-sm">حفظ التعديل</button><button onClick={() => setEditingNoteId(null)} className="flex-1 bg-slate-200 rounded-xl py-2 font-bold text-sm">إلغاء</button></div>
+            <div className="flex gap-2 pt-2"><button onClick={async () => { const subjectId = selectedSubjectId; if (!subjectId) { alert('لم يتم تحديد المادة. أغلق النافذة وافتح التعديل من داخل المادة مرة أخرى.'); return; } try { const subjectRef = doc(db, 'subjects', subjectId); const freshSnap = await getDoc(subjectRef); if (!freshSnap.exists()) { alert('لم نعثر على المادة في قاعدة البيانات.'); return; } const freshSubject = freshSnap.data() as any; const freshNotes = Array.isArray(freshSubject.notes) ? freshSubject.notes : []; if (!freshNotes.some((n: any) => n.id === editingNoteId)) { alert('لم نعثر على الشرح المطلوب. حدّث الصفحة وافتح التعديل من جديد.'); return; } const updatedNotes = freshNotes.map((n: any) => n.id === editingNoteId ? { ...n, title: editNoteTitle, content: editNoteContent, image: editNoteImage, isVip: editNoteVip, fontSize: `${noteFontSize}px`, textColor: noteTextColor, titleColor: noteTitleColor, contentBold } : n); await updateDoc(subjectRef, { notes: updatedNotes }); const updatedSubs = subjects.map(s => s.id === subjectId ? { ...s, notes: updatedNotes } : s); setSubjects(updatedSubs); localStorage.setItem('nabough_cached_subjects', JSON.stringify(updatedSubs)); void saveSubjectsOffline(updatedSubs); setEditingNoteId(null); setSuccessMessage('تم حفظ تعديل الشرح في قاعدة البيانات بنجاح'); setTimeout(() => setSuccessMessage(null), 3000); } catch (e: any) { console.error('Note update failed:', e); alert('فشل حفظ التعديل: ' + (e?.code || e?.message || 'خطأ غير معروف')); } }} className="flex-1 bg-emerald-600 text-white rounded-xl py-2 font-bold text-sm">حفظ التعديل</button><button onClick={() => setEditingNoteId(null)} className="flex-1 bg-slate-200 rounded-xl py-2 font-bold text-sm">إلغاء</button></div>
           </div>
         </div>
       )}
@@ -2851,7 +2779,7 @@ export function App() {
                         </div>}
                       </div>
 
-                      <div className="leading-relaxed whitespace-pre-wrap" dir="rtl" style={{ color: note.textColor || '#334155', fontSize: note.fontSize || '17px', fontWeight: note.contentBold ? 700 : 400, lineHeight: 1.9 }} dangerouslySetInnerHTML={{ __html: /<\/?[a-z][\s\S]*>/i.test(String(note.content || '')) ? sanitizeLessonHtml(String(note.content || '')) : sanitizeLessonHtml(String(note.content || '').split(/\r?\n/).map((line) => `<p>${line}</p>`).join('')) }} />
+                      <p className="leading-relaxed whitespace-pre-wrap" style={{ color: note.textColor || '#334155', fontSize: note.fontSize || '17px', fontWeight: note.contentBold ? 700 : 400, lineHeight: 1.9 }}>{note.content}</p>
                       <div className="flex items-center gap-2 flex-wrap">
                         <button type="button" onClick={() => speakingNoteId === String(note.id) ? stopLessonSpeech() : speakLessonNote(note)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-bold hover:bg-indigo-100">
                           <Play className="w-4 h-4" /> {speakingNoteId === String(note.id) ? 'إيقاف القراءة' : 'استمع إلى الشرح'}
@@ -2876,8 +2804,7 @@ export function App() {
                             const ansKey = `${note.id}_${iqIdx}`;
                             const userAns = studentInteractiveAnswers[ansKey] || '';
                             const isGraded = interactiveGradedStatus[ansKey];
-                            const isWrittenType = ['definition', 'enumeration', 'reason', 'compare', 'explain', 'procedure', 'short_answer'].includes(iq.type);
-                            const isCorrect = !isWrittenType && evaluateAnswerSmart(userAns, iq.correct, iq.type).isCorrect;
+                            const isCorrect = evaluateAnswerSmart(userAns, iq.correct, iq.type).isCorrect;
 
                             return (
                               <div key={iqIdx} className="bg-white p-3 rounded-lg border space-y-2 relative">
@@ -2914,39 +2841,23 @@ export function App() {
                                     ))}
                                   </div>
                                 ) : (
-                                  isWrittenType ? (
-                                    <textarea
-                                      rows={3}
-                                      value={userAns}
-                                      onChange={(e) => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: e.target.value})}
-                                      placeholder="اكتب إجابتك هنا، ثم اعرض الإجابة النموذجية للمراجعة..."
-                                      className="w-full px-3 py-2 bg-slate-50 border rounded text-xs font-bold"
-                                    />
-                                  ) : (
-                                    <input
-                                      type="text"
-                                      value={userAns}
-                                      onChange={(e) => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: e.target.value})}
-                                      placeholder="اكتب إجابتك هنا..."
-                                      className="w-full px-3 py-1.5 bg-slate-50 border rounded text-xs font-bold"
-                                    />
-                                  )
+                                  <input 
+                                    type="text" 
+                                    value={userAns} 
+                                    onChange={(e) => setStudentInteractiveAnswers({...studentInteractiveAnswers, [ansKey]: e.target.value})} 
+                                    placeholder="اكتب إجابتك هنا..." 
+                                    className="w-full px-3 py-1.5 bg-slate-50 border rounded text-xs font-bold" 
+                                  />
                                 )}
 
                                 <div className="flex items-center justify-between pt-1">
                                   <button onClick={() => setInteractiveGradedStatus({...interactiveGradedStatus, [ansKey]: true})} className="px-3 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold shadow cursor-pointer">
-                                    {isWrittenType ? 'عرض الإجابة النموذجية' : 'تحقق ✓'}
+                                    تحقق ✓
                                   </button>
                                   {isGraded && (
-                                    isWrittenType ? (
-                                      <div className="w-full text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg p-2">
-                                        إجابتك للمراجعة الذاتية — الإجابة النموذجية: <span style={{ color: iq.answerColor || '#047857' }}>{iq.correct}</span>
-                                      </div>
-                                    ) : (
-                                      <span className={`text-[10px] font-black ${isCorrect ? 'text-emerald-600' : 'text-rose-600'}`}>
-                                        {isCorrect ? '✅ صحيحة بطل!' : <span>❌ خطأ (العبارة الصحيحة: <b style={{ color: iq.answerColor || '#047857', fontSize: iq.questionFontSize || '16px' }}>{iq.correct}</b>)</span>}
-                                      </span>
-                                    )
+                                    <span className={`text-[10px] font-black ${isCorrect ? 'text-emerald-600' : 'text-rose-600'}`}>
+                                      {isCorrect ? '✅ صحيحة بطل!' : <span>❌ خطأ (العبارة الصحيحة: <b style={{ color: iq.answerColor || '#047857', fontSize: iq.questionFontSize || '16px' }}>{iq.correct}</b>)</span>}
+                                    </span>
                                   )}
                                 </div>
                               </div>
@@ -2962,8 +2873,7 @@ export function App() {
                   <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
                     <h5 className="text-xs font-black text-slate-800">➕ إضافة شرح أو تعليل جديد (مع صورة توضيحية وسؤال تفاعلي):</h5>
                     <input type="text" value={newNoteTitle} onChange={(e) => setNewNoteTitle(e.target.value)} placeholder="العنوان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
-                    {renderNoteToolbar(newNoteEditorRef)}
-                    <div ref={newNoteEditorRef} contentEditable suppressContentEditableWarning onInput={(e) => setNewNoteContent(e.currentTarget.innerHTML)} data-placeholder="اكتب الشرح التفصيلي هنا..." className="w-full px-3 py-3 border rounded-xl text-sm font-bold min-h-36 max-h-80 overflow-y-auto bg-white text-right leading-8 empty:before:content-[attr(data-placeholder)] empty:before:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-200" dir="rtl" />
+                    <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="النص التفصيلي..." className="w-full px-3 py-2 border rounded-xl text-sm font-bold min-h-28" />
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-xl border bg-slate-50 p-3">
                       <label className="text-xs font-bold">حجم نص الشرح<select value={noteFontSize} onChange={e => setNoteFontSize(e.target.value)} className="mt-1 w-full border rounded-lg p-2 bg-white"><option value="15">صغير</option><option value="17">متوسط</option><option value="19">كبير</option><option value="22">كبير جداً</option><option value="25">ضخم</option></select></label>
                       <label className="text-xs font-bold">لون نص الشرح<input type="color" value={noteTextColor} onChange={e => setNoteTextColor(e.target.value)} className="mt-1 w-full h-10 border rounded-lg bg-white" /></label>
@@ -2982,13 +2892,6 @@ export function App() {
                           <option value="mcq">اختيارات</option>
                           <option value="fill">فراغ</option>
                           <option value="true_false">صح وخطأ</option>
-                          <option value="definition">عرّف</option>
-                          <option value="enumeration">عدد</option>
-                          <option value="reason">علّل</option>
-                          <option value="compare">قارن</option>
-                          <option value="explain">اشرح</option>
-                          <option value="procedure">خطوات / تجربة</option>
-                          <option value="short_answer">إجابة قصيرة</option>
                         </select>
                         <input type="text" value={interactiveQText} onChange={(e) => setInteractiveQText(e.target.value)} placeholder="نص السؤال التفاعلي..." className="flex-1 px-2 py-1 bg-white border rounded text-xs font-bold" />
                       </div>
@@ -3004,8 +2907,8 @@ export function App() {
                         </div>
                       )}
 
-                      {interactiveType !== 'mcq' && interactiveType !== 'true_false' && (
-                        <textarea value={interactiveFill} onChange={(e) => setInteractiveFill(e.target.value)} placeholder={interactiveType === 'fill' ? 'الإجابة بالفراغ...' : 'اكتب الإجابة النموذجية التي ستظهر للطالب للمراجعة...'} rows={interactiveType === 'fill' ? 1 : 3} className="w-full px-2 py-2 bg-emerald-50 border rounded text-xs font-bold text-emerald-900" />
+                      {interactiveType === 'fill' && (
+                        <input type="text" value={interactiveFill} onChange={(e) => setInteractiveFill(e.target.value)} placeholder="الإجابة بالفراغ..." className="w-full px-2 py-1 bg-emerald-50 border rounded text-xs font-bold text-emerald-900" />
                       )}
 
                       {interactiveType === 'true_false' && (
@@ -3022,7 +2925,7 @@ export function App() {
                           type: interactiveType,
                           q: interactiveQText,
                           options: interactiveType === 'mcq' ? interactiveOptions : (interactiveType === 'true_false' ? ['صح', 'خطأ'] : []),
-                          correct: interactiveType === 'mcq' ? interactiveCorrect : (interactiveType === 'true_false' ? interactiveTf : interactiveFill),
+                          correct: interactiveType === 'mcq' ? interactiveCorrect : (interactiveType === 'fill' ? interactiveFill : interactiveTf),
                           questionFontSize, questionColor: questionTextColor, answerColor: answerTextColor
                         };
                         setInteractiveList([...interactiveList, qObj]);
