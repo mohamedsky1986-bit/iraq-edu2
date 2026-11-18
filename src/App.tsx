@@ -288,7 +288,7 @@ export function App() {
       transferPhone: '07701234567 (زين كاش / آسياسيل)',
       whatsappPhone: '',
       telegram: MY_TELEGRAM_LINK,
-      guestAccess: { enabled: true, lessons: true, videos: true, booklets: true, examsPreview: true, answersPreview: true, askEnabled: true, askMode: 'limited', askDailyLimit: 2, signupEnabled: true, loginEnabled: true, welcomeMessage: 'تصفح المناهج والشروحات مجاناً، وأنشئ حساباً للاستفادة من المميزات التفاعلية.' }
+      guestAccess: { enabled: true, lessons: true, videos: true, booklets: true, examsPreview: true, answersPreview: true, askEnabled: true, askMode: 'limited', askDailyLimit: 2, signupEnabled: true, loginEnabled: true, forumGuestView: true, welcomeMessage: 'تصفح المناهج والشروحات مجاناً، وأنشئ حساباً للاستفادة من المميزات التفاعلية.' }
     });
   });
 
@@ -467,6 +467,7 @@ export function App() {
   const [isStudentSignup, setIsStudentSignup] = useState(false);
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentStage, setNewStudentStage] = useState('الثالث المتوسط');
+  const [newStudentGender, setNewStudentGender] = useState<'ذكر' | 'أنثى'>('ذكر');
 
   const [isChangingStage, setIsChangingStage] = useState<boolean>(false);
 
@@ -486,6 +487,7 @@ export function App() {
   const forumEditorRef = useRef<HTMLDivElement | null>(null);
   const [forumCommentDrafts, setForumCommentDrafts] = useState<Record<string,string>>({});
   const [forumComments, setForumComments] = useState<Record<string,any[]>>({});
+  const [expandedNoteIds, setExpandedNoteIds] = useState<Record<string, boolean>>({});
   const [soundContext, setSoundContext] = useState<any>(null);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupStage, setNewGroupStage] = useState('الثالث المتوسط');
@@ -561,7 +563,7 @@ export function App() {
   }, [activeTab, selectedGroupId]);
 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
-  const [selectedChapter, setSelectedChapter] = useState('');
+  const [selectedChapter, setSelectedChapter] = useState(''); // فارغ = لم يختر الطالب فصلاً بعد
   const [activeSubjectSection, setActiveSubjectSection] = useState<'lessons'|'videos'|'booklets'|'exams'>('lessons');
   const [adminProfileStudent, setAdminProfileStudent] = useState<any | null>(null);
   const [adminProfileAttendance, setAdminProfileAttendance] = useState<any[]>([]);
@@ -601,7 +603,7 @@ export function App() {
   // منتديات مستقلة لكل مرحلة، مع أقسام حسب المادة.
   useEffect(() => {
     if (activeTab !== 'studentGroups') return;
-    const stage = isAdmin ? (forumStage || newGroupStage) : (loggedStudent?.stage || '');
+    const stage = isAdmin ? (forumStage || newGroupStage) : (loggedStudent?.stage || forumStage || newGroupStage || '');
     if (!stage) { setForumPosts([]); return; }
     const unsub = onSnapshot(query(collection(db,'forum_posts'), where('stage','==',stage)), snap => {
       const rows = snap.docs.map(d=>({id:d.id,...d.data()}));
@@ -614,7 +616,7 @@ export function App() {
     const stage = isAdmin ? (forumStage || newGroupStage) : loggedStudent?.stage;
     const html = forumEditorRef.current?.innerHTML || '';
     const plain = forumEditorRef.current?.innerText?.trim() || '';
-    if (!stage || !forumSubject || (!plain && !/<img\b/i.test(html)) || (!loggedStudent && !isAdmin)) return alert('اختر المادة واكتب المنشور.');
+    if (!stage || !forumSubject || (!plain && !/<img\b/i.test(html)) || (!loggedStudent && !isAdmin)) return alert('النشر متاح للأعضاء المسجلين فقط. سجّل الدخول أولاً.');
     try {
       await addDoc(collection(db,'forum_posts'), { stage, subjectName:forumSubject, text:plain, html:sanitizeForumHtml(html), authorId:isAdmin?'admin':loggedStudent.id, authorName:isAdmin?'إدارة النابغة':loggedStudent.name, authorVerified:!!currentLoggedStudentData?.isVerified, likes:[], createdAt:serverTimestamp(), updatedAt:serverTimestamp() });
       setForumText(''); if (forumEditorRef.current) forumEditorRef.current.innerHTML = ''; void playSystemSound('message');
@@ -630,8 +632,9 @@ export function App() {
     try { await addDoc(collection(db,'forum_comments'),{postId:post.id,stage:post.stage,text,authorId:loggedStudent.id,authorName:loggedStudent.name,authorVerified:!!currentLoggedStudentData?.isVerified,createdAt:serverTimestamp()}); setForumCommentDrafts(old=>({...old,[post.id]:''})); }
     catch(e) { alert('تعذر إضافة التعليق.'); }
   };
-  const removeForumPost = async (post:any) => { if(!isAdmin || !confirm('حذف هذا المنشور نهائياً؟')) return; try { await deleteDoc(doc(db,'forum_posts',post.id)); } catch(e) { alert('تعذر حذف المنشور.'); } };
-  const updateForumPost = async (post:any) => { if(!isAdmin) return; const text=prompt('تعديل نص المنشور',post.text||''); if(text===null || !text.trim()) return; try { await updateDoc(doc(db,'forum_posts',post.id),{text:text.trim(),updatedAt:serverTimestamp(),editedBy:'admin'}); } catch(e) { alert('تعذر تعديل المنشور.'); } };
+  const canManageForumPost = (post:any) => isAdmin || (!!loggedStudent?.id && post.authorId === loggedStudent.id);
+  const removeForumPost = async (post:any) => { if(!canManageForumPost(post) || !confirm('حذف منشورك نهائياً؟')) return; try { await deleteDoc(doc(db,'forum_posts',post.id)); } catch(e) { alert('تعذر حذف المنشور.'); } };
+  const updateForumPost = async (post:any) => { if(!canManageForumPost(post)) return; const text=prompt('تعديل نص المنشور',post.text||''); if(text===null || !text.trim()) return; const safeText=text.trim(); const escaped=safeText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br/>'); try { await updateDoc(doc(db,'forum_posts',post.id),{text:safeText,html:escaped,updatedAt:serverTimestamp(),editedBy:isAdmin?'admin':loggedStudent.id}); } catch(e) { alert('تعذر تعديل المنشور.'); } };
   const moderateForumComment = async (comment:any) => { if(!isAdmin || !confirm('حذف التعليق؟')) return; try { await deleteDoc(doc(db,'forum_comments',comment.id)); } catch(e) { alert('تعذر حذف التعليق.'); } };
   useEffect(() => {
     if(activeTab!=='studentGroups' || !forumPosts.length) return;
@@ -1633,7 +1636,7 @@ export function App() {
     try {
       const response = await fetch('/api/ask', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: askQuestion.trim() || 'اشرح وأجب عن السؤال الموجود في الصورة.', subject: chosenSubject.name, stage: stageName, curriculumContext: noteLines, image: askImage ? { data: askImage.data, mimeType: askImage.mimeType } : null })
+        body: JSON.stringify({ question: `${(currentLoggedStudentData?.gender || loggedStudent?.gender) === 'أنثى' ? 'ملاحظة أسلوبية: خاطب الطالبة بصيغة المؤنث وبأسلوب تربوي لطيف ومحترم، واستخدم (أنتِ/اسألي/حاولي) عند الحاجة، دون افتراضات أو تمييز. لا تغيّر محتوى الحل العلمي.' : 'ملاحظة أسلوبية: خاطب الطالب بصيغة المذكر وبأسلوب تربوي لطيف ومحترم. لا تغيّر محتوى الحل العلمي.'}\n\nسؤال الطالب: ${askQuestion.trim() || 'اشرح وأجب عن السؤال الموجود في الصورة.'}`, studentGender: currentLoggedStudentData?.gender || loggedStudent?.gender || 'ذكر', subject: chosenSubject.name, stage: stageName, curriculumContext: noteLines, image: askImage ? { data: askImage.data, mimeType: askImage.mimeType } : null })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'تعذر الحصول على الإجابة.');
@@ -1672,7 +1675,7 @@ export function App() {
     }
     if (showExamHistory) { setShowExamHistory(false); return; }
     if (selectedSubjectId) { setSelectedSubjectId(null); setSearchQuery(''); return; }
-    if (activeTab !== 'curriculum' && (isAdmin || loggedStudent)) { setActiveTab('curriculum'); return; }
+    if (activeTab !== 'curriculum' && (isAdmin || loggedStudent || activeTab === 'studentGroups')) { setActiveTab('curriculum'); return; }
     if (selectedStage !== 'all') { setSelectedStage('all'); return; }
     // في الصفحة الرئيسية نبقى داخل المنصة ولا نسمح بزر الرجوع بإغلاقها.
   };
@@ -2369,6 +2372,7 @@ export function App() {
                   username: studentLoginUser,
                   pass: studentLoginPass,
                   stage: newStudentStage,
+                  gender: newStudentGender,
                   isVip: false,
                   status: 'متصل الآن',
                   lastSeen: nowFormatted,
@@ -2404,6 +2408,10 @@ export function App() {
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">الاسم الثلاثي الصريح</label>
                   <input type="text" required value={newStudentName} onChange={(e) => setNewStudentName(e.target.value)} placeholder="مثال: محمد قاسم كريم" className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">الجنس</label>
+                  <select value={newStudentGender} onChange={e => setNewStudentGender(e.target.value as 'ذكر' | 'أنثى')} className="w-full px-4 py-2.5 rounded-xl border text-sm font-bold bg-white"><option value="ذكر">ذكر</option><option value="أنثى">أنثى</option></select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">اسم المستخدم (4 أحرف إنجليزية على الأقل)</label>
@@ -2791,8 +2799,15 @@ export function App() {
       )}
 
       {/* المحتوى الرئيسي */}
+      {!isAdmin && !loggedStudent && vipSettings.guestAccess?.enabled !== false && vipSettings.guestAccess?.forumGuestView !== false && (
+        <div className="bg-white border-b px-3 py-2">
+          <button onClick={() => setActiveTab('studentGroups')} className={`rounded-xl px-4 py-2 text-xs font-black ${activeTab === 'studentGroups' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700'}`}>👁️ مشاهدة منتدى المرحلة</button>
+          <span className="mr-2 text-[11px] text-slate-500">التصفح متاح للزوار، والنشر للأعضاء المسجلين فقط.</span>
+        </div>
+      )}
+
       <main className="flex-1 w-full max-w-full mx-auto px-1 sm:px-3 py-3 space-y-5 overflow-x-hidden">
-        {(selectedSubjectId || showExamHistory || activeQuiz || activePdfUrl || activeVideoUrl || (activeTab !== 'curriculum' && (isAdmin || loggedStudent))) && (
+        {(selectedSubjectId || showExamHistory || activeQuiz || activePdfUrl || activeVideoUrl || (activeTab !== 'curriculum' && (isAdmin || loggedStudent || activeTab === 'studentGroups'))) && (
           <div className="flex justify-start px-1">
             <button type="button" onClick={handleInternalBack} className="inline-flex items-center gap-2 rounded-xl bg-white border border-indigo-200 px-4 py-2 text-sm font-black text-indigo-700 shadow-sm hover:bg-indigo-50 active:scale-95" aria-label="رجوع داخل المنصة">
               <ArrowRight className="w-4 h-4" /> رجوع
@@ -2923,6 +2938,10 @@ export function App() {
           <section className="space-y-4 text-right">
             <div className="rounded-3xl bg-gradient-to-l from-indigo-950 to-blue-700 text-white p-5 shadow-lg">
               <div className="flex items-center gap-3"><div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center text-3xl">👨‍🎓</div><div><h2 className="text-xl font-black">{loggedStudent.name} {currentLoggedStudentData?.isVerified && <VerifiedBadge size={20} />}</h2><p className="text-sm text-indigo-100">{loggedStudent.stage} · ملفي الدراسي</p></div></div>
+              <div className="mt-4 rounded-xl bg-white/10 p-3">
+                <label className="block text-xs font-bold mb-2">الجنس (يمكنك تعديله)</label>
+                <select value={currentLoggedStudentData?.gender || loggedStudent.gender || 'ذكر'} onChange={async e => { const gender = e.target.value as 'ذكر' | 'أنثى'; try { await updateDoc(doc(db, 'students', loggedStudent.id), { gender }); const updated = studentsList.map((st:any) => st.id === loggedStudent.id ? { ...st, gender } : st); setStudentsList(updated); localStorage.setItem('nabough_cached_students', JSON.stringify(updated)); setLoggedStudent({ ...loggedStudent, gender }); } catch(err) { alert('تعذر حفظ الجنس. حاول مرة أخرى.'); } }} className="w-full rounded-xl bg-white text-slate-900 p-2.5 text-sm font-bold"><option value="ذكر">ذكر</option><option value="أنثى">أنثى</option></select>
+              </div>
               <div className="grid grid-cols-3 gap-2 mt-5"><div className="rounded-xl bg-white/10 p-3 text-center"><b className="block text-2xl">{studentAttendance.filter((a:any)=>a.status==='حاضر').length}</b><span className="text-[11px]">أيام الحضور</span></div><div className="rounded-xl bg-white/10 p-3 text-center"><b className="block text-2xl">{studentAttendance.filter((a:any)=>a.status==='غائب').length}</b><span className="text-[11px]">أيام الغياب</span></div><div className="rounded-xl bg-white/10 p-3 text-center"><b className="block text-2xl">{studentAttendance.length ? Math.round(studentAttendance.filter((a:any)=>a.status==='حاضر').length/studentAttendance.length*100) : 0}%</b><span className="text-[11px]">نسبة الحضور</span></div></div>
             </div>
             <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-3"><h3 className="font-black text-lg">📅 جدول الدروس القادمة</h3>{lessonSchedule.length ? lessonSchedule.map((item:any)=><div key={item.id} className="border rounded-xl p-3 flex flex-wrap justify-between gap-2"><div><b className="text-sm">{item.title || item.subjectName}</b><p className="text-xs text-slate-500">{item.subjectName} · {item.date} · {item.time}</p></div><span className="text-xs bg-indigo-50 text-indigo-700 rounded-lg px-2 py-1">{item.day || 'موعد الدرس'}</span></div>) : <p className="text-sm text-slate-500">لا توجد مواعيد دروس مضافة لمرحلتك حالياً.</p>}</div>
@@ -2932,14 +2951,15 @@ export function App() {
         )}
 
         {/* منتدى المرحلة الدراسي */}
-        {activeTab === 'studentGroups' && (loggedStudent || isAdmin) && (
+        {activeTab === 'studentGroups' && (loggedStudent || isAdmin || (!loggedStudent && vipSettings.guestAccess?.enabled !== false && vipSettings.guestAccess?.forumGuestView !== false)) && (
           <section className="space-y-4 text-right">
             <div className="rounded-2xl bg-gradient-to-l from-indigo-700 to-sky-600 text-white p-4"><h2 className="text-xl font-black">📚 منتدى المرحلة</h2><p className="text-xs mt-1 text-white/80">أسئلة ومناقشات علمية حسب المادة، بإشراف إدارة النابغة.</p>
-              {isAdmin ? <select value={forumStage||newGroupStage} onChange={e=>setForumStage(e.target.value)} className="mt-3 w-full rounded-xl p-3 text-slate-900">{allStagesList.map(st=><option key={st.id} value={st.name}>{st.name}</option>)}</select> : <div className="mt-2 text-sm font-bold">المرحلة: {loggedStudent?.stage}</div>}
+              {isAdmin ? <select value={forumStage||newGroupStage} onChange={e=>setForumStage(e.target.value)} className="mt-3 w-full rounded-xl p-3 text-slate-900">{allStagesList.map(st=><option key={st.id} value={st.name}>{st.name}</option>)}</select> : loggedStudent ? <div className="mt-2 text-sm font-bold">المرحلة: {loggedStudent.stage}</div> : <><label className="block mt-3 text-xs font-bold text-white">اختر المرحلة لمشاهدة المنتدى</label><select value={forumStage||newGroupStage} onChange={e=>setForumStage(e.target.value)} className="mt-1 w-full rounded-xl p-3 text-slate-900">{allStagesList.map(st=><option key={st.id} value={st.name}>{st.name}</option>)}</select></>}
             </div>
-            <div className="bg-white rounded-2xl border p-4 space-y-3"><h3 className="font-black">✍️ اكتب سؤالاً أو ملخصاً أو موضوعاً</h3><select value={forumSubject} onChange={e=>setForumSubject(e.target.value)} className="w-full border rounded-xl p-3 text-sm"><option value="">اختر المادة</option>{subjects.filter((sub:any)=>!sub.stage || sub.stage===(isAdmin?(forumStage||newGroupStage):loggedStudent?.stage)).map((sub:any)=><option key={sub.id} value={sub.name}>{sub.name}</option>)}</select><div className="flex flex-wrap items-center gap-1 rounded-t-xl border bg-slate-50 p-2"><button type="button" title="غامق" onClick={()=>{forumEditorRef.current?.focus();document.execCommand('bold');}} className="rounded-lg border bg-white px-3 py-2 font-black">B</button><button type="button" title="مائل" onClick={()=>{forumEditorRef.current?.focus();document.execCommand('italic');}} className="rounded-lg border bg-white px-3 py-2 italic">I</button><button type="button" title="تسطير" onClick={()=>{forumEditorRef.current?.focus();document.execCommand('underline');}} className="rounded-lg border bg-white px-3 py-2 underline">U</button><button type="button" title="تمييز النص" onClick={()=>{forumEditorRef.current?.focus();document.execCommand('backColor',false,'#fff3a3');}} className="rounded-lg border bg-yellow-100 px-3 py-2 text-xs font-bold">تمييز</button><label title="لون النص" className="flex items-center gap-1 rounded-lg border bg-white px-2 py-1 text-xs">لون <input type="color" defaultValue="#2563eb" onChange={e=>{forumEditorRef.current?.focus();document.execCommand('foreColor',false,e.target.value);}} className="h-7 w-7 cursor-pointer border-0 bg-transparent"/></label><button type="button" onClick={()=>{const url=prompt('ضع رابط الموقع (https://)');if(url && /^https:\/\//i.test(url)){forumEditorRef.current?.focus();document.execCommand('createLink',false,url);}else if(url) alert('استخدم رابطاً يبدأ بـ https://');}} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold">إضافة رابط 🔗</button><button type="button" onClick={()=>{const url=prompt('ضع رابط الصورة المباشر الذي يبدأ بـ https://');if(url && /^https:\/\//i.test(url)){forumEditorRef.current?.focus();document.execCommand('insertHTML',false,`<img src="${url.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" alt="صورة مرفقة" style="max-width:100%;border-radius:12px;margin:8px 0" />`);}else if(url) alert('رابط الصورة لازم يبدأ بـ https://');}} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold">إضافة صورة 🖼️</button><button type="button" onClick={()=>{forumEditorRef.current?.focus();document.execCommand('removeFormat');}} className="rounded-lg border bg-white px-3 py-2 text-xs">مسح التنسيق</button></div><div ref={forumEditorRef} contentEditable suppressContentEditableWarning onInput={e=>setForumText(e.currentTarget.innerText)} dir="auto" className="min-h-[150px] max-h-[420px] overflow-y-auto rounded-b-xl border border-t-0 p-3 text-sm leading-8 outline-none focus:ring-2 focus:ring-indigo-200" data-placeholder="اكتب السؤال أو الملخص... ظلل النص ثم اختر اللون أو التمييز من الأعلى"/><p className="text-[11px] text-slate-500">حدد النص أولاً لتغيير لونه أو تمييزه. لإضافة صورة استخدم رابط صورة مباشر يبدأ بـ https://</p><button onClick={()=>void createForumPost()} className="w-full rounded-xl bg-indigo-600 text-white py-3 font-black">نشر في المنتدى</button></div>
+            {(loggedStudent || isAdmin) && <div className="bg-white rounded-2xl border p-4 space-y-3"><h3 className="font-black">✍️ اكتب سؤالاً أو ملخصاً أو موضوعاً</h3><select value={forumSubject} onChange={e=>setForumSubject(e.target.value)} className="w-full border rounded-xl p-3 text-sm"><option value="">اختر المادة</option>{subjects.filter((sub:any)=>!sub.stage || sub.stage===(isAdmin?(forumStage||newGroupStage):loggedStudent?.stage)).map((sub:any)=><option key={sub.id} value={sub.name}>{sub.name}</option>)}</select><div className="flex flex-wrap items-center gap-1 rounded-t-xl border bg-slate-50 p-2"><button type="button" title="غامق" onClick={()=>{forumEditorRef.current?.focus();document.execCommand('bold');}} className="rounded-lg border bg-white px-3 py-2 font-black">B</button><button type="button" title="مائل" onClick={()=>{forumEditorRef.current?.focus();document.execCommand('italic');}} className="rounded-lg border bg-white px-3 py-2 italic">I</button><button type="button" title="تسطير" onClick={()=>{forumEditorRef.current?.focus();document.execCommand('underline');}} className="rounded-lg border bg-white px-3 py-2 underline">U</button><button type="button" title="تمييز النص" onClick={()=>{forumEditorRef.current?.focus();document.execCommand('backColor',false,'#fff3a3');}} className="rounded-lg border bg-yellow-100 px-3 py-2 text-xs font-bold">تمييز</button><label title="لون النص" className="flex items-center gap-1 rounded-lg border bg-white px-2 py-1 text-xs">لون <input type="color" defaultValue="#2563eb" onChange={e=>{forumEditorRef.current?.focus();document.execCommand('foreColor',false,e.target.value);}} className="h-7 w-7 cursor-pointer border-0 bg-transparent"/></label><button type="button" onClick={()=>{const url=prompt('ضع رابط الموقع (https://)');if(url && /^https:\/\//i.test(url)){forumEditorRef.current?.focus();document.execCommand('createLink',false,url);}else if(url) alert('استخدم رابطاً يبدأ بـ https://');}} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold">إضافة رابط 🔗</button><button type="button" onClick={()=>{const url=prompt('ضع رابط الصورة المباشر الذي يبدأ بـ https://');if(url && /^https:\/\//i.test(url)){forumEditorRef.current?.focus();document.execCommand('insertHTML',false,`<img src="${url.replace(/&/g,'&amp;').replace(/"/g,'&quot;')}" alt="صورة مرفقة" style="max-width:100%;border-radius:12px;margin:8px 0" />`);}else if(url) alert('رابط الصورة لازم يبدأ بـ https://');}} className="rounded-lg border bg-white px-3 py-2 text-xs font-bold">إضافة صورة 🖼️</button><button type="button" onClick={()=>{forumEditorRef.current?.focus();document.execCommand('removeFormat');}} className="rounded-lg border bg-white px-3 py-2 text-xs">مسح التنسيق</button></div><div ref={forumEditorRef} contentEditable suppressContentEditableWarning onInput={e=>setForumText(e.currentTarget.innerText)} dir="auto" className="min-h-[150px] max-h-[420px] overflow-y-auto rounded-b-xl border border-t-0 p-3 text-sm leading-8 outline-none focus:ring-2 focus:ring-indigo-200" data-placeholder="اكتب السؤال أو الملخص... ظلل النص ثم اختر اللون أو التمييز من الأعلى"/><p className="text-[11px] text-slate-500">حدد النص أولاً لتغيير لونه أو تمييزه. لإضافة صورة استخدم رابط صورة مباشر يبدأ بـ https://</p><button onClick={()=>void createForumPost()} className="w-full rounded-xl bg-indigo-600 text-white py-3 font-black">نشر في المنتدى</button></div>}
+            {!loggedStudent && !isAdmin && <div className="rounded-xl border border-sky-200 bg-sky-50 p-3 text-center text-xs font-bold text-sky-800">أنت تتصفح المنتدى كزائر. يمكنك مشاهدة المنشورات والتعليقات، وللنشر أو التفاعل سجّل الدخول أو أنشئ حساباً.</div>}
             <div className="flex flex-wrap gap-2"><button onClick={()=>setForumSubject('')} className={`rounded-full px-3 py-2 text-xs font-bold ${!forumSubject?'bg-indigo-600 text-white':'bg-white border'}`}>كل المواد</button>{Array.from(new Set(subjects.map((x:any)=>x.name))).map((name:any)=><button key={name} onClick={()=>setForumSubject(name)} className={`rounded-full px-3 py-2 text-xs font-bold ${forumSubject===name?'bg-indigo-600 text-white':'bg-white border'}`}>{name}</button>)}</div>
-            <div className="space-y-3">{forumPosts.filter(post=>!forumSubject||post.subjectName===forumSubject).map(post=><article key={post.id} className="bg-white border rounded-2xl p-4 space-y-3 shadow-sm"><div className="flex justify-between gap-2"><div><div className="font-black text-sm flex items-center gap-1">{post.authorName}{post.authorVerified&&<VerifiedBadge size={15}/>}</div><div className="text-[11px] text-slate-500">{post.stage} · {post.subjectName} · {post.createdAt?.toDate?post.createdAt.toDate().toLocaleString('ar-IQ'):''}</div></div>{isAdmin&&<div className="flex gap-2 text-xs"><button onClick={()=>updateForumPost(post)} className="text-indigo-700 font-bold">تعديل</button><button onClick={()=>removeForumPost(post)} className="text-rose-600 font-bold">حذف</button></div>}</div><div className="text-sm whitespace-pre-wrap leading-7 break-words [&_img]:max-w-full [&_img]:rounded-xl [&_a]:text-blue-700 [&_a]:underline" dangerouslySetInnerHTML={{__html:post.html ? sanitizeForumHtml(post.html) : (post.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br/>')}} /><div className="flex items-center gap-3 border-y py-2"><button onClick={()=>void toggleForumLike(post)} className="text-xs font-bold text-rose-600">♥ إعجاب ({post.likes?.length||0})</button><span className="text-xs text-slate-500">{(forumComments[post.id]||[]).length} تعليق</span></div><div className="space-y-2">{(forumComments[post.id]||[]).map((comment:any)=><div key={comment.id} className="bg-slate-50 rounded-xl p-2 text-xs"><div className="flex justify-between"><b className="flex items-center gap-1">{comment.authorName}{comment.authorVerified&&<VerifiedBadge size={13}/>}</b>{isAdmin&&<button onClick={()=>moderateForumComment(comment)} className="text-rose-600 font-bold">حذف</button>}</div><p className="mt-1 whitespace-pre-wrap">{comment.text}</p></div>)}</div>{loggedStudent&&<div className="flex gap-2"><input value={forumCommentDrafts[post.id]||''} onChange={e=>setForumCommentDrafts(old=>({...old,[post.id]:e.target.value}))} placeholder="اكتب تعليقاً..." className="flex-1 border rounded-xl p-2 text-xs"/><button onClick={()=>void addForumComment(post)} className="bg-sky-600 text-white rounded-xl px-3 text-xs font-bold">تعليق</button></div>}</article>)}{!forumPosts.length&&<div className="bg-white border rounded-2xl p-8 text-center text-sm text-slate-500">لا توجد منشورات في منتدى هذه المرحلة. كن أول من يطرح سؤالاً.</div>}</div>
+            <div className="space-y-3">{forumPosts.filter(post=>!forumSubject||post.subjectName===forumSubject).map(post=><article key={post.id} className="bg-white border rounded-2xl p-4 space-y-3 shadow-sm"><div className="flex justify-between gap-2"><div><div className="font-black text-sm flex items-center gap-1">{post.authorName}{post.authorVerified&&<VerifiedBadge size={15}/>}</div><div className="text-[11px] text-slate-500">{post.stage} · {post.subjectName} · {post.createdAt?.toDate?post.createdAt.toDate().toLocaleString('ar-IQ'):''}</div></div>{canManageForumPost(post)&&<div className="flex gap-2 text-xs"><button onClick={()=>updateForumPost(post)} className="text-indigo-700 font-bold">تعديل</button><button onClick={()=>removeForumPost(post)} className="text-rose-600 font-bold">حذف</button></div>}</div><div className="text-sm whitespace-pre-wrap leading-7 break-words [&_img]:max-w-full [&_img]:rounded-xl [&_a]:text-blue-700 [&_a]:underline" dangerouslySetInnerHTML={{__html:post.html ? sanitizeForumHtml(post.html) : (post.text||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br/>')}} /><div className="flex items-center gap-3 border-y py-2">{loggedStudent ? <button onClick={()=>void toggleForumLike(post)} className="text-xs font-bold text-rose-600">♥ إعجاب ({post.likes?.length||0})</button> : <span className="text-xs text-slate-500">♥ إعجاب ({post.likes?.length||0})</span>}<span className="text-xs text-slate-500">{(forumComments[post.id]||[]).length} تعليق</span></div><div className="space-y-2">{(forumComments[post.id]||[]).map((comment:any)=><div key={comment.id} className="bg-slate-50 rounded-xl p-2 text-xs"><div className="flex justify-between"><b className="flex items-center gap-1">{comment.authorName}{comment.authorVerified&&<VerifiedBadge size={13}/>}</b>{isAdmin&&<button onClick={()=>moderateForumComment(comment)} className="text-rose-600 font-bold">حذف</button>}</div><p className="mt-1 whitespace-pre-wrap">{comment.text}</p></div>)}</div>{loggedStudent&&<div className="flex gap-2"><input value={forumCommentDrafts[post.id]||''} onChange={e=>setForumCommentDrafts(old=>({...old,[post.id]:e.target.value}))} placeholder="اكتب تعليقاً..." className="flex-1 border rounded-xl p-2 text-xs"/><button onClick={()=>void addForumComment(post)} className="bg-sky-600 text-white rounded-xl px-3 text-xs font-bold">تعليق</button></div>}</article>)}{!forumPosts.length&&<div className="bg-white border rounded-2xl p-8 text-center text-sm text-slate-500">لا توجد منشورات في منتدى هذه المرحلة. كن أول من يطرح سؤالاً.</div>}</div>
           </section>
         )}
 
@@ -3067,7 +3087,7 @@ export function App() {
 
           const chapterNames = Array.from(new Set((currentSub.notes || []).map((n: any) => getLessonChapter(n)))) as string[];
           const filteredNotes = (currentSub.notes || []).filter((n: any) =>
-            (!selectedChapter || getLessonChapter(n) === selectedChapter) &&
+            (selectedChapter === '__all__' || (!!selectedChapter && getLessonChapter(n) === selectedChapter)) &&
             (String(n.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || String(n.content || '').toLowerCase().includes(searchQuery.toLowerCase()))
           );
 
@@ -3150,14 +3170,19 @@ export function App() {
               {/* أ) الشروحات والتعاليل */}
               <div hidden={activeSubjectSection !== 'lessons'} className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
-                  <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
+                  <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({(currentSub.notes || []).length})
                 </h4>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={() => setSelectedChapter('')} className={`rounded-full px-3 py-2 text-xs font-black ${!selectedChapter?'bg-amber-600 text-white':'bg-white border text-slate-700'}`}>كل الفصول</button>
-                  {chapterNames.map(ch => <button key={ch} onClick={() => setSelectedChapter(ch)} className={`rounded-full px-3 py-2 text-xs font-black ${selectedChapter===ch?'bg-amber-600 text-white':'bg-white border text-slate-700'}`}>{ch}</button>)}
+                <div className="rounded-xl border border-amber-200 bg-white p-3 space-y-2">
+                  <label className="flex items-center gap-2 text-xs font-black text-slate-700"><ChevronDown className="w-4 h-4 text-amber-600" /> اختر الفصل لعرض شروحاته</label>
+                  <select value={selectedChapter} onChange={e => setSelectedChapter(e.target.value)} className="w-full rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-sm font-black text-slate-900">
+                    <option value="">— اختر الفصل —</option>
+                    <option value="__all__">عرض كل الفصول</option>
+                    {chapterNames.map(ch => <option key={ch} value={ch}>{ch}</option>)}
+                  </select>
+                  <p className="text-[11px] text-slate-500">لن تظهر الشروحات كلها مرة واحدة. اختر فصلاً، أو اختر «عرض كل الفصول» إذا احتجت ذلك.</p>
                 </div>
                 <div className="space-y-4">
-                  {filteredNotes.map((note: any, nIdx: number) => (
+                  {!selectedChapter ? <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50 p-6 text-center text-sm font-bold text-amber-900">اختر فصلاً من القائمة أعلاه حتى تظهر شروحاته هنا.</div> : filteredNotes.map((note: any, nIdx: number) => (
                     <div key={note.id} className="p-4 bg-white rounded-2xl border shadow-sm space-y-3 relative">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
@@ -3170,7 +3195,8 @@ export function App() {
                         </div>}
                       </div>
 
-                      <div className="leading-relaxed whitespace-pre-wrap" dir="rtl" style={{ color: note.textColor || '#334155', fontSize: note.fontSize || '17px', fontWeight: note.contentBold ? 700 : 400, lineHeight: 1.9 }} dangerouslySetInnerHTML={{ __html: /<\/?[a-z][\s\S]*>/i.test(String(note.content || '')) ? safeLessonHtml(String(note.content || '')) : safeLessonHtml(String(note.content || '').split('\n').map(line => `<p>${line}</p>`).join('')) }} />
+                      <div className={`leading-relaxed whitespace-pre-wrap overflow-hidden ${expandedNoteIds[String(note.id)] ? '' : 'line-clamp-2'}`} dir="rtl" style={{ color: note.textColor || '#334155', fontSize: note.fontSize || '17px', fontWeight: note.contentBold ? 700 : 400, lineHeight: 1.9 }} dangerouslySetInnerHTML={{ __html: /<\/?[a-z][\s\S]*>/i.test(String(note.content || '')) ? safeLessonHtml(String(note.content || '')) : safeLessonHtml(String(note.content || '').split('\n').map(line => `<p>${line}</p>`).join('')) }} />
+                      {String(note.content || '').length > 120 && <button type="button" onClick={() => setExpandedNoteIds(old => ({...old, [String(note.id)]: !old[String(note.id)]}))} className="inline-flex items-center gap-1 text-xs font-black text-indigo-700 hover:text-indigo-900">{expandedNoteIds[String(note.id)] ? 'عرض أقل' : 'المزيد'} <span>{expandedNoteIds[String(note.id)] ? '⌃' : '⌄'}</span></button>}
                       <div className="flex items-center gap-2 flex-wrap">
                         <button type="button" onClick={() => speakingNoteId === String(note.id) ? stopLessonSpeech() : speakLessonNote(note)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-bold hover:bg-indigo-100">
                           <Play className="w-4 h-4" /> {speakingNoteId === String(note.id) ? 'إيقاف القراءة' : 'استمع إلى الشرح'}
@@ -3735,6 +3761,7 @@ export function App() {
                 <div className="flex items-center justify-between gap-2"><h3 className="font-black text-lg text-sky-950">الملف الشخصي الكامل للطالب</h3><button onClick={()=>setAdminProfileStudent(null)} className="rounded-lg bg-white border px-3 py-1 text-xs font-bold">إغلاق ✕</button></div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                   <p><b>الاسم:</b> {adminProfileStudent.name} {adminProfileStudent.isVerified && <VerifiedBadge size={16}/>}</p><p><b>المرحلة:</b> {adminProfileStudent.stage}</p>
+                  <div className="flex items-center gap-2"><b>الجنس:</b><select value={adminProfileStudent.gender || 'ذكر'} onChange={async e => { const gender=e.target.value as 'ذكر'|'أنثى'; try { await updateDoc(doc(db,'students',adminProfileStudent.id),{gender}); setAdminProfileStudent({...adminProfileStudent,gender}); const updated=studentsList.map((st:any)=>st.id===adminProfileStudent.id?{...st,gender}:st); setStudentsList(updated); localStorage.setItem('nabough_cached_students',JSON.stringify(updated)); } catch(err) { alert('تعذر تحديث الجنس.'); } }} className="rounded-lg border bg-white p-1.5 text-xs"><option value="ذكر">ذكر</option><option value="أنثى">أنثى</option></select></div>
                   <p><b>اسم المستخدم:</b> {adminProfileStudent.username || '—'}</p><p><b>تاريخ التسجيل:</b> {adminProfileStudent.regDate || '—'}</p>
                   <p><b>الاشتراك:</b> {adminProfileStudent.isVip ? 'VIP' : 'عادي'}</p><p><b>آخر ظهور:</b> {adminProfileStudent.lastSeen || '—'}</p>
                   <p><b>الحالة:</b> {adminProfileStudent.status || '—'}</p><p><b>آخر درجة:</b> {adminProfileStudent.examScore || 'لا توجد'}</p>
@@ -4083,6 +4110,11 @@ export function App() {
             </div>
             <div className="rounded-xl border p-3 space-y-3"><h3 className="font-black text-sm">المحتوى المتاح للزائر</h3>
               {[['lessons','الشروحات والدروس'],['videos','الفيديوهات'],['booklets','الملازم والملخصات'],['examsPreview','معاينة الامتحانات'],['answersPreview','عرض الأسئلة والإجابات النموذجية']].map(([key,label]) => <label key={key} className="flex items-center justify-between gap-3 text-xs font-bold"><span>{label}</span><input type="checkbox" checked={vipSettings.guestAccess?.[key] !== false} onChange={e => setVipSettings((v: any) => ({...v, guestAccess:{...(v.guestAccess || {}), [key]:e.target.checked}}))} className="w-4 h-4" /></label>)}
+            </div>
+            <div className="rounded-xl border border-sky-200 bg-sky-50/50 p-3 space-y-3">
+              <h3 className="font-black text-sm">إعدادات منتدى المرحلة</h3>
+              <label className="flex items-center justify-between gap-3 text-xs font-bold"><span>إظهار المنتدى للزائر (مشاهدة فقط)</span><input type="checkbox" checked={vipSettings.guestAccess?.forumGuestView !== false} onChange={e => setVipSettings((v: any) => ({...v, guestAccess:{...(v.guestAccess || {}), forumGuestView:e.target.checked}}))} className="w-4 h-4" /></label>
+              <p className="text-[11px] text-slate-600">الزائر يستطيع مشاهدة المنشورات والتعليقات فقط. لا يستطيع النشر أو التعليق أو الإعجاب إلا بعد تسجيل الدخول.</p>
             </div>
             <div className="rounded-xl border p-3 space-y-3"><h3 className="font-black text-sm">اسأل النابغة للزائر</h3>
               <label className="flex items-center justify-between text-xs font-bold"><span>السماح بظهور اسأل النابغة للزائر</span><input type="checkbox" checked={vipSettings.guestAccess?.askEnabled !== false} onChange={e => setVipSettings((v: any) => ({...v, guestAccess:{...(v.guestAccess || {}), askEnabled:e.target.checked}}))} className="w-4 h-4" /></label>
