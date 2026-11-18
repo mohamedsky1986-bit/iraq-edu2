@@ -518,6 +518,8 @@ export function App() {
     return () => unsub();
   }, [activeTab, selectedGroupId]);
 
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
+
   // احتساب حضور واحد فقط لكل طالب ومادة في اليوم، بعد البقاء داخل صفحة المادة 60 ثانية.
   useEffect(() => {
     if (isAdmin || !loggedStudent?.id || !selectedSubjectId || !isOnline) return;
@@ -571,7 +573,6 @@ export function App() {
     return () => { window.clearInterval(refresh); if (unsubscribe) unsubscribe(); };
   }, [isAdmin, activeTab]);
   const [selectedStage, setSelectedStage] = useState<string>('all'); 
-  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [showAskNabigha, setShowAskNabigha] = useState(false);
   const [askSubjectId, setAskSubjectId] = useState('');
   const [askQuestion, setAskQuestion] = useState('');
