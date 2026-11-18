@@ -227,7 +227,8 @@ export function App() {
       mastercard: '9876-5432-1098-7654 (مصرف الرافدين)',
       transferPhone: '07701234567 (زين كاش / آسياسيل)',
       whatsappPhone: '',
-      telegram: MY_TELEGRAM_LINK
+      telegram: MY_TELEGRAM_LINK,
+      guestAccess: { enabled: true, lessons: true, videos: true, booklets: true, examsPreview: true, answersPreview: true, askEnabled: true, askMode: 'limited', askDailyLimit: 2, signupEnabled: true, loginEnabled: true, welcomeMessage: 'تصفح المناهج والشروحات مجاناً، وأنشئ حساباً للاستفادة من المميزات التفاعلية.' }
     });
   });
 
@@ -409,7 +410,7 @@ export function App() {
 
   const [isChangingStage, setIsChangingStage] = useState<boolean>(false);
 
-  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings' | 'communications' | 'visitors'>('curriculum');
+  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings' | 'communications' | 'visitors' | 'guestSettings'>('curriculum');
 
   // لوحة الإحصائيات فقط هي التي تشترك مع الجلسات النشطة؛ يعاد تحديث نافذة الدقيقتين كل دقيقة.
   useEffect(() => {
@@ -2530,6 +2531,7 @@ export function App() {
               <button onClick={() => { setActiveTab('visitors'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'visitors' ? 'bg-violet-700 text-white' : 'bg-violet-50 text-violet-700'}`}>
                 <Users className="w-3.5 h-3.5" /> إحصائيات الزوار
               </button>
+              <button onClick={() => { setActiveTab('guestSettings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'guestSettings' ? 'bg-fuchsia-700 text-white' : 'bg-fuchsia-50 text-fuchsia-700'}`}><Eye className="w-3.5 h-3.5" /> إعدادات الزوار</button>
               <button onClick={() => { setActiveTab('settings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'settings' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}>
                 <Key className="w-3.5 h-3.5" /> كلمة المرور
               </button>
@@ -2643,10 +2645,10 @@ export function App() {
           </section>
         )}
 
-        {!isAdmin && (
+        {!isAdmin && (loggedStudent || (vipSettings.guestAccess?.enabled !== false && vipSettings.guestAccess?.askEnabled !== false)) && (
           <section className="rounded-2xl border border-indigo-200 bg-gradient-to-l from-indigo-950 via-indigo-900 to-slate-900 p-4 sm:p-5 text-white shadow-lg space-y-3">
             <div className="flex items-center gap-3"><div className="w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center"><Sparkles className="w-6 h-6 text-amber-300" /></div><div><h2 className="font-black text-lg">اسأل النابغة 🤖</h2><p className="text-xs text-indigo-100">مدرّسك الذكي يشرح لك من محتوى المنهج المرفوع</p></div></div>
-            <button type="button" onClick={() => { setAskSubjectId(selectedSubjectId || filteredSubjects[0]?.id || ''); setShowAskNabigha(true); }} className="w-full rounded-xl bg-white text-indigo-950 font-black py-3 hover:bg-indigo-50 flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> اكتب سؤالك واحصل على شرح</button>
+            <button type="button" onClick={() => { if (!loggedStudent && vipSettings.guestAccess?.askMode === 'login') { setShowStudentAuthModal(true); return; } setAskSubjectId(selectedSubjectId || filteredSubjects[0]?.id || ''); setShowAskNabigha(true); }} className="w-full rounded-xl bg-white text-indigo-950 font-black py-3 hover:bg-indigo-50 flex items-center justify-center gap-2"><MessageCircle className="w-4 h-4" /> اكتب سؤالك واحصل على شرح</button>
             <p className="text-[10px] text-indigo-200">تقدر تكتب السؤال أو ترفق صورة. الإجابات تعتمد على الدروس المتوفرة للمادة.</p>
           </section>
         )}
@@ -2712,12 +2714,12 @@ export function App() {
                 <div 
                   key={sub.id}
                   onClick={() => {
-                    if (!loggedStudent && !isAdmin) {
+                    if (!isAdmin && vipSettings.guestAccess?.enabled === false && !loggedStudent) {
                       setShowStudentAuthModal(true);
-                    } else {
-                      setSelectedSubjectId(sub.id);
-                      setSearchQuery('');
+                      return;
                     }
+                    setSelectedSubjectId(sub.id);
+                    setSearchQuery('');
                   }}
                   className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all border border-slate-200 group flex flex-col justify-between relative cursor-pointer"
                 >
@@ -3213,6 +3215,7 @@ export function App() {
                           <button onClick={() => setVipModalItem(quiz)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
                         ) : (
                           <button onClick={() => {
+                            if (!loggedStudent && !isAdmin) { setShowStudentAuthModal(true); return; }
                             if (quiz.type === 'html' || quiz.htmlContent) setActiveQuiz(quiz);
                             else { setActiveQuiz(quiz); setTimeLeft((quiz.durationMinutes || 15) * 60); setTimerActive(true); }
                           }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">
@@ -3730,6 +3733,31 @@ export function App() {
             </div>
             <div className="bg-white rounded-2xl p-4 shadow-xl border space-y-2"><h3 className="font-black">زر قناة التليجرام</h3><p className="text-xs text-slate-600">أضف رابط القناة من تبويب إعدادات VIP؛ سيظهر زر الانضمام للطلاب تلقائياً بعد حفظ الرابط.</p><button onClick={() => setActiveTab('vipSettings')} className="px-4 py-2 rounded-xl bg-amber-500 text-white text-xs font-bold">فتح إعدادات الرابط</button></div>
           </div>
+        )}
+
+        {/* إعدادات دخول الزوار والتحكم بالمميزات */}
+        {activeTab === 'guestSettings' && isAdmin && (
+          <section className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-xl border space-y-5 text-right">
+            <div><h2 className="text-xl font-black text-slate-900">إعدادات الزوار والتسجيل</h2><p className="text-xs text-slate-500 mt-1">تحكم بما يستطيع الزائر مشاهدته واستخدامه. تُحفظ الإعدادات في مستند إعدادات VIP الحالي دون إنشاء مجموعة جديدة.</p></div>
+            <div className="rounded-xl border p-3 space-y-3">
+              <label className="flex items-center justify-between gap-3 text-sm font-black"><span>السماح بتصفح المنصة كزائر</span><input type="checkbox" checked={vipSettings.guestAccess?.enabled !== false} onChange={e => setVipSettings((v: any) => ({...v, guestAccess:{...(v.guestAccess || {}), enabled:e.target.checked}}))} className="w-5 h-5" /></label>
+              <p className="text-[11px] text-slate-500">عند الإيقاف، الزائر غير المسجل يُطلب منه تسجيل الدخول قبل فتح المواد.</p>
+            </div>
+            <div className="rounded-xl border p-3 space-y-3"><h3 className="font-black text-sm">المحتوى المتاح للزائر</h3>
+              {[['lessons','الشروحات والدروس'],['videos','الفيديوهات'],['booklets','الملازم والملخصات'],['examsPreview','معاينة الامتحانات'],['answersPreview','عرض الأسئلة والإجابات النموذجية']].map(([key,label]) => <label key={key} className="flex items-center justify-between gap-3 text-xs font-bold"><span>{label}</span><input type="checkbox" checked={vipSettings.guestAccess?.[key] !== false} onChange={e => setVipSettings((v: any) => ({...v, guestAccess:{...(v.guestAccess || {}), [key]:e.target.checked}}))} className="w-4 h-4" /></label>)}
+            </div>
+            <div className="rounded-xl border p-3 space-y-3"><h3 className="font-black text-sm">اسأل النابغة للزائر</h3>
+              <label className="flex items-center justify-between text-xs font-bold"><span>السماح بظهور اسأل النابغة للزائر</span><input type="checkbox" checked={vipSettings.guestAccess?.askEnabled !== false} onChange={e => setVipSettings((v: any) => ({...v, guestAccess:{...(v.guestAccess || {}), askEnabled:e.target.checked}}))} className="w-4 h-4" /></label>
+              <label className="block text-xs font-bold">طريقة الاستخدام<select value={vipSettings.guestAccess?.askMode || 'limited'} onChange={e => setVipSettings((v: any) => ({...v, guestAccess:{...(v.guestAccess || {}), askMode:e.target.value}}))} className="mt-1 w-full border rounded-lg p-2"><option value="limited">عدد محدد يومياً</option><option value="open">مفتوح للزائر</option><option value="login">يتطلب حساباً مجانياً</option></select></label>
+              {vipSettings.guestAccess?.askMode === 'limited' && <label className="block text-xs font-bold">عدد أسئلة الزائر يومياً<input type="number" min="0" max="50" value={vipSettings.guestAccess?.askDailyLimit ?? 2} onChange={e => setVipSettings((v: any) => ({...v, guestAccess:{...(v.guestAccess || {}), askDailyLimit:Math.max(0, Math.min(50, Number(e.target.value) || 0))}}))} className="mt-1 w-full border rounded-lg p-2" /></label>}
+              <p className="text-[10px] text-amber-700 bg-amber-50 rounded-lg p-2">تنبيه: تحديد عدد أسئلة الزائر هنا إعداد واجهة أولي؛ تطبيق حد يومي لا يمكن تجاوزه يحتاج ربطه بالتحقق الخادمي في api/ask.ts قبل اعتماده.</p>
+            </div>
+            <div className="rounded-xl border p-3 space-y-3"><h3 className="font-black text-sm">التسجيل المجاني</h3>
+              {[['signupEnabled','إظهار زر إنشاء حساب مجاني'],['loginEnabled','إظهار زر تسجيل الدخول']].map(([key,label]) => <label key={key} className="flex items-center justify-between gap-3 text-xs font-bold"><span>{label}</span><input type="checkbox" checked={vipSettings.guestAccess?.[key] !== false} onChange={e => setVipSettings((v: any) => ({...v, guestAccess:{...(v.guestAccess || {}), [key]:e.target.checked}}))} className="w-4 h-4" /></label>)}
+              <label className="block text-xs font-bold">رسالة الترحيب للزائر<textarea value={vipSettings.guestAccess?.welcomeMessage || ''} onChange={e => setVipSettings((v: any) => ({...v, guestAccess:{...(v.guestAccess || {}), welcomeMessage:e.target.value}}))} rows={2} className="mt-1 w-full border rounded-lg p-2" /></label>
+            </div>
+            <button onClick={async () => { try { const next={...vipSettings}; await setDoc(doc(db,'settings','vip_config'), next, {merge:true}); localStorage.setItem('nabough_vip_settings', JSON.stringify(next)); setSuccessMessage('تم حفظ إعدادات الزوار بنجاح وتطبيقها على الأجهزة.'); setTimeout(() => setSuccessMessage(null), 4000); } catch(error) { console.error(error); alert('تعذر حفظ إعدادات الزوار. تحقق من الاتصال وصلاحيات Firestore.'); } }} className="w-full rounded-xl bg-fuchsia-700 text-white py-3 text-sm font-black">حفظ إعدادات الزوار</button>
+          </section>
         )}
 
         {/* إحصائيات التواجد الفعلي للزوار والطلبة */}
