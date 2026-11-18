@@ -69,6 +69,29 @@ const safeGetStorage = (key: string, fallback: any) => {
   }
 };
 
+
+const AdminAttendancePanel = ({ students }: { students: any[] }) => {
+  const [rows, setRows] = useState<any[]>([]);
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, 'attendance_records'), snap => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      data.sort((a:any,b:any)=>String(b.date||'').localeCompare(String(a.date||'')));
+      setRows(data.slice(0,100));
+    }, err => console.warn('تعذر تحميل سجل الحضور الإداري:', err));
+    return () => unsub();
+  }, []);
+  const changeStatus = async (row:any, status:string) => {
+    try { await updateDoc(doc(db,'attendance_records',row.id), { status, source:'إداري', updatedAt:serverTimestamp() }); }
+    catch(e) { alert('تعذر تعديل حالة الحضور.'); }
+  };
+  const addManualRecord = async (student:any, status:string) => {
+    const date = new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Baghdad',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
+    try { await addDoc(collection(db,'attendance_records'), { studentId:student.id, studentName:student.name||'', stage:student.stage||'', subjectName:'تسجيل إداري', date, status, source:'إداري', attendedAt:serverTimestamp() }); }
+    catch(e) { alert('تعذر إضافة سجل الحضور اليدوي.'); }
+  };
+  return <div className="space-y-3"><div className="rounded-xl border p-3 space-y-2"><b className="text-sm">تسجيل حضور يدوي للطلاب</b>{students.slice(0,80).map((student:any)=><div key={student.id} className="flex flex-wrap items-center justify-between gap-2 border-b last:border-0 py-2"><span className="text-xs font-bold">{student.name} <span className="text-slate-400">· {student.stage}</span></span><div className="flex gap-1">{['حاضر','غائب','متأخر'].map(status=><button key={status} onClick={()=>void addManualRecord(student,status)} className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-700">{status}</button>)}</div></div>)}</div><b className="text-sm">آخر سجلات الحضور</b><div className="space-y-2 max-h-[520px] overflow-y-auto">{rows.length ? rows.map(row=><div key={row.id} className="border rounded-xl p-3 flex flex-wrap items-center justify-between gap-2"><div><b className="text-sm">{row.studentName}</b><p className="text-[10px] text-slate-500">{row.stage} · {row.subjectName} · {row.date}</p></div><div className="flex gap-1">{['حاضر','غائب','متأخر'].map(status=><button key={status} onClick={()=>void changeStatus(row,status)} className={`px-2 py-1 rounded-lg text-[10px] font-bold ${row.status===status?'bg-indigo-600 text-white':'bg-slate-100 text-slate-700'}`}>{status}</button>)}</div></div>) : <p className="text-xs text-slate-500">لا توجد سجلات حضور حتى الآن.</p>}</div></div>;
+};
+
 export function App() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator === 'undefined' ? true : navigator.onLine);
@@ -418,7 +441,112 @@ export function App() {
 
   const [isChangingStage, setIsChangingStage] = useState<boolean>(false);
 
-  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings' | 'communications' | 'visitors' | 'guestSettings'>('curriculum');
+  const [activeTab, setActiveTab] = useState<'curriculum' | 'students' | 'adminPanel' | 'settings' | 'vipSettings' | 'communications' | 'visitors' | 'guestSettings' | 'studentProfile' | 'studentGroups' | 'soundSettings'>('curriculum');
+
+  // ملف الطالب والحضور والكروبات وأصوات النظام - إضافات مستقلة عن بيانات المنهج الحالية.
+  const [studentAttendance, setStudentAttendance] = useState<any[]>([]);
+  const [lessonSchedule, setLessonSchedule] = useState<any[]>([]);
+  const [studentGroups, setStudentGroups] = useState<any[]>([]);
+  const [groupMessages, setGroupMessages] = useState<any[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState('');
+  const [groupMessageText, setGroupMessageText] = useState('');
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupStage, setNewGroupStage] = useState('الثالث المتوسط');
+  const [scheduleTitle, setScheduleTitle] = useState('');
+  const [scheduleSubject, setScheduleSubject] = useState('');
+  const [scheduleDate, setScheduleDate] = useState('');
+  const [scheduleTime, setScheduleTime] = useState('');
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => localStorage.getItem('nabigha_sound_enabled') !== 'false');
+  const [soundVolume, setSoundVolume] = useState<number>(() => Number(localStorage.getItem('nabigha_sound_volume') || 35));
+  const [soundReady, setSoundReady] = useState(false);
+
+  const playSystemSound = (kind: 'notification' | 'correct' | 'wrong' | 'complete' | 'message' = 'notification') => {
+    if (!soundEnabled || typeof window === 'undefined') return;
+    try {
+      const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const patterns: Record<string, number[]> = { notification: [660, 880], correct: [660, 880, 1040], wrong: [260, 190], complete: [523, 659, 784], message: [740, 880] };
+      let start = ctx.currentTime;
+      (patterns[kind] || patterns.notification).forEach((frequency) => {
+        const oscillator = ctx.createOscillator();
+        const gain = ctx.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = frequency;
+        gain.gain.setValueAtTime(Math.max(0.001, soundVolume / 100 * 0.12), start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.13);
+        oscillator.connect(gain); gain.connect(ctx.destination);
+        oscillator.start(start); oscillator.stop(start + 0.14);
+        start += 0.16;
+      });
+      window.setTimeout(() => { void ctx.close(); }, 1000);
+    } catch (error) { console.warn('تعذر تشغيل صوت النظام:', error); }
+  };
+
+  // تحميل سجل الطالب وجدول الدروس عند فتح ملفه الشخصي.
+  useEffect(() => {
+    if (!loggedStudent?.id || activeTab !== 'studentProfile') return;
+    const attendanceQuery = query(collection(db, 'attendance_records'), where('studentId', '==', loggedStudent.id));
+    const unsubAttendance = onSnapshot(attendanceQuery, snap => {
+      const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      rows.sort((a: any, b: any) => String(b.date || '').localeCompare(String(a.date || '')));
+      setStudentAttendance(rows);
+    }, err => console.warn('تعذر تحميل الحضور:', err));
+    const scheduleQuery = query(collection(db, 'lesson_schedule'), where('stage', '==', loggedStudent.stage || ''));
+    const unsubSchedule = onSnapshot(scheduleQuery, snap => setLessonSchedule(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a: any,b: any) => `${a.date || ''} ${a.time || ''}`.localeCompare(`${b.date || ''} ${b.time || ''}`))), err => console.warn('تعذر تحميل جدول الدروس:', err));
+    return () => { unsubAttendance(); unsubSchedule(); };
+  }, [loggedStudent?.id, loggedStudent?.stage, activeTab]);
+
+  // تحميل الكروبات؛ الطالب يرى كروبات مرحلته، والإدارة ترى الجميع.
+  useEffect(() => {
+    if (activeTab !== 'studentGroups') return;
+    const unsub = onSnapshot(collection(db, 'student_groups'), snap => {
+      const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setStudentGroups(isAdmin ? rows : rows.filter((g: any) => g.stage === loggedStudent?.stage && (g.memberIds?.includes(loggedStudent?.id) || g.openToStage !== false)));
+    }, err => console.warn('تعذر تحميل الكروبات:', err));
+    return () => unsub();
+  }, [activeTab, isAdmin, loggedStudent?.id, loggedStudent?.stage]);
+
+  useEffect(() => {
+    if (activeTab !== 'studentGroups' || !selectedGroupId) { setGroupMessages([]); return; }
+    const msgsQuery = query(collection(db, 'group_messages'), where('groupId', '==', selectedGroupId));
+    const unsub = onSnapshot(msgsQuery, snap => {
+      const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      rows.sort((a: any,b: any) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+      setGroupMessages(rows.slice(-100));
+    }, err => console.warn('تعذر تحميل رسائل الكروب:', err));
+    return () => unsub();
+  }, [activeTab, selectedGroupId]);
+
+  // احتساب حضور واحد فقط لكل طالب ومادة في اليوم، بعد البقاء داخل صفحة المادة 60 ثانية.
+  useEffect(() => {
+    if (isAdmin || !loggedStudent?.id || !selectedSubjectId || !isOnline) return;
+    const subject = subjects.find((item: any) => item.id === selectedSubjectId);
+    const timer = window.setTimeout(async () => {
+      const date = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Baghdad', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+      const attendanceId = `${loggedStudent.id}_${date}_${selectedSubjectId}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+      try {
+        await setDoc(doc(db, 'attendance_records', attendanceId), {
+          studentId: loggedStudent.id, studentName: loggedStudent.name || '', stage: loggedStudent.stage || '',
+          subjectId: selectedSubjectId, subjectName: subject?.name || 'درس', date,
+          status: 'حاضر', source: 'تلقائي', attendedAt: serverTimestamp(), durationSeconds: 60
+        }, { merge: true });
+      } catch (error) { console.warn('تعذر تسجيل الحضور التلقائي:', error); }
+    }, 60000);
+    return () => window.clearTimeout(timer);
+  }, [selectedSubjectId, loggedStudent?.id, loggedStudent?.name, loggedStudent?.stage, isAdmin, isOnline, subjects]);
+
+  const sendGroupMessage = async () => {
+    if (!selectedGroupId || !groupMessageText.trim() || (!loggedStudent && !isAdmin)) return;
+    try {
+      await addDoc(collection(db, 'group_messages'), {
+        groupId: selectedGroupId, senderId: isAdmin ? 'admin' : loggedStudent.id,
+        senderName: isAdmin ? 'إدارة النابغة' : loggedStudent.name,
+        text: groupMessageText.trim(), createdAt: serverTimestamp()
+      });
+      setGroupMessageText(''); playSystemSound('message');
+    } catch (error) { alert('تعذر إرسال رسالة الكروب. تحقق من صلاحيات Firestore.'); }
+  };
 
   // لوحة الإحصائيات فقط هي التي تشترك مع الجلسات النشطة؛ يعاد تحديث نافذة الدقيقتين كل دقيقة.
   useEffect(() => {
@@ -514,6 +642,7 @@ export function App() {
   };
 
   const studentNotifications = notificationItems;
+  useEffect(() => { if (studentNotifications.some((item:any)=>!item.isRead)) playSystemSound('notification'); }, [studentNotifications.length]);
   const unreadNotificationCount = studentNotifications.filter((item: any) => !item.isRead).length;
 
   const markNotificationAsRead = async (item: any) => {
@@ -1452,7 +1581,7 @@ export function App() {
     }
     if (showExamHistory) { setShowExamHistory(false); return; }
     if (selectedSubjectId) { setSelectedSubjectId(null); setSearchQuery(''); return; }
-    if (isAdmin && activeTab !== 'curriculum') { setActiveTab('curriculum'); return; }
+    if (activeTab !== 'curriculum' && (isAdmin || loggedStudent)) { setActiveTab('curriculum'); return; }
     if (selectedStage !== 'all') { setSelectedStage('all'); return; }
     // في الصفحة الرئيسية نبقى داخل المنصة ولا نسمح بزر الرجوع بإغلاقها.
   };
@@ -2540,10 +2669,23 @@ export function App() {
                 <Users className="w-3.5 h-3.5" /> إحصائيات الزوار
               </button>
               <button onClick={() => { setActiveTab('guestSettings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'guestSettings' ? 'bg-fuchsia-700 text-white' : 'bg-fuchsia-50 text-fuchsia-700'}`}><Eye className="w-3.5 h-3.5" /> إعدادات الزوار</button>
+              <button onClick={() => { setActiveTab('studentGroups'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs whitespace-nowrap ${activeTab === 'studentGroups' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700'}`}>👥 كروبات الطلاب</button>
+              <button onClick={() => { setActiveTab('soundSettings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs whitespace-nowrap ${activeTab === 'soundSettings' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700'}`}>🔊 أصوات النظام</button>
               <button onClick={() => { setActiveTab('settings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'settings' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}>
                 <Key className="w-3.5 h-3.5" /> كلمة المرور
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {!isAdmin && loggedStudent && (
+        <div className="bg-white border-b border-slate-200 sticky top-0 z-20 w-full">
+          <div className="max-w-7xl mx-auto px-3 py-2 flex gap-2 overflow-x-auto scrollbar-none">
+            <button onClick={() => setActiveTab('curriculum')} className={`shrink-0 px-3 py-2 rounded-xl text-xs font-black ${activeTab === 'curriculum' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'}`}>📚 المنهج</button>
+            <button onClick={() => setActiveTab('studentProfile')} className={`shrink-0 px-3 py-2 rounded-xl text-xs font-black ${activeTab === 'studentProfile' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'}`}>👤 ملفي الشخصي</button>
+            <button onClick={() => setActiveTab('studentGroups')} className={`shrink-0 px-3 py-2 rounded-xl text-xs font-black ${activeTab === 'studentGroups' ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-700'}`}>👥 كروبات الطلاب</button>
+            <button onClick={() => setActiveTab('soundSettings')} className={`shrink-0 px-3 py-2 rounded-xl text-xs font-black ${activeTab === 'soundSettings' ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-700'}`}>🔊 أصوات النظام</button>
           </div>
         </div>
       )}
@@ -2559,7 +2701,7 @@ export function App() {
 
       {/* المحتوى الرئيسي */}
       <main className="flex-1 w-full max-w-full mx-auto px-1 sm:px-3 py-3 space-y-5 overflow-x-hidden">
-        {(selectedSubjectId || showExamHistory || activeQuiz || activePdfUrl || activeVideoUrl || (isAdmin && activeTab !== 'curriculum')) && (
+        {(selectedSubjectId || showExamHistory || activeQuiz || activePdfUrl || activeVideoUrl || (activeTab !== 'curriculum' && (isAdmin || loggedStudent))) && (
           <div className="flex justify-start px-1">
             <button type="button" onClick={handleInternalBack} className="inline-flex items-center gap-2 rounded-xl bg-white border border-indigo-200 px-4 py-2 text-sm font-black text-indigo-700 shadow-sm hover:bg-indigo-50 active:scale-95" aria-label="رجوع داخل المنصة">
               <ArrowRight className="w-4 h-4" /> رجوع
@@ -2682,6 +2824,41 @@ export function App() {
               {askError && <p className="text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 rounded-lg p-2">{askError}</p>}
               <p className="text-[10px] text-slate-500">تنبيه: إذا ما متوفر جواب مؤكد في المحتوى المرفوع، راح ينبهك المدرّس بدل التخمين.</p>
             </div>
+          </section>
+        )}
+
+        {/* الملف الشخصي للطالب وجدول الدروس والحضور */}
+        {activeTab === 'studentProfile' && loggedStudent && !isAdmin && (
+          <section className="space-y-4 text-right">
+            <div className="rounded-3xl bg-gradient-to-l from-indigo-950 to-blue-700 text-white p-5 shadow-lg">
+              <div className="flex items-center gap-3"><div className="w-14 h-14 rounded-2xl bg-white/15 flex items-center justify-center text-3xl">👨‍🎓</div><div><h2 className="text-xl font-black">{loggedStudent.name} {currentLoggedStudentData?.isVerified && <VerifiedBadge size={20} />}</h2><p className="text-sm text-indigo-100">{loggedStudent.stage} · ملفي الدراسي</p></div></div>
+              <div className="grid grid-cols-3 gap-2 mt-5"><div className="rounded-xl bg-white/10 p-3 text-center"><b className="block text-2xl">{studentAttendance.filter((a:any)=>a.status==='حاضر').length}</b><span className="text-[11px]">أيام الحضور</span></div><div className="rounded-xl bg-white/10 p-3 text-center"><b className="block text-2xl">{studentAttendance.filter((a:any)=>a.status==='غائب').length}</b><span className="text-[11px]">أيام الغياب</span></div><div className="rounded-xl bg-white/10 p-3 text-center"><b className="block text-2xl">{studentAttendance.length ? Math.round(studentAttendance.filter((a:any)=>a.status==='حاضر').length/studentAttendance.length*100) : 0}%</b><span className="text-[11px]">نسبة الحضور</span></div></div>
+            </div>
+            <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-3"><h3 className="font-black text-lg">📅 جدول الدروس القادمة</h3>{lessonSchedule.length ? lessonSchedule.map((item:any)=><div key={item.id} className="border rounded-xl p-3 flex flex-wrap justify-between gap-2"><div><b className="text-sm">{item.title || item.subjectName}</b><p className="text-xs text-slate-500">{item.subjectName} · {item.date} · {item.time}</p></div><span className="text-xs bg-indigo-50 text-indigo-700 rounded-lg px-2 py-1">{item.day || 'موعد الدرس'}</span></div>) : <p className="text-sm text-slate-500">لا توجد مواعيد دروس مضافة لمرحلتك حالياً.</p>}</div>
+            <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-3"><h3 className="font-black text-lg">🕘 سجل الحضور والغياب</h3>{studentAttendance.length ? studentAttendance.map((item:any)=><div key={item.id} className="flex items-center justify-between border-b last:border-0 py-2 gap-2"><div><b className="text-sm">{item.subjectName || 'درس'}</b><p className="text-[11px] text-slate-500">{item.date} · {item.source === 'تلقائي' ? 'تسجيل تلقائي بعد دقيقة' : 'تسجيل إداري'}</p></div><span className={`text-xs font-black rounded-lg px-3 py-1 ${item.status==='حاضر'?'bg-emerald-50 text-emerald-700':item.status==='متأخر'?'bg-amber-50 text-amber-700':'bg-rose-50 text-rose-700'}`}>{item.status}</span></div>) : <p className="text-sm text-slate-500">بعد دخولك إلى صفحة المادة والبقاء فيها دقيقة، يظهر الحضور هنا.</p>}</div>
+            <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-2"><h3 className="font-black">طلب تصحيح الحضور</h3><p className="text-xs text-slate-500">إذا دخلت الدرس ولم يُسجّل حضورك بسبب انقطاع الإنترنت، أرسل طلباً للإدارة.</p><button onClick={async()=>{try{await addDoc(collection(db,'attendance_requests'),{studentId:loggedStudent.id,studentName:loggedStudent.name,stage:loggedStudent.stage,createdAt:serverTimestamp(),status:'قيد المراجعة',message:'أطلب مراجعة حضوري'});alert('تم إرسال طلب مراجعة الحضور للإدارة.');}catch(e){alert('تعذر إرسال الطلب حالياً.');}}} className="w-full rounded-xl bg-indigo-600 text-white py-2.5 text-sm font-black">إرسال طلب مراجعة الحضور</button></div>
+          </section>
+        )}
+
+        {/* إدارة الكروبات والمحادثة الجماعية */}
+        {activeTab === 'studentGroups' && (loggedStudent || isAdmin) && (
+          <section className="space-y-4 text-right">
+            {isAdmin && <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-3"><h2 className="font-black text-lg">إنشاء كروب طلاب</h2><input value={newGroupName} onChange={e=>setNewGroupName(e.target.value)} placeholder="اسم الكروب" className="w-full border rounded-xl p-3 text-sm"/><select value={newGroupStage} onChange={e=>setNewGroupStage(e.target.value)} className="w-full border rounded-xl p-3 text-sm">{allStagesList.map(st=><option key={st.id} value={st.name}>{st.name}</option>)}</select><button onClick={async()=>{if(!newGroupName.trim())return alert('اكتب اسم الكروب');try{await addDoc(collection(db,'student_groups'),{name:newGroupName.trim(),stage:newGroupStage,openToStage:true,memberIds:[],createdAt:serverTimestamp(),createdBy:'admin'});setNewGroupName('');alert('تم إنشاء الكروب.');}catch(e){alert('تعذر إنشاء الكروب؛ تحقق من صلاحيات Firestore.');}}} className="w-full bg-sky-600 text-white rounded-xl py-3 text-sm font-black">إنشاء الكروب</button></div>}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3"><div className="bg-white rounded-2xl border p-3 space-y-2"><h3 className="font-black">الكروبات المتاحة</h3>{studentGroups.length?studentGroups.map((g:any)=><button key={g.id} onClick={()=>setSelectedGroupId(g.id)} className={`w-full text-right rounded-xl p-3 border text-sm font-bold ${selectedGroupId===g.id?'bg-sky-600 text-white border-sky-600':'bg-slate-50'}`}>{g.name}<span className="block text-[10px] opacity-75">{g.stage}</span></button>):<p className="text-xs text-slate-500">لا توجد كروبات متاحة حالياً.</p>}</div>
+              <div className="md:col-span-2 bg-white rounded-2xl border p-3 flex flex-col min-h-[420px]"><h3 className="font-black border-b pb-3">{studentGroups.find((g:any)=>g.id===selectedGroupId)?.name || 'اختر كروباً لعرض المحادثة'}</h3><div className="flex-1 min-h-64 max-h-[55vh] overflow-y-auto py-3 space-y-2">{groupMessages.map((m:any)=><div key={m.id} className={`max-w-[90%] rounded-2xl p-3 text-sm ${m.senderId===(loggedStudent?.id||'')?'mr-auto bg-indigo-50':'ml-auto bg-slate-100'}`}><b className="block text-[10px] text-sky-700">{m.senderName}</b>{m.text}<span className="block text-[9px] text-slate-400 mt-1">{m.createdAt?.toDate?m.createdAt.toDate().toLocaleString('ar-IQ'):''}</span></div>)}</div><div className="flex gap-2"><input value={groupMessageText} onChange={e=>setGroupMessageText(e.target.value)} disabled={!selectedGroupId} onKeyDown={e=>{if(e.key==='Enter')void sendGroupMessage();}} placeholder="اكتب رسالة للكروب..." className="flex-1 border rounded-xl p-3 text-sm"/><button onClick={()=>void sendGroupMessage()} disabled={!selectedGroupId||!groupMessageText.trim()} className="bg-sky-600 text-white rounded-xl px-4 font-black disabled:opacity-40">إرسال</button></div></div>
+            </div>
+            {isAdmin && <div className="bg-white rounded-2xl border p-4 space-y-2"><h3 className="font-black">إدارة الكروبات</h3>{studentGroups.map((g:any)=><div key={g.id} className="flex justify-between items-center border-b py-2"><span className="text-sm font-bold">{g.name} · {g.stage}</span><button onClick={async()=>{if(!confirm('حذف الكروب ورسائله؟'))return;try{await deleteDoc(doc(db,'student_groups',g.id));if(selectedGroupId===g.id)setSelectedGroupId('');}catch(e){alert('تعذر حذف الكروب.');}}} className="text-xs text-rose-600 font-bold">حذف الكروب</button></div>)}</div>}
+          </section>
+        )}
+
+        {/* إعدادات أصوات النظام */}
+        {activeTab === 'soundSettings' && (loggedStudent || isAdmin) && (
+          <section className="bg-white rounded-2xl border shadow-sm p-4 sm:p-6 space-y-4 text-right max-w-2xl mx-auto"><div><h2 className="text-xl font-black">🔊 أصوات النظام</h2><p className="text-xs text-slate-500 mt-1">أصوات خفيفة للإشعارات والتفاعل داخل المنصة. قد يحتاج المتصفح إلى أول ضغطة من المستخدم للسماح بالصوت.</p></div><label className="flex justify-between items-center rounded-xl bg-slate-50 p-3 text-sm font-black"><span>تفعيل أصوات النظام</span><input type="checkbox" checked={soundEnabled} onChange={e=>{setSoundEnabled(e.target.checked);localStorage.setItem('nabigha_sound_enabled',String(e.target.checked));}} className="w-5 h-5"/></label><label className="block text-sm font-bold">مستوى الصوت: {soundVolume}%<input type="range" min="0" max="100" value={soundVolume} onChange={e=>{const v=Number(e.target.value);setSoundVolume(v);localStorage.setItem('nabigha_sound_volume',String(v));}} className="w-full mt-3"/></label><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{([['notification','تجربة إشعار'],['correct','إجابة صحيحة'],['wrong','إجابة خاطئة'],['complete','اكتمال امتحان'],['message','رسالة جديدة']] as const).map(([kind,label])=><button key={kind} onClick={()=>{setSoundReady(true);playSystemSound(kind);}} className="rounded-xl border bg-violet-50 text-violet-800 p-3 text-xs font-black">{label}</button>)}</div>{soundReady&&<p className="text-[10px] text-emerald-700">إذا لم تسمع الصوت، ارفع مستوى صوت الجهاز وتأكد أن المتصفح غير مكتوم.</p>}</section>
+        )}
+
+        {/* إدارة المواعيد والحضور من لوحة الإدارة */}
+        {activeTab === 'students' && isAdmin && (
+          <section className="bg-white rounded-2xl border p-4 mt-4 space-y-3 text-right"><h2 className="font-black text-lg">📅 مواعيد الدروس وتسجيل الحضور</h2><div className="grid grid-cols-1 sm:grid-cols-2 gap-2"><input value={scheduleTitle} onChange={e=>setScheduleTitle(e.target.value)} placeholder="عنوان الدرس / الموعد" className="border rounded-xl p-2 text-sm"/><select value={scheduleSubject} onChange={e=>setScheduleSubject(e.target.value)} className="border rounded-xl p-2 text-sm"><option value="">اختر المادة</option>{subjects.map((sub:any)=><option key={sub.id} value={sub.name}>{sub.name}</option>)}</select><select value={newGroupStage} onChange={e=>setNewGroupStage(e.target.value)} className="border rounded-xl p-2 text-sm">{allStagesList.map(st=><option key={st.id} value={st.name}>{st.name}</option>)}</select><input type="date" value={scheduleDate} onChange={e=>setScheduleDate(e.target.value)} className="border rounded-xl p-2 text-sm"/><input type="time" value={scheduleTime} onChange={e=>setScheduleTime(e.target.value)} className="border rounded-xl p-2 text-sm"/></div><button onClick={async()=>{if(!scheduleTitle.trim()||!scheduleDate||!scheduleTime)return alert('أكمل عنوان الدرس والتاريخ والوقت');try{await addDoc(collection(db,'lesson_schedule'),{title:scheduleTitle.trim(),subjectName:scheduleSubject,stage:newGroupStage,date:scheduleDate,time:scheduleTime,createdAt:serverTimestamp()});setScheduleTitle('');alert('تم حفظ موعد الدرس للمرحلة المحددة.');}catch(e){alert('تعذر حفظ الموعد. تحقق من صلاحيات Firestore.');}}} className="w-full bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-black">إضافة موعد درس</button><h3 className="font-black pt-2">سجل الحضور الأخير</h3><AdminAttendancePanel students={studentsList} />
           </section>
         )}
 
@@ -2955,7 +3132,7 @@ export function App() {
                                 )}
 
                                 <div className="flex items-center justify-between pt-1">
-                                  <button onClick={() => setInteractiveGradedStatus({...interactiveGradedStatus, [ansKey]: true})} className="px-3 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold shadow cursor-pointer">
+                                  <button onClick={() => { setInteractiveGradedStatus({...interactiveGradedStatus, [ansKey]: true}); if (!isWrittenType) { const normalizedUser = String(userAns).trim().toLowerCase(); const normalizedCorrect = String(iq.correct ?? '').trim().toLowerCase(); playSystemSound(normalizedUser && normalizedUser === normalizedCorrect ? 'correct' : 'wrong'); } }} className="px-3 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold shadow cursor-pointer">
                                     {isWrittenType ? 'عرض الإجابة النموذجية' : 'تحقق ✓'}
                                   </button>
                                   {isGraded && (isWrittenType ? <div className="w-full text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg p-2">الإجابة النموذجية: <span style={{ color: iq.answerColor || '#047857' }}>{iq.correct}</span></div> : <span className={`text-[10px] font-black ${isCorrect ? 'text-emerald-600' : 'text-rose-600'}`}>{isCorrect ? '✅ صحيحة بطل!' : <span>❌ خطأ (العبارة الصحيحة: <b style={{ color: iq.answerColor || '#047857', fontSize: iq.questionFontSize || '16px' }}>{iq.correct}</b>)</span>}</span>)}
@@ -3093,7 +3270,7 @@ export function App() {
                         {vid.isVip && !isVipActive && isAdmin === false ? (
                           <button onClick={() => setVipModalItem(vid)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
                         ) : (
-                          <button onClick={() => setActiveVideoUrl(vid.url)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">تشغيل</button>
+                          <button onClick={() => { setActiveVideoUrl(vid.url); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">تشغيل</button>
                         )}
                         {isAdmin && (
                           <div className="flex items-center gap-1">
