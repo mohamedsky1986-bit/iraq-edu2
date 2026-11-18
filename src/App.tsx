@@ -30,6 +30,15 @@ const sanitizeForumHtml = (html: string) => {
   const result = document.createElement('div'); parsed.body.childNodes.forEach(child => { const safe = clean(child); if (safe) result.appendChild(safe); }); return result.innerHTML;
 };
 
+// استخراج اسم الفصل من بيانات الدرس أو عنوانه حتى تظهر الشروحات مجزأة.
+const getLessonChapter = (note: any) => {
+  const explicit = String(note?.chapterName || note?.chapter || note?.unit || note?.sectionName || '').trim();
+  if (explicit) return explicit;
+  const title = String(note?.title || '');
+  const match = title.match(/الفصل\s*(?:الأول|الاول|الثاني|الثالث|الرابع|الخامس|السادس|السابع|الثامن|التاسع|العاشر|\d+)/i);
+  return match ? match[0] : 'شروحات غير مصنفة';
+};
+
 // شارة توثيق زرقاء مستوحاة من أسلوب إنستغرام
 const VerifiedBadge = ({ size = 16 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" aria-label="حساب موثّق" role="img" className="inline-block align-middle shrink-0">
@@ -552,6 +561,12 @@ export function App() {
   }, [activeTab, selectedGroupId]);
 
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
+  const [selectedChapter, setSelectedChapter] = useState('');
+  const [activeSubjectSection, setActiveSubjectSection] = useState<'lessons'|'videos'|'booklets'|'exams'>('lessons');
+  const [adminProfileStudent, setAdminProfileStudent] = useState<any | null>(null);
+  const [adminProfileAttendance, setAdminProfileAttendance] = useState<any[]>([]);
+  const [adminProfileAttempts, setAdminProfileAttempts] = useState<any[]>([]);
+  const [adminProfileLoading, setAdminProfileLoading] = useState(false);
 
   // احتساب حضور واحد فقط لكل طالب ومادة في اليوم، بعد البقاء داخل صفحة المادة 60 ثانية.
   useEffect(() => {
@@ -1016,6 +1031,7 @@ export function App() {
   const [isMinisterialQuestion, setIsMinisterialQuestion] = useState<boolean>(false);
 
   const [newNoteTitle, setNewNoteTitle] = useState('');
+  const [newNoteChapter, setNewNoteChapter] = useState('الفصل الأول');
   const [newNoteContent, setNewNoteContent] = useState('');
   const [newNoteImage, setNewNoteImage] = useState('');
   const [newNoteVip, setNewNoteVip] = useState(false);
@@ -2980,6 +2996,8 @@ export function App() {
                       return;
                     }
                     setSelectedSubjectId(sub.id);
+                    setSelectedChapter('');
+                    setActiveSubjectSection('lessons');
                     setSearchQuery('');
                   }}
                   className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all border border-slate-200 group flex flex-col justify-between relative cursor-pointer"
@@ -3047,17 +3065,18 @@ export function App() {
           const currentSub = subjects.find(s => s.id === selectedSubjectId);
           if (!currentSub) return null;
 
-          const filteredNotes = (currentSub.notes || []).filter((n: any) => 
-            n.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-            n.content.toLowerCase().includes(searchQuery.toLowerCase())
+          const chapterNames = Array.from(new Set((currentSub.notes || []).map((n: any) => getLessonChapter(n)))) as string[];
+          const filteredNotes = (currentSub.notes || []).filter((n: any) =>
+            (!selectedChapter || getLessonChapter(n) === selectedChapter) &&
+            (String(n.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || String(n.content || '').toLowerCase().includes(searchQuery.toLowerCase()))
           );
 
           const filteredVideos = (currentSub.videos || []).filter((v: any) => 
-            v.title.toLowerCase().includes(searchQuery.toLowerCase())
+            String(v.title || '').toLowerCase().includes(searchQuery.toLowerCase())
           );
 
           const filteredBooklets = (currentSub.booklets || []).filter((b: any) => 
-            b.title.toLowerCase().includes(searchQuery.toLowerCase())
+            String(b.title || '').toLowerCase().includes(searchQuery.toLowerCase())
           );
 
           return (
@@ -3084,6 +3103,13 @@ export function App() {
                   placeholder="بحث سريع (اكتب أول حرف أو كلمة مثل: الفصل الأول، تعريف...)" 
                   className="w-full bg-slate-50 border-2 border-indigo-100 rounded-2xl pr-10 pl-4 py-3 text-xs sm:text-sm font-bold text-slate-900 focus:outline-none focus:border-indigo-500 shadow-sm"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <button onClick={() => setActiveSubjectSection('lessons')} className={`rounded-xl p-3 text-sm font-black border ${activeSubjectSection==='lessons'?'bg-amber-500 text-white border-amber-500':'bg-white text-slate-700'}`}>📖 الشروحات</button>
+                <button onClick={() => setActiveSubjectSection('videos')} className={`rounded-xl p-3 text-sm font-black border ${activeSubjectSection==='videos'?'bg-indigo-600 text-white border-indigo-600':'bg-white text-slate-700'}`}>🎬 الفيديوات</button>
+                <button onClick={() => setActiveSubjectSection('booklets')} className={`rounded-xl p-3 text-sm font-black border ${activeSubjectSection==='booklets'?'bg-emerald-600 text-white border-emerald-600':'bg-white text-slate-700'}`}>📚 الملازم</button>
+                <button onClick={() => setActiveSubjectSection('exams')} className={`rounded-xl p-3 text-sm font-black border ${activeSubjectSection==='exams'?'bg-violet-600 text-white border-violet-600':'bg-white text-slate-700'}`}>📝 الامتحانات</button>
               </div>
 
               {isAdmin && (
@@ -3122,10 +3148,14 @@ export function App() {
               )}
 
               {/* أ) الشروحات والتعاليل */}
-              <div className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
+              <div hidden={activeSubjectSection !== 'lessons'} className="bg-slate-50 p-3 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({filteredNotes.length})
                 </h4>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => setSelectedChapter('')} className={`rounded-full px-3 py-2 text-xs font-black ${!selectedChapter?'bg-amber-600 text-white':'bg-white border text-slate-700'}`}>كل الفصول</button>
+                  {chapterNames.map(ch => <button key={ch} onClick={() => setSelectedChapter(ch)} className={`rounded-full px-3 py-2 text-xs font-black ${selectedChapter===ch?'bg-amber-600 text-white':'bg-white border text-slate-700'}`}>{ch}</button>)}
+                </div>
                 <div className="space-y-4">
                   {filteredNotes.map((note: any, nIdx: number) => (
                     <div key={note.id} className="p-4 bg-white rounded-2xl border shadow-sm space-y-3 relative">
@@ -3225,7 +3255,8 @@ export function App() {
                 {isAdmin && (
                   <div className="bg-white p-4 rounded-xl border space-y-3 mt-3">
                     <h5 className="text-xs font-black text-slate-800">➕ إضافة شرح أو تعليل جديد (مع صورة توضيحية وسؤال تفاعلي):</h5>
-                    <input type="text" value={newNoteTitle} onChange={(e) => setNewNoteTitle(e.target.value)} placeholder="العنوان..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
+                    <input type="text" value={newNoteChapter} onChange={(e) => setNewNoteChapter(e.target.value)} placeholder="الفصل (مثال: الفصل الأول)" className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
+                    <input type="text" value={newNoteTitle} onChange={(e) => setNewNoteTitle(e.target.value)} placeholder="عنوان الشرح..." className="w-full px-3 py-2 border rounded-xl text-xs font-bold" />
                     <textarea value={newNoteContent} onChange={(e) => setNewNoteContent(e.target.value)} placeholder="النص التفصيلي..." className="w-full px-3 py-2 border rounded-xl text-sm font-bold min-h-28" />
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 rounded-xl border bg-slate-50 p-3">
                       <label className="text-xs font-bold">حجم نص الشرح<select value={noteFontSize} onChange={e => setNoteFontSize(e.target.value)} className="mt-1 w-full border rounded-lg p-2 bg-white"><option value="15">صغير</option><option value="17">متوسط</option><option value="19">كبير</option><option value="22">كبير جداً</option><option value="25">ضخم</option></select></label>
@@ -3307,7 +3338,7 @@ export function App() {
                       if (!newNoteTitle || !newNoteContent) return;
                       const newNoteObj = { 
                         id: Date.now().toString(), 
-                        title: newNoteTitle, 
+                        title: newNoteTitle, chapterName: newNoteChapter.trim() || 'شروحات غير مصنفة',
                         content: newNoteContent, 
                         fontSize: `${noteFontSize}px`, textColor: noteTextColor, titleColor: noteTitleColor, titleFontSize: '18px', contentBold,
                         image: newNoteImage, 
@@ -3328,7 +3359,7 @@ export function App() {
               </div>
 
               {/* ب) الفيديوهات الشارحة (مع زر التعديل والـ VIP) */}
-              <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
+              <div hidden={activeSubjectSection !== 'videos'} className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <Video className="w-4 h-4 text-indigo-600" /> الدروس المرئية ({filteredVideos.length})
                 </h4>
@@ -3395,7 +3426,7 @@ export function App() {
               </div>
 
               {/* ج) ملازم PDF (مع زر التعديل والـ VIP) */}
-              <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
+              <div hidden={activeSubjectSection !== 'booklets'} className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <FileText className="w-4 h-4 text-emerald-600" /> ملازم الـ PDF ({filteredBooklets.length})
                 </h4>
@@ -3461,7 +3492,7 @@ export function App() {
               </div>
 
               {/* د) الامتحانات (مع خاصية الاستيراد السريع للأسئلة التفاعلية المضافة سابقاً) */}
-              <div className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
+              <div hidden={activeSubjectSection !== 'exams'} className="bg-slate-50 p-4 sm:p-5 rounded-2xl border space-y-4">
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <CheckSquare className="w-4 h-4 text-indigo-600" /> الامتحانات المتاحة ({currentSub.quizzes?.length || 0})
                 </h4>
@@ -3699,6 +3730,22 @@ export function App() {
               <Users className="w-5 h-5 text-indigo-600" /> إدارة الطلبة ودرجاتهم وتعديل بياناتهم
             </h2>
 
+            {adminProfileStudent && (
+              <div className="rounded-2xl border-2 border-sky-200 bg-sky-50 p-4 space-y-3 text-right">
+                <div className="flex items-center justify-between gap-2"><h3 className="font-black text-lg text-sky-950">الملف الشخصي الكامل للطالب</h3><button onClick={()=>setAdminProfileStudent(null)} className="rounded-lg bg-white border px-3 py-1 text-xs font-bold">إغلاق ✕</button></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                  <p><b>الاسم:</b> {adminProfileStudent.name} {adminProfileStudent.isVerified && <VerifiedBadge size={16}/>}</p><p><b>المرحلة:</b> {adminProfileStudent.stage}</p>
+                  <p><b>اسم المستخدم:</b> {adminProfileStudent.username || '—'}</p><p><b>تاريخ التسجيل:</b> {adminProfileStudent.regDate || '—'}</p>
+                  <p><b>الاشتراك:</b> {adminProfileStudent.isVip ? 'VIP' : 'عادي'}</p><p><b>آخر ظهور:</b> {adminProfileStudent.lastSeen || '—'}</p>
+                  <p><b>الحالة:</b> {adminProfileStudent.status || '—'}</p><p><b>آخر درجة:</b> {adminProfileStudent.examScore || 'لا توجد'}</p>
+                </div>
+                {adminProfileLoading ? <p className="text-sm font-bold text-sky-800">جارٍ تحميل الحضور والامتحانات...</p> : <>
+                  <div className="rounded-xl bg-white border p-3"><h4 className="font-black text-sm mb-2">سجل الحضور والغياب ({adminProfileAttendance.length})</h4>{adminProfileAttendance.length ? adminProfileAttendance.slice(0,30).map((a:any)=><div key={a.id} className="flex justify-between gap-2 border-b last:border-0 py-1 text-xs"><span>{a.date} · {a.subjectName || 'درس'}</span><b>{a.status}</b></div>) : <p className="text-xs text-slate-500">لا توجد سجلات حضور.</p>}</div>
+                  <div className="rounded-xl bg-white border p-3"><h4 className="font-black text-sm mb-2">سجل الامتحانات ({adminProfileAttempts.length})</h4>{adminProfileAttempts.length ? adminProfileAttempts.slice(0,30).map((a:any)=><div key={a.id} className="flex justify-between gap-2 border-b last:border-0 py-1 text-xs"><span>{a.subjectName || a.subject || 'امتحان'} · {a.quizTitle || a.title || 'اختبار'}</span><b>{a.score ?? a.examScore ?? '—'}</b></div>) : <p className="text-xs text-slate-500">لا توجد محاولات محفوظة.</p>}</div>
+                </>}
+              </div>
+            )}
+
             {/* أدوات البحث والتصفية: لا تغيّر بيانات الطلبة أو طريقة إدارتهم */}
             <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_220px] gap-2 rounded-2xl border border-indigo-100 bg-indigo-50/60 p-3">
               <div className="relative">
@@ -3866,6 +3913,18 @@ export function App() {
                       </td>
 
                       <td className="p-3 text-center space-y-1">
+                        <button onClick={async () => {
+                          setAdminProfileStudent(st); setAdminProfileLoading(true); setAdminProfileAttendance([]); setAdminProfileAttempts([]);
+                          try {
+                            const [attendanceSnap, attemptsSnap] = await Promise.all([
+                              getDocs(query(collection(db, 'attendance_records'), where('studentId', '==', st.id))),
+                              getDocs(query(collection(db, 'exam_attempts'), where('studentId', '==', st.id)))
+                            ]);
+                            setAdminProfileAttendance(attendanceSnap.docs.map(d => ({id:d.id,...d.data()})).sort((a:any,b:any)=>String(b.date||'').localeCompare(String(a.date||''))));
+                            setAdminProfileAttempts(attemptsSnap.docs.map(d => ({id:d.id,...d.data()})).sort((a:any,b:any)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)));
+                          } catch (err) { console.warn('تعذر تحميل الملف الكامل للطالب',err); alert('تعذر تحميل بعض تفاصيل الملف. تحقق من صلاحيات Firestore.'); }
+                          finally { setAdminProfileLoading(false); }
+                        }} className="px-2 py-1 bg-sky-700 text-white rounded text-[10px] font-bold block mx-auto">👤 الملف الشخصي الكامل</button>
                         {st.examDetails && (
                           <button onClick={() => setViewingStudentAnswers(st)} className="px-2 py-1 bg-indigo-600 text-white rounded text-[10px] font-bold cursor-pointer block mx-auto">
                             🔍 عرض آخر إجابات
