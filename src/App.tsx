@@ -89,7 +89,7 @@ const AdminAttendancePanel = ({ students }: { students: any[] }) => {
     try { await addDoc(collection(db,'attendance_records'), { studentId:student.id, studentName:student.name||'', stage:student.stage||'', subjectName:'تسجيل إداري', date, status, source:'إداري', attendedAt:serverTimestamp() }); }
     catch(e) { alert('تعذر إضافة سجل الحضور اليدوي.'); }
   };
-  return <div className="space-y-3"><div className="rounded-xl border p-3 space-y-2"><b className="text-sm">تسجيل حضور يدوي للطلاب</b>{students.slice(0,80).map((student:any)=><div key={student.id} className="flex flex-wrap items-center justify-between gap-2 border-b last:border-0 py-2"><span className="text-xs font-bold">{student.name} <span className="text-slate-400">· {student.stage}</span></span><div className="flex gap-1">{['حاضر','غائب','متأخر'].map(status=><button key={status} onClick={()=>void addManualRecord(student,status)} className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-700">{status}</button>)}</div></div>)}</div><b className="text-sm">آخر سجلات الحضور</b><div className="space-y-2 max-h-[520px] overflow-y-auto">{rows.length ? rows.map(row=><div key={row.id} className="border rounded-xl p-3 flex flex-wrap items-center justify-between gap-2"><div><b className="text-sm">{row.studentName}</b><p className="text-[10px] text-slate-500">{row.stage} · {row.subjectName} · {row.date}</p></div><div className="flex gap-1">{['حاضر','غائب','متأخر'].map(status=><button key={status} onClick={()=>void changeStatus(row,status)} className={`px-2 py-1 rounded-lg text-[10px] font-bold ${row.status===status?'bg-indigo-600 text-white':'bg-slate-100 text-slate-700'}`}>{status}</button>)}</div></div>) : <p className="text-xs text-slate-500">لا توجد سجلات حضور حتى الآن.</p>}</div></div>;
+  return <div className="space-y-3"><div className="rounded-xl border p-3 space-y-2"><b className="text-sm">تسجيل حضور يدوي للطلاب</b>{students.slice(0,80).map((student:any)=><div key={student.id} className="flex flex-wrap items-center justify-between gap-2 border-b last:border-0 py-2"><span className="text-xs font-bold">{student.name} <span className="text-slate-400">· {student.stage}</span></span><div className="flex gap-1">{['حاضر','غائب','متأخر'].map(status=><button key={status} onClick={()=>void addManualRecord(student,status)} className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-100 text-slate-700">{status}</button>)}</div></div>)}</div><b className="text-sm">آخر سجلات الحضور</b><div className="space-y-2 max-h-[520px] overflow-y-auto">{rows.length ? rows.map(row=><div key={row.id} className="border rounded-xl p-3 flex flex-wrap items-center justify-between gap-2"><div><b className="text-sm">{row.studentName}</b><p className="text-[10px] text-slate-500">{row.stage} · {row.subjectName} · {row.date}</p></div><div className="flex flex-wrap gap-1">{['حاضر','غائب','متأخر'].map(status=><button key={status} onClick={()=>void changeStatus(row,status)} className={`px-2 py-1 rounded-lg text-[10px] font-bold ${row.status===status?'bg-indigo-600 text-white':'bg-slate-100 text-slate-700'}`}>{status}</button>)}<button onClick={async()=>{if(!confirm('حذف سجل الحضور هذا؟'))return;try{await deleteDoc(doc(db,'attendance_records',row.id));}catch(e){alert('تعذر حذف السجل.');}}} className="px-2 py-1 rounded-lg text-[10px] font-bold bg-rose-50 text-rose-700">حذف</button></div></div>) : <p className="text-xs text-slate-500">لا توجد سجلات حضور حتى الآن.</p>}</div></div>;
 };
 
 export function App() {
@@ -450,6 +450,13 @@ export function App() {
   const [groupMessages, setGroupMessages] = useState<any[]>([]);
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [groupMessageText, setGroupMessageText] = useState('');
+  const [forumStage, setForumStage] = useState('');
+  const [forumSubject, setForumSubject] = useState('');
+  const [forumPosts, setForumPosts] = useState<any[]>([]);
+  const [forumText, setForumText] = useState('');
+  const [forumCommentDrafts, setForumCommentDrafts] = useState<Record<string,string>>({});
+  const [forumComments, setForumComments] = useState<Record<string,any[]>>({});
+  const [soundContext, setSoundContext] = useState<any>(null);
   const [newGroupName, setNewGroupName] = useState('');
   const [newGroupStage, setNewGroupStage] = useState('الثالث المتوسط');
   const [scheduleTitle, setScheduleTitle] = useState('');
@@ -457,29 +464,34 @@ export function App() {
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('');
   const [soundEnabled, setSoundEnabled] = useState<boolean>(() => localStorage.getItem('nabigha_sound_enabled') !== 'false');
-  const [soundVolume, setSoundVolume] = useState<number>(() => Number(localStorage.getItem('nabigha_sound_volume') || 35));
+  const [soundVolume, setSoundVolume] = useState<number>(() => Number(localStorage.getItem('nabigha_sound_volume') || 75));
   const [soundReady, setSoundReady] = useState(false);
 
-  const playSystemSound = (kind: 'notification' | 'correct' | 'wrong' | 'complete' | 'message' = 'notification') => {
-    if (!soundEnabled || typeof window === 'undefined') return;
+  const unlockSystemSound = async () => {
     try {
       const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContextClass) return;
-      const ctx = new AudioContextClass();
-      const patterns: Record<string, number[]> = { notification: [660, 880], correct: [660, 880, 1040], wrong: [260, 190], complete: [523, 659, 784], message: [740, 880] };
-      let start = ctx.currentTime;
+      if (!AudioContextClass) return null;
+      let ctx = soundContext;
+      if (!ctx || ctx.state === 'closed') { ctx = new AudioContextClass(); setSoundContext(ctx); }
+      if (ctx.state === 'suspended') await ctx.resume();
+      setSoundReady(true);
+      return ctx;
+    } catch (error) { console.warn('تعذر تفعيل الصوت:', error); return null; }
+  };
+  const playSystemSound = async (kind: 'notification' | 'correct' | 'wrong' | 'complete' | 'message' = 'notification') => {
+    if (!soundEnabled || typeof window === 'undefined') return;
+    try {
+      const ctx = await unlockSystemSound(); if (!ctx || ctx.state !== 'running') return;
+      const patterns: Record<string, number[]> = { notification: [740, 990], correct: [660, 880, 1100], wrong: [300, 220], complete: [523, 659, 784, 988], message: [820, 1040] };
+      let start = ctx.currentTime + 0.015;
+      const master = Math.max(0.015, Math.pow(Math.max(0, Math.min(100, soundVolume)) / 100, 1.35) * 0.42);
       (patterns[kind] || patterns.notification).forEach((frequency) => {
-        const oscillator = ctx.createOscillator();
-        const gain = ctx.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.value = frequency;
-        gain.gain.setValueAtTime(Math.max(0.001, soundVolume / 100 * 0.12), start);
-        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.13);
-        oscillator.connect(gain); gain.connect(ctx.destination);
-        oscillator.start(start); oscillator.stop(start + 0.14);
-        start += 0.16;
+        const oscillator = ctx.createOscillator(); const gain = ctx.createGain();
+        oscillator.type = 'triangle'; oscillator.frequency.setValueAtTime(frequency, start);
+        gain.gain.setValueAtTime(0.0001, start); gain.gain.linearRampToValueAtTime(master, start + 0.025);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.22);
+        oscillator.connect(gain); gain.connect(ctx.destination); oscillator.start(start); oscillator.stop(start + 0.23); start += 0.25;
       });
-      window.setTimeout(() => { void ctx.close(); }, 1000);
     } catch (error) { console.warn('تعذر تشغيل صوت النظام:', error); }
   };
 
@@ -549,6 +561,45 @@ export function App() {
       setGroupMessageText(''); playSystemSound('message');
     } catch (error) { alert('تعذر إرسال رسالة الكروب. تحقق من صلاحيات Firestore.'); }
   };
+
+  // منتديات مستقلة لكل مرحلة، مع أقسام حسب المادة.
+  useEffect(() => {
+    if (activeTab !== 'studentGroups') return;
+    const stage = isAdmin ? (forumStage || newGroupStage) : (loggedStudent?.stage || '');
+    if (!stage) { setForumPosts([]); return; }
+    const unsub = onSnapshot(query(collection(db,'forum_posts'), where('stage','==',stage)), snap => {
+      const rows = snap.docs.map(d=>({id:d.id,...d.data()}));
+      rows.sort((a:any,b:any)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)); setForumPosts(rows);
+    }, err=>console.warn('تعذر تحميل المنتدى:',err));
+    return ()=>unsub();
+  }, [activeTab,isAdmin,loggedStudent?.stage,forumStage,newGroupStage]);
+
+  const createForumPost = async () => {
+    const stage = isAdmin ? (forumStage || newGroupStage) : loggedStudent?.stage;
+    if (!stage || !forumSubject || !forumText.trim() || (!loggedStudent && !isAdmin)) return alert('اختر المادة واكتب المنشور.');
+    try {
+      await addDoc(collection(db,'forum_posts'), { stage, subjectName:forumSubject, text:forumText.trim(), authorId:isAdmin?'admin':loggedStudent.id, authorName:isAdmin?'إدارة النابغة':loggedStudent.name, authorVerified:!!currentLoggedStudentData?.isVerified, likes:[], createdAt:serverTimestamp(), updatedAt:serverTimestamp() });
+      setForumText(''); void playSystemSound('message');
+    } catch(e) { alert('تعذر نشر الموضوع. تحقق من صلاحيات Firestore.'); }
+  };
+  const toggleForumLike = async (post:any) => {
+    if (!loggedStudent?.id) return alert('سجّل دخولك حتى تتمكن من الإعجاب.');
+    const likes = Array.isArray(post.likes)?post.likes:[]; const next = likes.includes(loggedStudent.id)?likes.filter((id:string)=>id!==loggedStudent.id):[...likes,loggedStudent.id];
+    try { await updateDoc(doc(db,'forum_posts',post.id),{likes:next}); } catch(e) { alert('تعذر تسجيل الإعجاب.'); }
+  };
+  const addForumComment = async (post:any) => {
+    const text = (forumCommentDrafts[post.id]||'').trim(); if(!text || !loggedStudent?.id) return;
+    try { await addDoc(collection(db,'forum_comments'),{postId:post.id,stage:post.stage,text,authorId:loggedStudent.id,authorName:loggedStudent.name,authorVerified:!!currentLoggedStudentData?.isVerified,createdAt:serverTimestamp()}); setForumCommentDrafts(old=>({...old,[post.id]:''})); }
+    catch(e) { alert('تعذر إضافة التعليق.'); }
+  };
+  const removeForumPost = async (post:any) => { if(!isAdmin || !confirm('حذف هذا المنشور نهائياً؟')) return; try { await deleteDoc(doc(db,'forum_posts',post.id)); } catch(e) { alert('تعذر حذف المنشور.'); } };
+  const updateForumPost = async (post:any) => { if(!isAdmin) return; const text=prompt('تعديل نص المنشور',post.text||''); if(text===null || !text.trim()) return; try { await updateDoc(doc(db,'forum_posts',post.id),{text:text.trim(),updatedAt:serverTimestamp(),editedBy:'admin'}); } catch(e) { alert('تعذر تعديل المنشور.'); } };
+  const moderateForumComment = async (comment:any) => { if(!isAdmin || !confirm('حذف التعليق؟')) return; try { await deleteDoc(doc(db,'forum_comments',comment.id)); } catch(e) { alert('تعذر حذف التعليق.'); } };
+  useEffect(() => {
+    if(activeTab!=='studentGroups' || !forumPosts.length) return;
+    const unsubs = forumPosts.map(post=>onSnapshot(query(collection(db,'forum_comments'),where('postId','==',post.id)),snap=>setForumComments(old=>({...old,[post.id]:snap.docs.map(d=>({id:d.id,...d.data()})).sort((a:any,b:any)=>(a.createdAt?.seconds||0)-(b.createdAt?.seconds||0))})),err=>console.warn(err)));
+    return ()=>unsubs.forEach(fn=>fn());
+  },[activeTab,forumPosts.map(p=>p.id).join('|')]);
 
   // لوحة الإحصائيات فقط هي التي تشترك مع الجلسات النشطة؛ يعاد تحديث نافذة الدقيقتين كل دقيقة.
   useEffect(() => {
@@ -2670,7 +2721,7 @@ export function App() {
                 <Users className="w-3.5 h-3.5" /> إحصائيات الزوار
               </button>
               <button onClick={() => { setActiveTab('guestSettings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'guestSettings' ? 'bg-fuchsia-700 text-white' : 'bg-fuchsia-50 text-fuchsia-700'}`}><Eye className="w-3.5 h-3.5" /> إعدادات الزوار</button>
-              <button onClick={() => { setActiveTab('studentGroups'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs whitespace-nowrap ${activeTab === 'studentGroups' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700'}`}>👥 كروبات الطلاب</button>
+              <button onClick={() => { setActiveTab('studentGroups'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs whitespace-nowrap ${activeTab === 'studentGroups' ? 'bg-sky-600 text-white' : 'bg-sky-50 text-sky-700'}`}>📚 منتدى المرحلة</button>
               <button onClick={() => { setActiveTab('soundSettings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs whitespace-nowrap ${activeTab === 'soundSettings' ? 'bg-violet-600 text-white' : 'bg-violet-50 text-violet-700'}`}>🔊 أصوات النظام</button>
               <button onClick={() => { setActiveTab('settings'); setSelectedSubjectId(null); }} className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 whitespace-nowrap ${activeTab === 'settings' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'}`}>
                 <Key className="w-3.5 h-3.5" /> كلمة المرور
@@ -2685,7 +2736,7 @@ export function App() {
           <div className="max-w-7xl mx-auto px-3 py-2 flex gap-2 overflow-x-auto scrollbar-none">
             <button onClick={() => setActiveTab('curriculum')} className={`shrink-0 px-3 py-2 rounded-xl text-xs font-black ${activeTab === 'curriculum' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'}`}>📚 المنهج</button>
             <button onClick={() => setActiveTab('studentProfile')} className={`shrink-0 px-3 py-2 rounded-xl text-xs font-black ${activeTab === 'studentProfile' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-700'}`}>👤 ملفي الشخصي</button>
-            <button onClick={() => setActiveTab('studentGroups')} className={`shrink-0 px-3 py-2 rounded-xl text-xs font-black ${activeTab === 'studentGroups' ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-700'}`}>👥 كروبات الطلاب</button>
+            <button onClick={() => setActiveTab('studentGroups')} className={`shrink-0 px-3 py-2 rounded-xl text-xs font-black ${activeTab === 'studentGroups' ? 'bg-sky-600 text-white' : 'bg-slate-100 text-slate-700'}`}>📚 منتدى المرحلة</button>
             <button onClick={() => setActiveTab('soundSettings')} className={`shrink-0 px-3 py-2 rounded-xl text-xs font-black ${activeTab === 'soundSettings' ? 'bg-violet-600 text-white' : 'bg-slate-100 text-slate-700'}`}>🔊 أصوات النظام</button>
           </div>
         </div>
@@ -2841,20 +2892,21 @@ export function App() {
           </section>
         )}
 
-        {/* إدارة الكروبات والمحادثة الجماعية */}
+        {/* منتدى المرحلة الدراسي */}
         {activeTab === 'studentGroups' && (loggedStudent || isAdmin) && (
           <section className="space-y-4 text-right">
-            {isAdmin && <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-3"><h2 className="font-black text-lg">إنشاء كروب طلاب</h2><input value={newGroupName} onChange={e=>setNewGroupName(e.target.value)} placeholder="اسم الكروب" className="w-full border rounded-xl p-3 text-sm"/><select value={newGroupStage} onChange={e=>setNewGroupStage(e.target.value)} className="w-full border rounded-xl p-3 text-sm">{allStagesList.map(st=><option key={st.id} value={st.name}>{st.name}</option>)}</select><button onClick={async()=>{if(!newGroupName.trim())return alert('اكتب اسم الكروب');try{await addDoc(collection(db,'student_groups'),{name:newGroupName.trim(),stage:newGroupStage,openToStage:true,memberIds:[],createdAt:serverTimestamp(),createdBy:'admin'});setNewGroupName('');alert('تم إنشاء الكروب.');}catch(e){alert('تعذر إنشاء الكروب؛ تحقق من صلاحيات Firestore.');}}} className="w-full bg-sky-600 text-white rounded-xl py-3 text-sm font-black">إنشاء الكروب</button></div>}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3"><div className="bg-white rounded-2xl border p-3 space-y-2"><h3 className="font-black">الكروبات المتاحة</h3>{studentGroups.length?studentGroups.map((g:any)=><button key={g.id} onClick={()=>setSelectedGroupId(g.id)} className={`w-full text-right rounded-xl p-3 border text-sm font-bold ${selectedGroupId===g.id?'bg-sky-600 text-white border-sky-600':'bg-slate-50'}`}>{g.name}<span className="block text-[10px] opacity-75">{g.stage}</span></button>):<p className="text-xs text-slate-500">لا توجد كروبات متاحة حالياً.</p>}</div>
-              <div className="md:col-span-2 bg-white rounded-2xl border p-3 flex flex-col min-h-[420px]"><h3 className="font-black border-b pb-3">{studentGroups.find((g:any)=>g.id===selectedGroupId)?.name || 'اختر كروباً لعرض المحادثة'}</h3><div className="flex-1 min-h-64 max-h-[55vh] overflow-y-auto py-3 space-y-2">{groupMessages.map((m:any)=><div key={m.id} className={`max-w-[90%] rounded-2xl p-3 text-sm ${m.senderId===(loggedStudent?.id||'')?'mr-auto bg-indigo-50':'ml-auto bg-slate-100'}`}><b className="block text-[10px] text-sky-700">{m.senderName}</b>{m.text}<span className="block text-[9px] text-slate-400 mt-1">{m.createdAt?.toDate?m.createdAt.toDate().toLocaleString('ar-IQ'):''}</span></div>)}</div><div className="flex gap-2"><input value={groupMessageText} onChange={e=>setGroupMessageText(e.target.value)} disabled={!selectedGroupId} onKeyDown={e=>{if(e.key==='Enter')void sendGroupMessage();}} placeholder="اكتب رسالة للكروب..." className="flex-1 border rounded-xl p-3 text-sm"/><button onClick={()=>void sendGroupMessage()} disabled={!selectedGroupId||!groupMessageText.trim()} className="bg-sky-600 text-white rounded-xl px-4 font-black disabled:opacity-40">إرسال</button></div></div>
+            <div className="rounded-2xl bg-gradient-to-l from-indigo-700 to-sky-600 text-white p-4"><h2 className="text-xl font-black">📚 منتدى المرحلة</h2><p className="text-xs mt-1 text-white/80">أسئلة ومناقشات علمية حسب المادة، بإشراف إدارة النابغة.</p>
+              {isAdmin ? <select value={forumStage||newGroupStage} onChange={e=>setForumStage(e.target.value)} className="mt-3 w-full rounded-xl p-3 text-slate-900">{allStagesList.map(st=><option key={st.id} value={st.name}>{st.name}</option>)}</select> : <div className="mt-2 text-sm font-bold">المرحلة: {loggedStudent?.stage}</div>}
             </div>
-            {isAdmin && <div className="bg-white rounded-2xl border p-4 space-y-2"><h3 className="font-black">إدارة الكروبات</h3>{studentGroups.map((g:any)=><div key={g.id} className="flex justify-between items-center border-b py-2"><span className="text-sm font-bold">{g.name} · {g.stage}</span><button onClick={async()=>{if(!confirm('حذف الكروب ورسائله؟'))return;try{await deleteDoc(doc(db,'student_groups',g.id));if(selectedGroupId===g.id)setSelectedGroupId('');}catch(e){alert('تعذر حذف الكروب.');}}} className="text-xs text-rose-600 font-bold">حذف الكروب</button></div>)}</div>}
+            <div className="bg-white rounded-2xl border p-4 space-y-3"><h3 className="font-black">✍️ اكتب سؤالاً أو موضوعاً</h3><select value={forumSubject} onChange={e=>setForumSubject(e.target.value)} className="w-full border rounded-xl p-3 text-sm"><option value="">اختر المادة</option>{subjects.filter((sub:any)=>!sub.stage || sub.stage===(isAdmin?(forumStage||newGroupStage):loggedStudent?.stage)).map((sub:any)=><option key={sub.id} value={sub.name}>{sub.name}</option>)}</select><textarea value={forumText} onChange={e=>setForumText(e.target.value)} rows={3} maxLength={2500} placeholder="اكتب سؤالك أو شارك معلومة مفيدة..." className="w-full border rounded-xl p-3 text-sm"/><button onClick={()=>void createForumPost()} className="w-full rounded-xl bg-indigo-600 text-white py-3 font-black">نشر في المنتدى</button></div>
+            <div className="flex flex-wrap gap-2"><button onClick={()=>setForumSubject('')} className={`rounded-full px-3 py-2 text-xs font-bold ${!forumSubject?'bg-indigo-600 text-white':'bg-white border'}`}>كل المواد</button>{Array.from(new Set(subjects.map((x:any)=>x.name))).map((name:any)=><button key={name} onClick={()=>setForumSubject(name)} className={`rounded-full px-3 py-2 text-xs font-bold ${forumSubject===name?'bg-indigo-600 text-white':'bg-white border'}`}>{name}</button>)}</div>
+            <div className="space-y-3">{forumPosts.filter(post=>!forumSubject||post.subjectName===forumSubject).map(post=><article key={post.id} className="bg-white border rounded-2xl p-4 space-y-3 shadow-sm"><div className="flex justify-between gap-2"><div><div className="font-black text-sm flex items-center gap-1">{post.authorName}{post.authorVerified&&<VerifiedBadge size={15}/>}</div><div className="text-[11px] text-slate-500">{post.stage} · {post.subjectName} · {post.createdAt?.toDate?post.createdAt.toDate().toLocaleString('ar-IQ'):''}</div></div>{isAdmin&&<div className="flex gap-2 text-xs"><button onClick={()=>updateForumPost(post)} className="text-indigo-700 font-bold">تعديل</button><button onClick={()=>removeForumPost(post)} className="text-rose-600 font-bold">حذف</button></div>}</div><p className="text-sm whitespace-pre-wrap leading-7">{post.text}</p><div className="flex items-center gap-3 border-y py-2"><button onClick={()=>void toggleForumLike(post)} className="text-xs font-bold text-rose-600">♥ إعجاب ({post.likes?.length||0})</button><span className="text-xs text-slate-500">{(forumComments[post.id]||[]).length} تعليق</span></div><div className="space-y-2">{(forumComments[post.id]||[]).map((comment:any)=><div key={comment.id} className="bg-slate-50 rounded-xl p-2 text-xs"><div className="flex justify-between"><b className="flex items-center gap-1">{comment.authorName}{comment.authorVerified&&<VerifiedBadge size={13}/>}</b>{isAdmin&&<button onClick={()=>moderateForumComment(comment)} className="text-rose-600 font-bold">حذف</button>}</div><p className="mt-1 whitespace-pre-wrap">{comment.text}</p></div>)}</div>{loggedStudent&&<div className="flex gap-2"><input value={forumCommentDrafts[post.id]||''} onChange={e=>setForumCommentDrafts(old=>({...old,[post.id]:e.target.value}))} placeholder="اكتب تعليقاً..." className="flex-1 border rounded-xl p-2 text-xs"/><button onClick={()=>void addForumComment(post)} className="bg-sky-600 text-white rounded-xl px-3 text-xs font-bold">تعليق</button></div>}</article>)}{!forumPosts.length&&<div className="bg-white border rounded-2xl p-8 text-center text-sm text-slate-500">لا توجد منشورات في منتدى هذه المرحلة. كن أول من يطرح سؤالاً.</div>}</div>
           </section>
         )}
 
         {/* إعدادات أصوات النظام */}
         {activeTab === 'soundSettings' && (loggedStudent || isAdmin) && (
-          <section className="bg-white rounded-2xl border shadow-sm p-4 sm:p-6 space-y-4 text-right max-w-2xl mx-auto"><div><h2 className="text-xl font-black">🔊 أصوات النظام</h2><p className="text-xs text-slate-500 mt-1">أصوات خفيفة للإشعارات والتفاعل داخل المنصة. قد يحتاج المتصفح إلى أول ضغطة من المستخدم للسماح بالصوت.</p></div><label className="flex justify-between items-center rounded-xl bg-slate-50 p-3 text-sm font-black"><span>تفعيل أصوات النظام</span><input type="checkbox" checked={soundEnabled} onChange={e=>{setSoundEnabled(e.target.checked);localStorage.setItem('nabigha_sound_enabled',String(e.target.checked));}} className="w-5 h-5"/></label><label className="block text-sm font-bold">مستوى الصوت: {soundVolume}%<input type="range" min="0" max="100" value={soundVolume} onChange={e=>{const v=Number(e.target.value);setSoundVolume(v);localStorage.setItem('nabigha_sound_volume',String(v));}} className="w-full mt-3"/></label><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{([['notification','تجربة إشعار'],['correct','إجابة صحيحة'],['wrong','إجابة خاطئة'],['complete','اكتمال امتحان'],['message','رسالة جديدة']] as const).map(([kind,label])=><button key={kind} onClick={()=>{setSoundReady(true);playSystemSound(kind);}} className="rounded-xl border bg-violet-50 text-violet-800 p-3 text-xs font-black">{label}</button>)}</div>{soundReady&&<p className="text-[10px] text-emerald-700">إذا لم تسمع الصوت، ارفع مستوى صوت الجهاز وتأكد أن المتصفح غير مكتوم.</p>}</section>
+          <section className="bg-white rounded-2xl border shadow-sm p-4 sm:p-6 space-y-4 text-right max-w-2xl mx-auto"><div><h2 className="text-xl font-black">🔊 أصوات النظام</h2><p className="text-xs text-slate-500 mt-1">أصوات أوضح للإشعارات والتفاعل داخل المنصة. قد يحتاج المتصفح إلى أول ضغطة من المستخدم للسماح بالصوت.</p></div><label className="flex justify-between items-center rounded-xl bg-slate-50 p-3 text-sm font-black"><span>تفعيل أصوات النظام</span><input type="checkbox" checked={soundEnabled} onChange={e=>{setSoundEnabled(e.target.checked);localStorage.setItem('nabigha_sound_enabled',String(e.target.checked));}} className="w-5 h-5"/></label><label className="block text-sm font-bold">مستوى الصوت: {soundVolume}%<input type="range" min="0" max="100" value={soundVolume} onChange={e=>{const v=Number(e.target.value);setSoundVolume(v);localStorage.setItem('nabigha_sound_volume',String(v));}} className="w-full mt-3"/></label><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{([['notification','تجربة إشعار'],['correct','إجابة صحيحة'],['wrong','إجابة خاطئة'],['complete','اكتمال امتحان'],['message','رسالة جديدة']] as const).map(([kind,label])=><button key={kind} onClick={()=>{void unlockSystemSound().then(()=>playSystemSound(kind));}} className="rounded-xl border bg-violet-50 text-violet-800 p-3 text-xs font-black">{label}</button>)}</div>{soundReady&&<p className="text-[10px] text-emerald-700">إذا لم تسمع الصوت، ارفع مستوى صوت الجهاز وتأكد أن المتصفح غير مكتوم.</p>}</section>
         )}
 
         {/* إدارة المواعيد والحضور من لوحة الإدارة */}
