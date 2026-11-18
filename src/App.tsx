@@ -8,7 +8,15 @@ import {
   Sparkles, PlusCircle, Trash2, Crown, Lock, Unlock, Settings, Play, Download, CheckSquare, Edit3, Image as ImageIcon, Eye, X, Key, User, Clock, CheckCircle, AlertCircle, FileText as NoteIcon, MessageCircle, Bell, CreditCard, Smartphone, ExternalLink, ArrowUp, ArrowDown, Flame, Send, MessageSquare, Globe, Search, RotateCcw, Unlock as UnlockIcon, Laptop, Upload
 } from 'lucide-react';
 
-const MY_TELEGRAM_LINK = 'https://t.me/YourUsername'; 
+const MY_TELEGRAM_LINK = 'https://t.me/YourUsername';
+
+// شارة توثيق زرقاء مستوحاة من أسلوب إنستغرام
+const VerifiedBadge = ({ size = 16 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-label="حساب موثّق" role="img" className="inline-block align-middle shrink-0">
+    <path fill="#3897F0" d="M12 1.7l2.2 1.4 2.6-.1 1.2 2.3 2.3 1.2-.1 2.6 1.4 2.2-1.4 2.2.1 2.6-2.3 1.2-1.2 2.3-2.6-.1-2.2 1.4-2.2-1.4-2.6.1-1.2-2.3-2.3-1.2.1-2.6L2.4 12l1.4-2.2-.1-2.6L6 6l1.2-2.3 2.6.1z" />
+    <path d="M7.8 12.2l2.7 2.7 5.8-6" fill="none" stroke="white" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
 
 // مخزن محلي IndexedDB لحفظ المناهج كاملة على الجهاز للعمل دون إنترنت
 const OFFLINE_DB_NAME = 'nabigha-offline-v1';
@@ -2272,7 +2280,7 @@ export function App() {
               </div>
               {loggedStudent && (
                 <div className="bg-indigo-50 p-3 rounded-xl border border-indigo-200 text-indigo-950 space-y-1">
-                  <div>👤 اسم الطالب: <b>{loggedStudent.name}</b></div>
+                  <div className="flex items-center gap-1">👤 اسم الطالب: <b>{loggedStudent.name}</b>{currentLoggedStudentData?.isVerified && <VerifiedBadge size={17} />}</div>
                   <div>🔑 اليوزر: <span className="font-mono">{loggedStudent.username}</span></div>
                 </div>
               )}
@@ -2491,7 +2499,7 @@ export function App() {
         <div className="fixed inset-0 z-[80] bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-3" onClick={() => setShowNotifications(false)}>
           <section className="bg-white w-full max-w-xl max-h-[85vh] overflow-hidden rounded-3xl shadow-2xl flex flex-col text-right" onClick={(e) => e.stopPropagation()}>
             <div className="p-4 border-b flex items-center justify-between gap-3 bg-indigo-50">
-              <div><h2 className="font-black text-lg text-slate-900">رسائلي وإشعاراتي 🔔</h2><p className="text-xs text-slate-500 mt-1">{loggedStudent.name} · {loggedStudent.stage}</p></div>
+              <div><h2 className="font-black text-lg text-slate-900">رسائلي وإشعاراتي 🔔</h2><p className="text-xs text-slate-500 mt-1 flex items-center gap-1">{loggedStudent.name}{currentLoggedStudentData?.isVerified && <VerifiedBadge size={15} />} · {loggedStudent.stage}</p></div>
               <button onClick={() => setShowNotifications(false)} className="w-9 h-9 rounded-full bg-white text-slate-600 font-black" aria-label="إغلاق">✕</button>
             </div>
             <div className="p-4 overflow-y-auto space-y-3">
@@ -3504,7 +3512,7 @@ export function App() {
                   }).map((st) => (
                     <tr key={st.id} className="hover:bg-slate-50">
                       <td className="p-3">
-                        <div className="font-black text-slate-900">{st.name}</div>
+                        <div className="font-black text-slate-900 flex items-center gap-1.5">{st.name}{st.isVerified && <VerifiedBadge size={17} />}</div>
                         <span className="text-indigo-600 text-[10px]">{st.stage}</span>
                       </td>
 
@@ -3580,9 +3588,27 @@ export function App() {
                         <button onClick={async () => {
                           const newVip = !st.isVip;
                           await updateDoc(doc(db, 'students', st.id), { isVip: newVip });
-                          setStudentsList(studentsList.map(item => item.id === st.id ? {...item, isVip: newVip} : item));
+                          const updated = studentsList.map(item => item.id === st.id ? {...item, isVip: newVip} : item);
+                          setStudentsList(updated);
+                          try { localStorage.setItem('nabough_cached_students', JSON.stringify(updated)); } catch (e) {}
                         }} className={`px-2 py-0.5 rounded text-[10px] font-black cursor-pointer ${st.isVip ? 'bg-amber-500 text-white' : 'bg-slate-200'}`}>
                           {st.isVip ? '⭐ VIP مفعّل' : 'عادي'}
+                        </button>
+                        <button onClick={async () => {
+                          const newVerified = !st.isVerified;
+                          try {
+                            await updateDoc(doc(db, 'students', st.id), { isVerified: newVerified });
+                            const updated = studentsList.map(item => item.id === st.id ? {...item, isVerified: newVerified} : item);
+                            setStudentsList(updated);
+                            try { localStorage.setItem('nabough_cached_students', JSON.stringify(updated)); } catch (e) {}
+                            setSuccessMessage(newVerified ? `تم توثيق حساب ${st.name}` : `تم إلغاء توثيق حساب ${st.name}`);
+                            setTimeout(() => setSuccessMessage(null), 3000);
+                          } catch (error) {
+                            setSuccessMessage('تعذر تحديث التوثيق. تحقق من اتصال الإنترنت وصلاحيات Firestore.');
+                            setTimeout(() => setSuccessMessage(null), 3500);
+                          }
+                        }} className={`px-2 py-1 rounded text-[10px] font-black cursor-pointer flex items-center gap-1 ${st.isVerified ? 'bg-sky-100 text-sky-700 border border-sky-200' : 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                          {st.isVerified ? <><VerifiedBadge size={14} /> موثّق · إلغاء</> : 'توثيق الحساب' }
                         </button>
                       </td>
 
