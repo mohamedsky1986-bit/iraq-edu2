@@ -403,6 +403,17 @@ export function App() {
     return safeGetStorage('nabough_cached_students', []);
   });
 
+  // تحديث قائمة الطلبة لحظياً عند فتح لوحة الإدارة.
+  useEffect(() => {
+    if (!isAdmin) return;
+    const unsubscribe = onSnapshot(collection(db, 'students'), (snapshot) => {
+      const liveStudents = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      setStudentsList(liveStudents);
+      try { localStorage.setItem('nabough_cached_students', JSON.stringify(liveStudents)); } catch {}
+    }, (error) => console.warn('تعذر تحديث قائمة الطلبة مباشرة:', error));
+    return () => unsubscribe();
+  }, [isAdmin]);
+
   // بحث وتصفية قائمة الطلبة في لوحة الإدارة فقط (بدون تعديل قاعدة البيانات)
   const [studentSearchText, setStudentSearchText] = useState('');
   const [studentStageFilter, setStudentStageFilter] = useState('all');
@@ -615,6 +626,49 @@ export function App() {
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [selectedChapter, setSelectedChapter] = useState(''); // فارغ = لم يختر الطالب فصلاً بعد
   const [activeSubjectSection, setActiveSubjectSection] = useState<'lessons'|'videos'|'booklets'|'exams'>('lessons');
+
+  // نبض اتصال الطالب: يحدّث آخر ظهور ومكانه داخل المنصة كل 30 ثانية.
+  useEffect(() => {
+    if (!loggedStudent?.id || isAdmin || !isOnline) return;
+    const publishStudentPresence = async () => {
+      const now = new Date();
+      const nowFormatted = now.toLocaleDateString('ar-IQ', { year: 'numeric', month: '2-digit', day: '2-digit' }) + ' | ' +
+        now.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
+      const currentSubject = selectedSubjectId ? subjects.find((s:any) => s.id === selectedSubjectId) : null;
+      const activityLabel = currentSubject
+        ? `داخل مادة ${currentSubject.name || currentSubject.title || 'دراسية'}`
+        : activeTab === 'studentProfile' ? 'يتصفح الملف الشخصي'
+        : activeTab === 'studentGroups' ? 'داخل المنتدى'
+        : activeTab === 'soundSettings' ? 'الإعدادات'
+        : 'يتصفح المنصة';
+      const activityData = {
+        status: 'متصل الآن',
+        lastSeen: nowFormatted,
+        lastSeenAt: serverTimestamp(),
+        deviceType: getDeviceType(),
+        currentActivity: activityLabel,
+        currentSubjectId: currentSubject?.id || '',
+        currentSubjectName: currentSubject?.name || currentSubject?.title || '',
+        currentSection: currentSubject ? activeSubjectSection : ''
+      };
+      try {
+        await updateDoc(doc(db, 'students', loggedStudent.id), activityData);
+        setStudentsList(prev => prev.map(st => st.id === loggedStudent.id ? { ...st, ...activityData, lastSeenAt: { toDate: () => now } } : st));
+      } catch (error) {
+        console.warn('تعذر تحديث آخر ظهور ومكان الطالب:', error);
+      }
+    };
+    void publishStudentPresence();
+    const heartbeat = window.setInterval(() => { void publishStudentPresence(); }, 30000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void publishStudentPresence(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      window.clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [loggedStudent?.id, isAdmin, isOnline, activeTab, selectedSubjectId, activeSubjectSection, subjects]);
   const [adminProfileStudent, setAdminProfileStudent] = useState<any | null>(null);
   const [adminProfileAttendance, setAdminProfileAttendance] = useState<any[]>([]);
   const [adminProfileAttempts, setAdminProfileAttempts] = useState<any[]>([]);
@@ -3850,7 +3904,7 @@ export function App() {
                   <div className="flex items-center gap-2"><b>الجنس:</b><select value={adminProfileStudent.gender || 'ذكر'} onChange={async e => { const gender=e.target.value as 'ذكر'|'أنثى'; try { await updateDoc(doc(db,'students',adminProfileStudent.id),{gender}); setAdminProfileStudent({...adminProfileStudent,gender}); const updated=studentsList.map((st:any)=>st.id===adminProfileStudent.id?{...st,gender}:st); setStudentsList(updated); localStorage.setItem('nabough_cached_students',JSON.stringify(updated)); } catch(err) { alert('تعذر تحديث الجنس.'); } }} className="rounded-lg border bg-white p-1.5 text-xs"><option value="ذكر">ذكر</option><option value="أنثى">أنثى</option></select></div>
                   <p><b>اسم المستخدم:</b> {adminProfileStudent.username || '—'}</p><p><b>تاريخ التسجيل:</b> {adminProfileStudent.regDate || '—'}</p>
                   <p><b>الاشتراك:</b> {adminProfileStudent.isVip ? 'VIP' : 'عادي'}</p><p><b>آخر ظهور:</b> {adminProfileStudent.lastSeen || '—'}</p>
-                  <p><b>الحالة:</b> {adminProfileStudent.status || '—'}</p><p><b>آخر درجة:</b> {adminProfileStudent.examScore || 'لا توجد'}</p>
+                  <p><b>الحالة:</b> {adminProfileStudent.status || '—'}</p><p><b>مكانه الحالي:</b> {adminProfileStudent.currentActivity || 'غير محدد'}</p><p><b>المادة الحالية:</b> {adminProfileStudent.currentSubjectName || 'ليس داخل مادة حالياً'}</p><p><b>القسم:</b> {adminProfileStudent.currentSection==='lessons'?'الشروحات':adminProfileStudent.currentSection==='videos'?'الفيديوات':adminProfileStudent.currentSection==='booklets'?'الملازم':adminProfileStudent.currentSection==='exams'?'الامتحانات':'—'}</p><p><b>آخر درجة:</b> {adminProfileStudent.examScore || 'لا توجد'}</p>
                 </div>
                 {adminProfileLoading ? <p className="text-sm font-bold text-sky-800">جارٍ تحميل الحضور والامتحانات...</p> : <>
                   <div className="rounded-xl bg-white border p-3"><h4 className="font-black text-sm mb-2">سجل الحضور والغياب ({adminProfileAttendance.length})</h4>{adminProfileAttendance.length ? adminProfileAttendance.slice(0,30).map((a:any)=><div key={a.id} className="flex justify-between gap-2 border-b last:border-0 py-1 text-xs"><span>{a.date} · {a.subjectName || 'درس'}</span><b>{a.status}</b></div>) : <p className="text-xs text-slate-500">لا توجد سجلات حضور.</p>}</div>
@@ -3932,7 +3986,10 @@ export function App() {
                       <td className="p-3 text-slate-600 space-y-1">
                         <div>📅 <span className="font-mono">{st.regDate || '2026-10-31'}</span></div>
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-emerald-600 font-mono text-[11px]">🕒 {st.lastSeen || 'الآن'}</span>
+                          <span className="text-slate-600 font-mono text-[11px]">🕒 آخر ظهور: {st.lastSeen || 'غير مسجل'}</span>
+                          {(() => { const stamp = st.lastSeenAt?.toDate ? st.lastSeenAt.toDate().getTime() : (typeof st.lastSeenAt === 'number' ? st.lastSeenAt : 0); const isLive = stamp > 0 && (Date.now() - stamp) < 90000; return <span className={`text-[10px] font-black ${isLive ? 'text-emerald-600' : 'text-slate-400'}`}>{isLive ? '● متصل الآن' : '○ غير متصل'}</span>; })()}
+                          <span className="text-indigo-700 text-[10px]">📍 {st.currentActivity || 'لم يحدد مكان التصفح بعد'}</span>
+                          {st.currentSubjectName && <span className="text-indigo-500 text-[10px]">المادة: {st.currentSubjectName}{st.currentSection ? ` · ${st.currentSection==='lessons'?'الشروحات':st.currentSection==='videos'?'الفيديوات':st.currentSection==='booklets'?'الملازم':'الامتحانات'}` : ''}</span>}
                           <button onClick={async () => {
                             await updateDoc(doc(db, 'students', st.id), { status: 'غير متصل' });
                             setStudentsList(studentsList.map(item => item.id === st.id ? {...item, status: 'غير متصل'} : item));
