@@ -384,18 +384,43 @@ export function App() {
     const visitorRef = doc(db, 'visitor_sessions', sessionId);
     const publishPresence = () => {
       const visitorType = isAdmin ? 'admin' : loggedStudent?.id ? 'student' : 'guest';
+      const currentSubject = selectedSubjectId ? subjects.find((item: any) => item.id === selectedSubjectId) : null;
+      const currentActivity = currentSubject
+        ? `داخل مادة ${currentSubject.name || currentSubject.title || 'دراسية'}`
+        : activeTab === 'studentGroups' ? 'يتصفح منتدى المرحلة'
+        : activeTab === 'studentProfile' ? 'يتصفح الملف الشخصي'
+        : activeTab === 'curriculum' ? 'يتصفح صفحة المنهج'
+        : activeTab === 'visitors' ? 'لوحة إحصائيات الزوار'
+        : 'يتصفح الصفحة الرئيسية';
+      const sectionName = currentSubject
+        ? activeSubjectSection === 'lessons' ? 'الشروحات'
+          : activeSubjectSection === 'videos' ? 'الفيديوات'
+          : activeSubjectSection === 'booklets' ? 'الملازم'
+          : activeSubjectSection === 'exams' ? 'الامتحانات' : ''
+        : '';
       void setDoc(visitorRef, {
         visitorType,
         studentId: loggedStudent?.id || null,
         studentName: loggedStudent?.name || null,
         deviceType: getDeviceType(),
+        currentActivity,
+        currentSubjectId: currentSubject?.id || null,
+        currentSubjectName: currentSubject?.name || currentSubject?.title || null,
+        currentSection: sectionName,
         lastSeen: serverTimestamp()
       }, { merge: true }).catch((error) => console.warn('تعذر تحديث تواجد الزائر:', error));
     };
     publishPresence();
     const heartbeat = window.setInterval(publishPresence, 45000);
-    return () => window.clearInterval(heartbeat);
-  }, [isOnline, isAdmin, loggedStudent?.id, loggedStudent?.name]);
+    const onVisibility = () => { if (document.visibilityState === 'visible') publishPresence(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', publishPresence);
+    return () => {
+      window.clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', publishPresence);
+    };
+  }, [isOnline, isAdmin, loggedStudent?.id, loggedStudent?.name, activeTab, selectedSubjectId, activeSubjectSection, subjects]);
 
 
 
@@ -4289,9 +4314,15 @@ export function App() {
             <div className="rounded-xl border p-3 space-y-2">
               <h3 className="font-black text-sm">تفاصيل الجلسات النشطة</h3>
               {activeVisitorSessions.length === 0 ? <p className="text-xs text-slate-500 py-3">لا توجد جلسات نشطة حالياً، أو لم تُمنح صلاحية قراءة المجموعة بعد.</p> : activeVisitorSessions.map((v: any) => (
-                <div key={v.id} className="flex items-center justify-between gap-2 border-b last:border-0 py-2 text-xs">
-                  <div><p className="font-bold text-slate-800">{v.visitorType === 'student' ? (v.studentName || 'طالب مسجل') : v.visitorType === 'admin' ? 'مدير المنصة' : 'زائر بدون حساب'}</p><p className="text-slate-500">{v.deviceType || 'جهاز غير محدد'}</p></div>
-                  <span className="rounded-full bg-emerald-50 text-emerald-700 px-2 py-1 font-bold">نشط</span>
+                <div key={v.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b last:border-0 py-3 text-xs">
+                  <div className="space-y-1">
+                    <p className="font-bold text-slate-800">{v.visitorType === 'student' ? (v.studentName || 'طالب مسجل') : v.visitorType === 'admin' ? 'مدير المنصة' : 'زائر بدون حساب'}</p>
+                    <p className="text-slate-500">{v.deviceType || 'جهاز غير محدد'} · {v.visitorType === 'guest' ? 'جلسة زائر مجهول' : 'حساب مسجل'}</p>
+                    <p className="font-bold text-indigo-700">📍 {v.currentActivity || 'يتصفح المنصة'}</p>
+                    {v.currentSubjectName && <p className="text-indigo-600">المادة: {v.currentSubjectName}{v.currentSection ? ` · ${v.currentSection}` : ''}</p>}
+                    <p className="text-slate-400">آخر تحديث: {v.lastSeen?.toDate ? v.lastSeen.toDate().toLocaleTimeString('ar-IQ') : 'قبل لحظات'}</p>
+                  </div>
+                  <span className="self-start rounded-full bg-emerald-50 text-emerald-700 px-2 py-1 font-bold">نشط الآن</span>
                 </div>
               ))}
             </div>
