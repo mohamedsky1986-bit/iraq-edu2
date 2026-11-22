@@ -3254,8 +3254,8 @@ export function App() {
 
           const chapterNames = Array.from(new Set((currentSub.notes || []).map((n: any) => getLessonChapter(n)))) as string[];
           const filteredNotes = (currentSub.notes || []).filter((n: any) =>
-            (selectedChapter === '__all__' || (!!selectedChapter && getLessonChapter(n) === selectedChapter)) &&
-            (String(n.title || '').toLowerCase().includes(searchQuery.toLowerCase()) || String(n.content || '').toLowerCase().includes(searchQuery.toLowerCase()))
+            String(n.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            String(n.content || '').toLowerCase().includes(searchQuery.toLowerCase())
           );
 
           const filteredVideos = (currentSub.videos || []).filter((v: any) => 
@@ -3339,15 +3339,6 @@ export function App() {
                 <h4 className="font-black text-slate-900 text-sm sm:text-base flex items-center gap-2">
                   <NoteIcon className="w-4 h-4 text-amber-600" /> الشروحات والتعاليل والملاحظات ({(currentSub.notes || []).length})
                 </h4>
-                <div className="rounded-xl border border-amber-200 bg-white p-3 space-y-2">
-                  <label className="flex items-center gap-2 text-xs font-black text-slate-700"><ChevronDown className="w-4 h-4 text-amber-600" /> اختر الفصل لعرض شروحاته</label>
-                  <select value={selectedChapter} onChange={e => setSelectedChapter(e.target.value)} className="w-full rounded-xl border-2 border-amber-300 bg-amber-50 p-3 text-sm font-black text-slate-900">
-                    <option value="">— اختر الفصل —</option>
-                    <option value="__all__">عرض كل الفصول</option>
-                    {chapterNames.map(ch => <option key={ch} value={ch}>{ch}</option>)}
-                  </select>
-                  <p className="text-[11px] text-slate-500">لن تظهر الشروحات كلها مرة واحدة. اختر فصلاً، أو اختر «عرض كل الفصول» إذا احتجت ذلك.</p>
-                </div>
                 <div className="space-y-4">
                   {filteredNotes.map((note: any, nIdx: number) => (
                     <div key={note.id} className="p-4 bg-white rounded-2xl border shadow-sm space-y-3 relative">
@@ -3362,8 +3353,7 @@ export function App() {
                         </div>}
                       </div>
 
-                      <div className={`leading-relaxed whitespace-pre-wrap overflow-hidden ${expandedNoteIds[String(note.id)] ? '' : 'line-clamp-2'}`} dir="rtl" style={{ color: note.textColor || '#334155', fontSize: note.fontSize || '17px', fontWeight: note.contentBold ? 700 : 400, lineHeight: 1.9 }} dangerouslySetInnerHTML={{ __html: /<\/?[a-z][\s\S]*>/i.test(String(note.content || '')) ? safeLessonHtml(String(note.content || '')) : safeLessonHtml(String(note.content || '').split('\n').map(line => `<p>${line}</p>`).join('')) }} />
-                      {String(note.content || '').length > 120 && <button type="button" onClick={() => setExpandedNoteIds(old => ({...old, [String(note.id)]: !old[String(note.id)]}))} className="inline-flex items-center gap-1 text-xs font-black text-indigo-700 hover:text-indigo-900">{expandedNoteIds[String(note.id)] ? 'عرض أقل' : 'المزيد'} <span>{expandedNoteIds[String(note.id)] ? '⌃' : '⌄'}</span></button>}
+                      <div className="leading-relaxed whitespace-pre-wrap" dir="rtl" style={{ color: note.textColor || '#334155', fontSize: note.fontSize || '17px', fontWeight: note.contentBold ? 700 : 400, lineHeight: 1.9 }} dangerouslySetInnerHTML={{ __html: /<\/?[a-z][\s\S]*>/i.test(String(note.content || '')) ? safeLessonHtml(String(note.content || '')) : safeLessonHtml(String(note.content || '').split('\n').map(line => `<p>${line}</p>`).join('')) }} />
                       {note.image && (
                         <div className="mt-2 h-48 w-full rounded-xl overflow-hidden border shadow-sm">
                           <img src={note.image} alt={note.title} className="w-full h-full object-cover" />
