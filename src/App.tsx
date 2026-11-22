@@ -368,59 +368,6 @@ export function App() {
     return () => unsubscribe();
   }, [isAdmin, loggedStudent?.id]);
 
-  // تسجيل وجود المتصفح: لا يجمع اسماً للزائر المجهول، ويحدّث نفس الوثيقة بدلاً من إنشاء زيارات متكررة.
-  useEffect(() => {
-    if (typeof window === 'undefined' || !isOnline) return;
-    let sessionId = '';
-    try {
-      sessionId = localStorage.getItem('nabough_visitor_session_id') || '';
-      if (!sessionId) {
-        sessionId = (window.crypto?.randomUUID?.() || `v_${Date.now()}_${Math.random().toString(36).slice(2)}`);
-        localStorage.setItem('nabough_visitor_session_id', sessionId);
-      }
-    } catch {
-      sessionId = `v_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-    }
-    const visitorRef = doc(db, 'visitor_sessions', sessionId);
-    const publishPresence = () => {
-      const visitorType = isAdmin ? 'admin' : loggedStudent?.id ? 'student' : 'guest';
-      const currentSubject = selectedSubjectId ? subjects.find((item: any) => item.id === selectedSubjectId) : null;
-      const currentActivity = currentSubject
-        ? `داخل مادة ${currentSubject.name || currentSubject.title || 'دراسية'}`
-        : activeTab === 'studentGroups' ? 'يتصفح منتدى المرحلة'
-        : activeTab === 'studentProfile' ? 'يتصفح الملف الشخصي'
-        : activeTab === 'curriculum' ? 'يتصفح صفحة المنهج'
-        : activeTab === 'visitors' ? 'لوحة إحصائيات الزوار'
-        : 'يتصفح الصفحة الرئيسية';
-      const sectionName = currentSubject
-        ? activeSubjectSection === 'lessons' ? 'الشروحات'
-          : activeSubjectSection === 'videos' ? 'الفيديوات'
-          : activeSubjectSection === 'booklets' ? 'الملازم'
-          : activeSubjectSection === 'exams' ? 'الامتحانات' : ''
-        : '';
-      void setDoc(visitorRef, {
-        visitorType,
-        studentId: loggedStudent?.id || null,
-        studentName: loggedStudent?.name || null,
-        deviceType: getDeviceType(),
-        currentActivity,
-        currentSubjectId: currentSubject?.id || null,
-        currentSubjectName: currentSubject?.name || currentSubject?.title || null,
-        currentSection: sectionName,
-        lastSeen: serverTimestamp()
-      }, { merge: true }).catch((error) => console.warn('تعذر تحديث تواجد الزائر:', error));
-    };
-    publishPresence();
-    const heartbeat = window.setInterval(publishPresence, 45000);
-    const onVisibility = () => { if (document.visibilityState === 'visible') publishPresence(); };
-    document.addEventListener('visibilitychange', onVisibility);
-    window.addEventListener('focus', publishPresence);
-    return () => {
-      window.clearInterval(heartbeat);
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('focus', publishPresence);
-    };
-  }, [isOnline, isAdmin, loggedStudent?.id, loggedStudent?.name, activeTab, selectedSubjectId, activeSubjectSection, subjects]);
 
 
 
@@ -651,6 +598,61 @@ export function App() {
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const [selectedChapter, setSelectedChapter] = useState(''); // فارغ = لم يختر الطالب فصلاً بعد
   const [activeSubjectSection, setActiveSubjectSection] = useState<'lessons'|'videos'|'booklets'|'exams'>('lessons');
+
+
+  // تسجيل وجود المتصفح: لا يجمع اسماً للزائر المجهول، ويحدّث نفس الوثيقة بدلاً من إنشاء زيارات متكررة.
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isOnline) return;
+    let sessionId = '';
+    try {
+      sessionId = localStorage.getItem('nabough_visitor_session_id') || '';
+      if (!sessionId) {
+        sessionId = (window.crypto?.randomUUID?.() || `v_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+        localStorage.setItem('nabough_visitor_session_id', sessionId);
+      }
+    } catch {
+      sessionId = `v_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    }
+    const visitorRef = doc(db, 'visitor_sessions', sessionId);
+    const publishPresence = () => {
+      const visitorType = isAdmin ? 'admin' : loggedStudent?.id ? 'student' : 'guest';
+      const currentSubject = selectedSubjectId ? subjects.find((item: any) => item.id === selectedSubjectId) : null;
+      const currentActivity = currentSubject
+        ? `داخل مادة ${currentSubject.name || currentSubject.title || 'دراسية'}`
+        : activeTab === 'studentGroups' ? 'يتصفح منتدى المرحلة'
+        : activeTab === 'studentProfile' ? 'يتصفح الملف الشخصي'
+        : activeTab === 'curriculum' ? 'يتصفح صفحة المنهج'
+        : activeTab === 'visitors' ? 'لوحة إحصائيات الزوار'
+        : 'يتصفح الصفحة الرئيسية';
+      const sectionName = currentSubject
+        ? activeSubjectSection === 'lessons' ? 'الشروحات'
+          : activeSubjectSection === 'videos' ? 'الفيديوات'
+          : activeSubjectSection === 'booklets' ? 'الملازم'
+          : activeSubjectSection === 'exams' ? 'الامتحانات' : ''
+        : '';
+      void setDoc(visitorRef, {
+        visitorType,
+        studentId: loggedStudent?.id || null,
+        studentName: loggedStudent?.name || null,
+        deviceType: getDeviceType(),
+        currentActivity,
+        currentSubjectId: currentSubject?.id || null,
+        currentSubjectName: currentSubject?.name || currentSubject?.title || null,
+        currentSection: sectionName,
+        lastSeen: serverTimestamp()
+      }, { merge: true }).catch((error) => console.warn('تعذر تحديث تواجد الزائر:', error));
+    };
+    publishPresence();
+    const heartbeat = window.setInterval(publishPresence, 45000);
+    const onVisibility = () => { if (document.visibilityState === 'visible') publishPresence(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', publishPresence);
+    return () => {
+      window.clearInterval(heartbeat);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', publishPresence);
+    };
+  }, [isOnline, isAdmin, loggedStudent?.id, loggedStudent?.name, activeTab, selectedSubjectId, activeSubjectSection, subjects]);
 
   // نبض اتصال الطالب: يحدّث آخر ظهور ومكانه داخل المنصة كل 30 ثانية.
   useEffect(() => {
