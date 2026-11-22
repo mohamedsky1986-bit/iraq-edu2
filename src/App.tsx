@@ -3183,7 +3183,7 @@ export function App() {
                       return;
                     }
                     setSelectedSubjectId(sub.id);
-                    setSelectedChapter('');
+                    setSelectedChapter('__all__');
                     setActiveSubjectSection('lessons');
                     setSearchQuery('');
                   }}
@@ -3349,7 +3349,7 @@ export function App() {
                   <p className="text-[11px] text-slate-500">لن تظهر الشروحات كلها مرة واحدة. اختر فصلاً، أو اختر «عرض كل الفصول» إذا احتجت ذلك.</p>
                 </div>
                 <div className="space-y-4">
-                  {!selectedChapter ? <div className="rounded-xl border border-dashed border-amber-300 bg-amber-50 p-6 text-center text-sm font-bold text-amber-900">اختر فصلاً من القائمة أعلاه حتى تظهر شروحاته هنا.</div> : filteredNotes.map((note: any, nIdx: number) => (
+                  {filteredNotes.map((note: any, nIdx: number) => (
                     <div key={note.id} className="p-4 bg-white rounded-2xl border shadow-sm space-y-3 relative">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <div className="flex items-center gap-2">
@@ -3364,13 +3364,6 @@ export function App() {
 
                       <div className={`leading-relaxed whitespace-pre-wrap overflow-hidden ${expandedNoteIds[String(note.id)] ? '' : 'line-clamp-2'}`} dir="rtl" style={{ color: note.textColor || '#334155', fontSize: note.fontSize || '17px', fontWeight: note.contentBold ? 700 : 400, lineHeight: 1.9 }} dangerouslySetInnerHTML={{ __html: /<\/?[a-z][\s\S]*>/i.test(String(note.content || '')) ? safeLessonHtml(String(note.content || '')) : safeLessonHtml(String(note.content || '').split('\n').map(line => `<p>${line}</p>`).join('')) }} />
                       {String(note.content || '').length > 120 && <button type="button" onClick={() => setExpandedNoteIds(old => ({...old, [String(note.id)]: !old[String(note.id)]}))} className="inline-flex items-center gap-1 text-xs font-black text-indigo-700 hover:text-indigo-900">{expandedNoteIds[String(note.id)] ? 'عرض أقل' : 'المزيد'} <span>{expandedNoteIds[String(note.id)] ? '⌃' : '⌄'}</span></button>}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <button type="button" onClick={() => speakingNoteId === String(note.id) ? stopLessonSpeech() : speakLessonNote(note)} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-800 text-xs font-bold hover:bg-indigo-100">
-                          <Play className="w-4 h-4" /> {speakingNoteId === String(note.id) ? 'إيقاف القراءة' : 'استمع إلى الشرح'}
-                        </button>
-                        {speakingNoteId === String(note.id) && <span className="text-[11px] text-emerald-700 font-bold">جارٍ قراءة الشرح صوتياً...</span>}
-                      </div>
-
                       {note.image && (
                         <div className="mt-2 h-48 w-full rounded-xl overflow-hidden border shadow-sm">
                           <img src={note.image} alt={note.title} className="w-full h-full object-cover" />
