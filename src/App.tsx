@@ -810,6 +810,23 @@ export function App() {
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(null);
+  const videoPlayerRef = useRef<HTMLDivElement | null>(null);
+  const toggleVideoFullscreen = async () => {
+    const player = videoPlayerRef.current;
+    if (!player) return;
+    try {
+      if (!document.fullscreenElement) {
+        await player.requestFullscreen();
+        try { await (screen.orientation as any)?.lock?.('landscape'); } catch {}
+      } else {
+        await document.exitFullscreen();
+        try { (screen.orientation as any)?.unlock?.(); } catch {}
+      }
+    } catch (error) {
+      console.warn('ملء الشاشة غير مدعوم في هذا المتصفح:', error);
+    }
+  };
+
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfLoadFailed, setPdfLoadFailed] = useState(false);
@@ -1272,6 +1289,21 @@ export function App() {
       videoId = url.split('watch?v=')[1]?.split('&')[0];
     }
     return videoId ? `https://www.youtube.com/embed/${videoId}` : url;
+  };
+
+  const getYouTubePlayerUrl = (url: string) => {
+    const embedUrl = formatYouTubeUrl(url);
+    if (!embedUrl) return '';
+    try {
+      const parsed = new URL(embedUrl);
+      if (!/^(www\.)?youtube\.com$/i.test(parsed.hostname) || !parsed.pathname.includes('/embed/')) return embedUrl;
+      parsed.searchParams.set('playsinline', '1');
+      parsed.searchParams.set('rel', '0');
+      parsed.searchParams.set('modestbranding', '1');
+      parsed.searchParams.set('controls', '1');
+      parsed.searchParams.set('fs', '1');
+      return parsed.toString();
+    } catch { return embedUrl; }
   };
 
   const evaluateAnswerSmart = (userAns: string, correctAns: string, qType: string) => {
@@ -2673,14 +2705,46 @@ export function App() {
 
       {/* مشغل الفيديو */}
       {activeVideoUrl && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-4xl w-full p-4 shadow-2xl relative">
-            <button onClick={() => setActiveVideoUrl(null)} className="absolute -top-4 -left-4 w-10 h-10 bg-rose-600 text-white rounded-full flex items-center justify-center font-bold text-lg shadow-lg">
-              <X className="w-5 h-5" />
-            </button>
-            <div className="aspect-video w-full rounded-2xl overflow-hidden bg-black">
-              <iframe src={activeVideoUrl} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen></iframe>
+        <div className="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-[100] flex items-center justify-center p-2 sm:p-4">
+          <div className="w-full max-w-6xl relative">
+            <div className="absolute -top-12 left-0 right-0 flex items-center justify-between gap-3 px-1">
+              <button type="button" onClick={() => setActiveVideoUrl(null)} className="w-10 h-10 bg-rose-600 text-white rounded-full flex items-center justify-center font-bold text-lg shadow-lg" aria-label="إغلاق الفيديو">
+                <X className="w-5 h-5" />
+              </button>
+              <button type="button" onClick={() => void toggleVideoFullscreen()} className="inline-flex items-center gap-2 px-4 py-2 bg-white/15 border border-white/30 text-white rounded-xl text-sm font-black" aria-label="ملء الشاشة">
+                <span>⛶</span> ملء الشاشة
+              </button>
             </div>
+            <div
+              id="nabigha-video-player"
+              ref={videoPlayerRef}
+              className="w-full aspect-video overflow-hidden bg-black rounded-2xl sm:rounded-3xl shadow-2xl"
+              style={{ background: '#000' }}
+            >
+              <iframe
+                key={activeVideoUrl}
+                src={activeVideoUrl}
+                title="مشغل فيديو النابغة"
+                className="w-full h-full border-0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                allowFullScreen
+                referrerPolicy="strict-origin-when-cross-origin"
+              />
+            </div>
+            <style>{`
+              #nabigha-video-player:fullscreen {
+                width: 100vw !important;
+                height: 100vh !important;
+                max-width: none !important;
+                aspect-ratio: auto !important;
+                border-radius: 0 !important;
+                background: #000 !important;
+              }
+              #nabigha-video-player:fullscreen iframe {
+                width: 100% !important;
+                height: 100% !important;
+              }
+            `}</style>
           </div>
         </div>
       )}
@@ -3553,7 +3617,7 @@ export function App() {
                         {vid.isVip && !isVipActive && isAdmin === false ? (
                           <button onClick={() => setVipModalItem(vid)} className="px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-bold cursor-pointer">قفل VIP 🔒</button>
                         ) : (
-                          <button onClick={() => { setActiveVideoUrl(vid.url); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">تشغيل</button>
+                          <button onClick={() => { setActiveVideoUrl(getYouTubePlayerUrl(vid.url)); }} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold shadow cursor-pointer">تشغيل</button>
                         )}
                         {isAdmin && (
                           <div className="flex items-center gap-1">
